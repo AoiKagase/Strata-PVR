@@ -1,6 +1,8 @@
 package wui
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -389,6 +391,52 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 	if len(reserves) != 1 || !reserves[0].IsManualReserved || !reserves[0].OneSeg {
 		t.Fatalf("reserve was not created correctly: %#v", reserves)
+	}
+}
+
+func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	schedule := []chinachu.ChannelSchedule{{
+		Channel:  chinachu.Channel{ID: "ch", Type: "GR", Channel: "27"},
+		Programs: []chinachu.Program{{ID: "p1", Title: "番組", Start: 1, End: 2, Channel: chinachu.Channel{ID: "ch"}}},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule.json", nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("schedule status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Encoding"); got != "deflate" {
+		t.Fatalf("content-encoding = %q", got)
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(res.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(zr)
+	_ = zr.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"id":"p1"`) {
+		t.Fatalf("unexpected deflated body: %s", body)
+	}
+	lastModified := res.Header().Get("Last-Modified")
+	if lastModified == "" {
+		t.Fatal("missing Last-Modified")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule.json", nil)
+	req.Header.Set("If-Modified-Since", lastModified)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotModified || res.Body.Len() != 0 {
+		t.Fatalf("conditional status=%d body=%q", res.Code, res.Body.String())
 	}
 }
 

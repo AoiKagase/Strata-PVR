@@ -1,6 +1,8 @@
 package wui
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -552,7 +554,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, apiType, "json") {
 			return
 		}
-		s.handleJSONFile(w, r, s.paths.Schedule, "[]")
+		s.handleSchedule(w, r)
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "programs":
 		if !requireAPIType(w, apiType, "json") {
 			return
@@ -644,6 +646,71 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 		return
 	}
 	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	info, err := os.Stat(s.paths.Schedule)
+	if err != nil && !os.IsNotExist(err) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var schedule []chinachu.ChannelSchedule
+	if err := storage.ReadJSON(s.paths.Schedule, &schedule, "[]"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err == nil {
+		lastModified := info.ModTime().UTC().Format(http.TimeFormat)
+		w.Header().Set("Last-Modified", lastModified)
+		if r.Header.Get("If-Modified-Since") == lastModified {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	body, err := json.Marshal(schedule)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if acceptsDeflate(r.Header.Get("Accept-Encoding")) {
+		var compressed bytes.Buffer
+		zw := zlib.NewWriter(&compressed)
+		if _, err := zw.Write(body); err != nil {
+			_ = zw.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := zw.Close(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Encoding", "deflate")
+		w.Header().Set("Content-Length", strconv.Itoa(compressed.Len()))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write(compressed.Bytes())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(body)
+	}
+}
+
+func acceptsDeflate(value string) bool {
+	for _, part := range strings.Split(value, ",") {
+		token := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+		if strings.EqualFold(token, "deflate") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
