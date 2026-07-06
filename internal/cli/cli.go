@@ -1129,6 +1129,14 @@ func programIDArg(args []string, command string) (string, []string, error) {
 			return id, rest, nil
 		}
 	}
+	for i, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		rest = append(rest, args[:i]...)
+		rest = append(rest, args[i+1:]...)
+		return arg, rest, nil
+	}
 	return "", nil, fmt.Errorf("Usage: %s <pgid>", command)
 }
 

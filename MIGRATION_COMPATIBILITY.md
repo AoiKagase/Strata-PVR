@@ -21,6 +21,9 @@ Top-level commands accepted by `./chinachu`:
 The Go CLI also accepts the legacy internal `app-cli.js` shape `-mode <command>`,
 `--mode <command>`, and `--mode=<command>` before dispatching to the same command
 handlers.
+For reservation/recording mutation commands, program IDs are accepted as either
+positional arguments or legacy `-id`/`--id` options, with boolean flags allowed
+before or after the ID.
 
 | Command | Current Go status | Notes |
 | --- | --- | --- |
