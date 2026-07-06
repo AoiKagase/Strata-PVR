@@ -43,53 +43,56 @@ func Run(ctx context.Context, paths Paths) error {
 	if err != nil {
 		return err
 	}
-	addr := listenAddress(cfg)
-	proto := "HTTP"
-	if cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != "" {
-		proto = "HTTPS"
+	servers := buildHTTPServers(paths, cfg)
+	if len(servers) == 0 {
+		return fmt.Errorf("no WUI listener configured")
 	}
-	if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Listening on %s", proto, addr); err != nil {
-		return err
-	}
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           NewHandler(paths, cfg),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	errCh := make(chan error, 1)
-	go func() {
-		if cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != "" {
-			errCh <- server.ListenAndServeTLS(cfg.WUITlsCertPath, cfg.WUITlsKeyPath)
-			return
-		}
-		errCh <- server.ListenAndServe()
-	}()
-	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
+	errCh := make(chan serverError, len(servers))
+	for _, srv := range servers {
+		if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Listening on %s", srv.label, srv.server.Addr); err != nil {
 			return err
 		}
-		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Closed", proto)
+		go func(s runningServer) {
+			var err error
+			if s.tls {
+				err = s.server.ListenAndServeTLS(cfg.WUITlsCertPath, cfg.WUITlsKeyPath)
+			} else {
+				err = s.server.ListenAndServe()
+			}
+			errCh <- serverError{server: s, err: err}
+		}(srv)
+	}
+	select {
+	case <-ctx.Done():
+		if err := shutdownServers(paths, servers); err != nil {
+			return err
+		}
 		return ctx.Err()
-	case err := <-errCh:
-		if err == http.ErrServerClosed {
-			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Closed", proto)
+	case serverErr := <-errCh:
+		if serverErr.err == http.ErrServerClosed {
+			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Closed", serverErr.server.label)
 			return nil
 		}
-		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
-		return err
+		_ = shutdownServers(paths, servers)
+		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", serverErr.err)
+		return serverErr.err
 	}
 }
 
 func NewHandler(paths Paths, cfg *config.Config) http.Handler {
+	return newHandler(paths, cfg, true)
+}
+
+func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	mux := http.NewServeMux()
 	server := &server{paths: paths, cfg: cfg, webRoot: findWebRoot(paths.WebRoot)}
 	mux.HandleFunc("/api/", server.handleAPI)
 	mux.HandleFunc("/", server.handleStatic)
-	return server.withCommonHeaders(server.withAuth(mux))
+	var handler http.Handler = mux
+	if auth {
+		handler = server.withAuth(handler)
+	}
+	return server.withCommonHeaders(handler)
 }
 
 type server struct {
@@ -98,13 +101,66 @@ type server struct {
 	webRoot string
 }
 
-func listenAddress(cfg *config.Config) string {
-	host := cfg.WUIOpenHost
-	port := cfg.WUIOpenPort
+type runningServer struct {
+	server *http.Server
+	label  string
+	tls    bool
+}
+
+type serverError struct {
+	server runningServer
+	err    error
+}
+
+func buildHTTPServers(paths Paths, cfg *config.Config) []runningServer {
+	servers := []runningServer{}
 	if cfg.WUIPort != nil {
-		port = *cfg.WUIPort
-		host = cfg.WUIHost
+		tls := cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != ""
+		label := "HTTP Server"
+		if tls {
+			label = "HTTPS Server"
+		}
+		servers = append(servers, runningServer{
+			server: &http.Server{
+				Addr:              listenAddress(cfg.WUIHost, *cfg.WUIPort),
+				Handler:           newHandler(paths, cfg, true),
+				ReadHeaderTimeout: 10 * time.Second,
+			},
+			label: label,
+			tls:   tls,
+		})
 	}
+	if cfg.WUIOpenServer {
+		port := cfg.WUIOpenPort
+		if port == 0 {
+			port = 20772
+		}
+		servers = append(servers, runningServer{
+			server: &http.Server{
+				Addr:              listenAddress(cfg.WUIOpenHost, port),
+				Handler:           newHandler(paths, cfg, false),
+				ReadHeaderTimeout: 10 * time.Second,
+			},
+			label: "HTTP Open Server",
+		})
+	}
+	return servers
+}
+
+func shutdownServers(paths Paths, servers []runningServer) error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, srv := range servers {
+		if err := srv.server.Shutdown(shutdownCtx); err != nil {
+			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
+			return err
+		}
+		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Closed", srv.label)
+	}
+	return nil
+}
+
+func listenAddress(host string, port int) string {
 	if host == "" {
 		host = "0.0.0.0"
 	}

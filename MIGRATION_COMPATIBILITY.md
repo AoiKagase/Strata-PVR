@@ -89,13 +89,13 @@ Fields from `config.sample.json` and JS references:
 | `schedulerMirakurunPath` | Legacy fallback for Mirakurun URL. | partially compatible |
 | `recordedDir` | Directory prefix for recorded files. | partially compatible |
 | `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | not started |
-| `excludeServices` | Mirakurun service IDs excluded from schedule import. | not started |
-| `serviceOrder` | Service IDs moved to the front in schedule order. | not started |
-| `wuiUsers` | Basic auth users as `user:pass`. | not started |
+| `excludeServices` | Mirakurun service IDs excluded from schedule import. | implemented |
+| `serviceOrder` | Service IDs moved to the front in schedule order. | implemented |
+| `wuiUsers` | Basic auth users as `user:pass`. | implemented for the authenticated listener. |
 | `wuiAllowCountries` | GeoIP country allow list. | not started |
-| `wuiPort`, `wuiHost` | Deprecated authenticated listener. | not started |
+| `wuiPort`, `wuiHost` | Deprecated authenticated listener. | partially compatible; starts a separate authenticated HTTP/HTTPS server when `wuiPort` is set. |
 | `wuiTlsKeyPath`, `wuiTlsCertPath`, `wuiTlsPassphrase`, `wuiTlsRequestCert`, `wuiTlsRejectUnauthorized`, `wuiTlsCaPath` | TLS listener settings. | not started |
-| `wuiOpenServer`, `wuiOpenHost`, `wuiOpenPort` | Unauthenticated LAN listener. | not started |
+| `wuiOpenServer`, `wuiOpenHost`, `wuiOpenPort` | Unauthenticated LAN listener. | partially compatible; starts a separate HTTP server without Basic auth. Automatic private IPv4 selection and mDNS remain incomplete. |
 | `wuiXFF` | Trust first `X-Forwarded-For` IP. | not started |
 | `wuiMdnsAdvertisement` | mDNS advertisement. | not started |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |

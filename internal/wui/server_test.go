@@ -641,6 +641,18 @@ func TestAPIAuth(t *testing.T) {
 	}
 }
 
+func TestOpenServerHandlerSkipsAuth(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	handler := newHandler(paths, &config.Config{WUIUsers: []string{"user:pass"}}, false)
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("open status without auth = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestStaticServingUsesWebRoot(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
