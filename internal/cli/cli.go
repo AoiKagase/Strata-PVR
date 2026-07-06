@@ -46,6 +46,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "installer":
 		fmt.Fprintln(stdout, "Chinachu-Go installer: Node.js/npm modules are not required.")
 		return nil
+	case "updater":
+		fmt.Fprintln(stdout, "Chinachu-Go updater: automatic git/service/installer operations are intentionally not performed.")
+		fmt.Fprintln(stdout, "Update the repository and rebuild chinachu-go; Node.js/npm modules are not required.")
+		return nil
 	case "compat":
 		return compat(args[1:], stdout)
 	case "service":
@@ -82,7 +86,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--disable"), stdout)
 	case "rmrule":
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--remove"), stdout)
-	case "updater", "ircbot", "test":
+	case "ircbot", "test":
 		return fmt.Errorf("%s: compatibility implementation not completed", args[0])
 	default:
 		printHelp(stdout)

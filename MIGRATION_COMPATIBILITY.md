@@ -21,7 +21,7 @@ Top-level commands accepted by `./chinachu`:
 | Command | Current Go status | Notes |
 | --- | --- | --- |
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
-| `updater` | not started | Existing command uses git, prompts, and optional installer. |
+| `updater` | intentionally changed | Accepted, but automatic git/service/installer operations are not performed. This avoids Node/npm runtime assumptions and destructive service changes; users should update repository/binary explicitly. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, and maintains `data/scheduler.pid` while running. Logging/hooks remain incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
@@ -223,7 +223,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
 - Go WUI status includes operator/scheduler PID values when PID files are present. Go operator now maintains `data/operator.pid`; process liveness checks beyond PID file presence remain incomplete.
 - Go WUI recorded/recording watch supports XSPF and direct m2ts file serving. Recording watch currently serves the current file contents and does not keep a live `tail -f` stream open.
-- Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm.
+- Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.
 
 ## Compatibility Status Matrix
 
