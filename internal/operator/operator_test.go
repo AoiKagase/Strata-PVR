@@ -192,11 +192,15 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		"RECORD: #21i3v9 ",
 		"STREAM: ",
 		"WRITE: " + paths.Recording,
+		"WRITE: " + paths.Recorded,
 		"FIN: #21i3v9 ",
 	} {
 		if !strings.Contains(string(logData), want) {
 			t.Fatalf("operator log missing %q: %s", want, string(logData))
 		}
+	}
+	if got := strings.Count(string(logData), "WRITE: "+paths.Recording); got < 2 {
+		t.Fatalf("operator log should include initial and completion recording writes, got %d: %s", got, string(logData))
 	}
 }
 

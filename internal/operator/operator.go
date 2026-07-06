@@ -168,6 +168,10 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		recording = removeProgram(recording, reserve.ID)
 		if writeErr := storage.WriteJSONAtomic(paths.Recording, recording, false); writeErr != nil && err == nil {
 			err = writeErr
+		} else if writeErr == nil {
+			if logErr := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); logErr != nil && err == nil {
+				err = logErr
+			}
 		}
 		if err != nil {
 			result.Failed++
@@ -176,6 +180,9 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 		recorded = mergeRecordedProgram(recorded, completed)
 		if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+			return result, err
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
 			return result, err
 		}
 		if completed.IsManualReserved {
