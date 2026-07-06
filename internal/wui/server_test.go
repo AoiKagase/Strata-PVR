@@ -737,6 +737,38 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{VAAPIEnabled: true, VAAPIDevice: "/dev/dri/test"})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=1280x720", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-vaapi_device /dev/dri/test", "-hwaccel vaapi", "-vf format=nv12|vaapi,hwupload,deinterlace_vaapi,scale_vaapi=w=1280:h=720", "-c:v h264_vaapi"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+	if gotInput != "tsdata" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+}
+
 func TestAPIProgramPreview(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

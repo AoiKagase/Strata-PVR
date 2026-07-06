@@ -95,7 +95,7 @@ Fields from `config.sample.json` and JS references:
 | `mirakurunPath` | Mirakurun base URL; supports HTTP, `http+unix`, and legacy `http://unix:` socket URLs. | partially compatible |
 | `schedulerMirakurunPath` | Legacy fallback for Mirakurun URL. | partially compatible |
 | `recordedDir` | Directory prefix for recorded files. | partially compatible; operator startup creates it when missing and logs legacy `MKDIR:`. |
-| `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | partially compatible; fields are parsed from existing config, but preview/transcode use is not implemented yet. |
+| `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | partially compatible; fields are parsed from existing config and used for WUI mp4 watch/transcode ffmpeg arguments. Preview image generation follows the legacy non-VAAPI ffmpeg command. |
 | `excludeServices` | Mirakurun service IDs excluded from schedule import. | implemented |
 | `serviceOrder` | Service IDs moved to the front in schedule order. | implemented |
 | `wuiUsers` | Basic auth users as `user:pass`. | implemented for the authenticated listener, including the legacy `WWW-Authenticate: Basic realm="Authentication."` challenge. |
