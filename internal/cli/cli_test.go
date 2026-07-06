@@ -33,6 +33,26 @@ func TestUpdaterAcceptedWithoutNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestServiceInitscriptIncludesRestart(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"service", "operator", "initscript"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"DAEMON=./chinachu-go",
+		`DAEMON_OPTS="service operator execute"`,
+		"restart )",
+		"sleep 3",
+		"ps -p $PID",
+		"Usage: $NAME {start|stop|restart|status}",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("initscript missing %q: %s", want, text)
+		}
+	}
+}
+
 func TestTestCommandAcceptedWithoutUsrBinExecution(t *testing.T) {
 	var out bytes.Buffer
 	if err := Run(context.Background(), []string{"test", "ffmpeg", "-version"}, &out, &bytes.Buffer{}); err != nil {

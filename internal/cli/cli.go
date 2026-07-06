@@ -675,7 +675,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 	}
 	switch action {
 	case "initscript":
-		fmt.Fprintf(stdout, "#!/bin/bash\nDAEMON=./chinachu-go\nDAEMON_OPTS=\"service %s execute\"\nNAME=chinachu-%s\nPIDFILE=/var/run/${NAME}.pid\ncase \"$1\" in\n  start ) $DAEMON $DAEMON_OPTS & echo $! > $PIDFILE ;;\n  stop ) kill -QUIT $(cat $PIDFILE); rm -f $PIDFILE ;;\n  status ) test -f $PIDFILE && echo \"${NAME} is running.\" || echo \"${NAME} is NOT running.\" ;;\n  * ) echo \"Usage: $NAME {start|stop|restart|status}\" >&2; exit 1 ;;\nesac\n", name, name)
+		fmt.Fprint(stdout, serviceInitScript(name))
 		return nil
 	case "execute":
 		switch name {
@@ -707,6 +707,81 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 	default:
 		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
 	}
+}
+
+func serviceInitScript(name string) string {
+	return fmt.Sprintf(`#!/bin/bash
+DAEMON=./chinachu-go
+DAEMON_OPTS="service %[1]s execute"
+NAME=chinachu-%[1]s
+PIDFILE=/var/run/${NAME}.pid
+
+start () {
+  echo -n "Starting ${NAME}: "
+  if [ -f $PIDFILE ]; then
+    PID=$(cat $PIDFILE)
+    if ps -p $PID > /dev/null 2>&1; then
+      echo "${NAME} is already running? (pid=${PID})"
+      exit
+    fi
+    rm -f $PIDFILE
+  fi
+  $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 &
+  PID=$!
+  if [ -z $PID ]; then
+    echo "Failed!"
+    exit
+  fi
+  echo $PID > $PIDFILE
+  echo "OK."
+}
+
+stop () {
+  echo -n "Stopping ${NAME}: "
+  if [ -f $PIDFILE ]; then
+    PID=$(cat $PIDFILE)
+    kill -QUIT $PID
+    echo "OK."
+    rm -f $PIDFILE
+  else
+    echo "${NAME} is not running? (${PIDFILE} not found)."
+  fi
+}
+
+status () {
+  if [ -f $PIDFILE ]; then
+    PID=$(cat $PIDFILE)
+    if ps -p $PID > /dev/null 2>&1; then
+      echo "${NAME} is running."
+    else
+      echo "${NAME} is dead but ${PIDFILE} exists."
+    fi
+  else
+    echo "${NAME} is NOT running."
+  fi
+}
+
+case "$1" in
+  start )
+    start "$@"
+    ;;
+  stop )
+    stop "$@"
+    ;;
+  restart )
+    stop "$@"
+    sleep 3
+    start "$@"
+    ;;
+  status )
+    status "$@"
+    ;;
+  * )
+    echo "Usage: $NAME {start|stop|restart|status}" >&2
+    exit 1
+    ;;
+esac
+`, name)
 }
 
 func compat(args []string, stdout io.Writer) error {
