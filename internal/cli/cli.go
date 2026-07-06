@@ -52,6 +52,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "test":
 		return testCommand(args[1:], stdout)
+	case "ircbot":
+		fmt.Fprintln(stdout, "Chinachu-Go ircbot: the experimental Node-era IRC bot is not implemented in the Go runtime.")
+		fmt.Fprintln(stdout, "Use WUI/API or build an external bot against the Go API.")
+		return nil
 	case "compat":
 		return compat(args[1:], stdout)
 	case "service":
@@ -88,8 +92,6 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--disable"), stdout)
 	case "rmrule":
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--remove"), stdout)
-	case "ircbot":
-		return fmt.Errorf("%s: compatibility implementation not completed", args[0])
 	default:
 		printHelp(stdout)
 		return nil

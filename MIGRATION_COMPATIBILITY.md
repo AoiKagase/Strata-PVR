@@ -40,7 +40,7 @@ Top-level commands accepted by `./chinachu`:
 | `recorded` | partially compatible | Basic list scaffold only. |
 | `cleanup` | partially compatible | Removes missing recorded entries; prompt not yet matched. |
 | `compat check`, `compat doctor` | implemented | New Go-only safety checks; does not alter legacy command behavior. |
-| `ircbot` | not started | Experimental IRC bot. |
+| `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
 | `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |
 | default/help | implemented | Help command shape is present. |
 

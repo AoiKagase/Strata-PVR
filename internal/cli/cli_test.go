@@ -41,6 +41,17 @@ func TestTestCommandAcceptedWithoutUsrBinExecution(t *testing.T) {
 	}
 }
 
+func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"ircbot"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "experimental Node-era IRC bot is not implemented") || !strings.Contains(text, "Go API") {
+		t.Fatalf("unexpected ircbot output: %s", text)
+	}
+}
+
 func TestReserve(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
