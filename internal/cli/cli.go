@@ -484,14 +484,16 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 			}, 0)
 		case "wui":
 			return wui.Run(ctx, wui.Paths{
-				Config:    p.config,
-				Rules:     p.rules,
-				Schedule:  p.schedule,
-				Reserves:  p.reserves,
-				Recording: p.recording,
-				Recorded:  p.recorded,
-				WebRoot:   "web",
-				LogDir:    "log",
+				Config:       p.config,
+				Rules:        p.rules,
+				Schedule:     p.schedule,
+				Reserves:     p.reserves,
+				Recording:    p.recording,
+				Recorded:     p.recorded,
+				WebRoot:      "web",
+				LogDir:       "log",
+				SchedulerPID: filepath.Join("data", "scheduler.pid"),
+				OperatorPID:  filepath.Join("data", "operator.pid"),
 			})
 		default:
 			return fmt.Errorf("Usage: ./chinachu service <name> <action>")

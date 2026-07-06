@@ -18,19 +18,23 @@ import (
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
 	"chinachu-go/internal/mirakurun"
+	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
 	"chinachu-go/internal/system"
 )
 
 type Paths struct {
-	Config    string
-	Rules     string
-	Schedule  string
-	Reserves  string
-	Recording string
-	Recorded  string
-	WebRoot   string
-	LogDir    string
+	Config       string
+	Rules        string
+	Schedule     string
+	Reserves     string
+	Recording    string
+	Recorded     string
+	WebRoot      string
+	LogDir       string
+	SchedulerPID string
+	OperatorPID  string
+	Scheduler    func(context.Context, bool) error
 }
 
 func Run(ctx context.Context, paths Paths) error {
@@ -150,6 +154,10 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 1 && parts[0] == "status":
 		writeJSON(w, http.StatusOK, s.status())
+	case len(parts) == 1 && parts[0] == "scheduler":
+		s.handleScheduler(w, r, apiType)
+	case len(parts) == 2 && parts[0] == "scheduler" && parts[1] == "force":
+		s.handleSchedulerForce(w, r)
 	case len(parts) == 1 && parts[0] == "storage":
 		s.handleStorage(w, r)
 	case len(parts) == 2 && parts[0] == "log":
@@ -263,6 +271,66 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
+		w.Header().Set("Allow", "HEAD, GET, PUT")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Method == http.MethodPut {
+		if err := s.runScheduler(r.Context(), false); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	logPath := filepath.Join(s.logDir(), "scheduler")
+	switch apiType {
+	case "txt":
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(data)
+		}
+	default:
+		result, ok, err := s.schedulerResultFromLog(logPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			if r.Method != http.MethodHead {
+				_ = json.NewEncoder(w).Encode(result)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.Header().Set("Allow", "PUT")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		_ = s.runScheduler(ctx, false)
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]any{})
+}
+
 func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, stream bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
@@ -292,6 +360,71 @@ func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, 
 		_, _ = w.Write([]byte(strings.Repeat(" ", 1023)))
 	}
 	_, _ = w.Write(data)
+}
+
+func (s *server) runScheduler(ctx context.Context, simulation bool) error {
+	if s.paths.Scheduler != nil {
+		return s.paths.Scheduler(ctx, simulation)
+	}
+	_, err := scheduler.Run(ctx, scheduler.Paths{
+		Config:   s.paths.Config,
+		Rules:    s.paths.Rules,
+		Schedule: s.paths.Schedule,
+		Reserves: s.paths.Reserves,
+	}, simulation)
+	return err
+}
+
+func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, error) {
+	result := map[string]any{
+		"time":      int64(0),
+		"conflicts": []chinachu.Program{},
+		"reserves":  []chinachu.Program{},
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, false, nil
+		}
+		return result, false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return result, false, err
+	}
+	schedules, err := s.readSchedule()
+	if err != nil {
+		return result, false, err
+	}
+	conflicts := []chinachu.Program{}
+	reserves := []chinachu.Program{}
+	lines := strings.Split(string(data), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "RUNNING SCHEDULER." {
+			break
+		}
+		kind, id, ok := parseSchedulerLogProgram(line)
+		if !ok {
+			continue
+		}
+		program := chinachu.GetProgramByID(id, schedules, nil)
+		if program == nil {
+			continue
+		}
+		if kind == "CONFLICT" {
+			conflicts = append(conflicts, *program)
+		}
+		if kind == "RESERVE" {
+			reserves = append(reserves, *program)
+		}
+	}
+	reversePrograms(conflicts)
+	reversePrograms(reserves)
+	result["time"] = info.ModTime().UnixMilli()
+	result["conflicts"] = conflicts
+	result["reserves"] = reserves
+	return result, true, nil
 }
 
 func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
@@ -794,6 +927,8 @@ func (s *server) readSchedule() ([]chinachu.ChannelSchedule, error) {
 }
 
 func (s *server) status() map[string]any {
+	operatorPID := readPID(s.pidPath("operator"))
+	schedulerPID := readPID(s.pidPath("scheduler"))
 	return map[string]any{
 		"connectedCount": 0,
 		"feature": map[string]any{
@@ -807,13 +942,34 @@ func (s *server) status() map[string]any {
 		},
 		"system": map[string]any{"core": runtime.NumCPU()},
 		"operator": map[string]any{
-			"alive": false,
-			"pid":   nil,
+			"alive": operatorPID != nil,
+			"pid":   operatorPID,
+		},
+		"scheduler": map[string]any{
+			"alive": schedulerPID != nil,
+			"pid":   schedulerPID,
 		},
 		"wui": map[string]any{
 			"alive": true,
 			"pid":   os.Getpid(),
 		},
+	}
+}
+
+func (s *server) pidPath(name string) string {
+	switch name {
+	case "operator":
+		if s.paths.OperatorPID != "" {
+			return s.paths.OperatorPID
+		}
+		return filepath.Join("data", "operator.pid")
+	case "scheduler":
+		if s.paths.SchedulerPID != "" {
+			return s.paths.SchedulerPID
+		}
+		return filepath.Join("data", "scheduler.pid")
+	default:
+		return ""
 	}
 }
 
@@ -846,6 +1002,21 @@ func parseIndex(value string) (int, bool) {
 	return index, true
 }
 
+func readPID(path string) *int {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return nil
+	}
+	return &pid
+}
+
 func withRemovedFlag(program chinachu.Program) map[string]any {
 	b, _ := json.Marshal(program)
 	var v map[string]any
@@ -876,6 +1047,28 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 		"atime":   modTimeMS,
 		"mtime":   modTimeMS,
 		"ctime":   modTimeMS,
+	}
+}
+
+func parseSchedulerLogProgram(line string) (string, string, bool) {
+	for _, kind := range []string{"RESERVE", "CONFLICT"} {
+		prefix := kind + ": "
+		if !strings.Contains(line, prefix) {
+			continue
+		}
+		rest := line[strings.Index(line, prefix)+len(prefix):]
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			return "", "", false
+		}
+		return kind, fields[0], true
+	}
+	return "", "", false
+}
+
+func reversePrograms(programs []chinachu.Program) {
+	for i, j := 0, len(programs)-1; i < j; i, j = i+1, j-1 {
+		programs[i], programs[j] = programs[j], programs[i]
 	}
 }
 

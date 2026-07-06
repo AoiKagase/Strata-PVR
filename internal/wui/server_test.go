@@ -1,6 +1,7 @@
 package wui
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -396,6 +397,130 @@ func TestAPILogAndStream(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent {
 		t.Fatalf("missing log status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	schedule := []chinachu.ChannelSchedule{{
+		Programs: []chinachu.Program{
+			{ID: "aaa", Title: "Reserve"},
+			{ID: "bbb", Title: "Conflict"},
+		},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\nCONFLICT: bbb\n"
+	if err := os.WriteFile(filepath.Join(paths.LogDir, "scheduler"), []byte(logData), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	paths.Scheduler = func(_ context.Context, simulation bool) error {
+		calls++
+		if simulation {
+			t.Fatal("scheduler should not be called in simulation mode")
+		}
+		return nil
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("scheduler json status=%d body=%q", res.Code, res.Body.String())
+	}
+	var result struct {
+		Time      int64              `json:"time"`
+		Conflicts []chinachu.Program `json:"conflicts"`
+		Reserves  []chinachu.Program `json:"reserves"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Time == 0 || len(result.Reserves) != 1 || result.Reserves[0].ID != "aaa" || len(result.Conflicts) != 1 || result.Conflicts[0].ID != "bbb" {
+		t.Fatalf("unexpected scheduler result: %#v", result)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/scheduler.txt", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != logData {
+		t.Fatalf("scheduler txt status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/scheduler.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("scheduler put status=%d calls=%d body=%q", res.Code, calls, res.Body.String())
+	}
+}
+
+func TestAPISchedulerNoLogAndForce(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	done := make(chan struct{}, 1)
+	paths.Scheduler = func(_ context.Context, _ bool) error {
+		done <- struct{}{}
+		return nil
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("scheduler missing log status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/scheduler/force.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("scheduler force status=%d body=%q", res.Code, res.Body.String())
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler force did not run")
+	}
+}
+
+func TestAPIStatusReadsPIDFiles(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.OperatorPID = filepath.Join(dir, "operator.pid")
+	paths.SchedulerPID = filepath.Join(dir, "scheduler.pid")
+	if err := os.WriteFile(paths.OperatorPID, []byte("123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.SchedulerPID, []byte("456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", res.Code, res.Body.String())
+	}
+	var status struct {
+		Operator  map[string]any `json:"operator"`
+		Scheduler map[string]any `json:"scheduler"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Operator["pid"].(float64) != 123 || status.Scheduler["pid"].(float64) != 456 {
+		t.Fatalf("unexpected status: %#v", status)
 	}
 }
 

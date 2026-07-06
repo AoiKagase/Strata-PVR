@@ -24,8 +24,8 @@ Phase 1/2 scaffolding is present:
   state.
 - `chinachu-go service wui execute` starts a Go WUI/API server with Basic auth,
   static asset serving, rule/reservation mutations, recorded file access,
-  channel logo/watch proxying, storage/log endpoints, and the first compatible
-  JSON API endpoints.
+  channel logo/watch proxying, scheduler/storage/log endpoints, and the first
+  compatible JSON API endpoints.
 - CLI command names are accepted, with reservation state and rule operations
   partially implemented.
 
