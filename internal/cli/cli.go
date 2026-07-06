@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"chinachu-go/internal/chinachu"
+	"chinachu-go/internal/config"
 	"chinachu-go/internal/operator"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
@@ -1017,17 +1018,24 @@ func compat(args []string, stdout io.Writer) error {
 	}
 	switch args[0] {
 	case "check", "doctor":
+		cfg, cfgErr := config.Load("config.json")
+		recordedDirErr := cfgErr
+		if cfgErr == nil {
+			recordedDirErr = validateWritableDir(cfg.RecordedDir)
+		}
 		checks := []struct {
 			name string
 			err  error
 		}{
-			{"config.json", validateJSONFile("config.json", "{}")},
-			{"rules.json", validateJSONFile("rules.json", "[]")},
+			{"config.json", validateJSONFile("config.json", "")},
+			{"rules.json", validateJSONFile("rules.json", "")},
 			{"data directory", validateDir("data")},
-			{"data/schedule.json", validateJSONFile(filepath.Join("data", "schedule.json"), "[]")},
-			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "[]")},
-			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "[]")},
-			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "[]")},
+			{"recordedDir", recordedDirErr},
+			{"data/schedule.json", validateJSONFile(filepath.Join("data", "schedule.json"), "")},
+			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},
+			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "")},
+			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
+			{"Node.js runtime", nil},
 		}
 		failed := false
 		for _, check := range checks {
@@ -1061,6 +1069,22 @@ func validateDir(path string) error {
 		return fmt.Errorf("not a directory")
 	}
 	return nil
+}
+
+func validateWritableDir(path string) error {
+	if err := validateDir(path); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(path, ".chinachu-go-compat-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
 }
 
 func hasFlag(args []string, names ...string) bool {

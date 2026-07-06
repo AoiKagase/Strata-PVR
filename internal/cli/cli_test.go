@@ -76,6 +76,90 @@ func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
 	}
 }
 
+func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("recorded", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"config.json":         `{"recordedDir":"recorded"}`,
+		"rules.json":          `[]`,
+		"data/schedule.json":  `[]`,
+		"data/reserves.json":  `[]`,
+		"data/recording.json": `[]`,
+		"data/recorded.json":  `[]`,
+	}
+	for name, data := range files {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"OK config.json",
+		"OK rules.json",
+		"OK data directory",
+		"OK recordedDir",
+		"OK data/schedule.json",
+		"OK data/reserves.json",
+		"OK data/recording.json",
+		"OK data/recorded.json",
+		"OK Node.js runtime",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("compat output missing %q: %s", want, text)
+		}
+	}
+}
+
+func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("recorded", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"config.json":         `{"recordedDir":"recorded"}`,
+		"rules.json":          `[]`,
+		"data/reserves.json":  `[]`,
+		"data/recording.json": `[]`,
+		"data/recorded.json":  `[]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	err := Run(context.Background(), []string{"compat", "doctor"}, &out, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "compat check failed") {
+		t.Fatalf("expected compat failure, got err=%v output=%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "NG data/schedule.json") {
+		t.Fatalf("compat output missing missing schedule failure: %s", out.String())
+	}
+}
+
 func TestProgramListPrintsLegacyColumns(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
