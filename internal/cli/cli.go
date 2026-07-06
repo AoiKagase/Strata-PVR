@@ -641,6 +641,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				Reserves:  p.reserves,
 				Recording: p.recording,
 				Recorded:  p.recorded,
+				PID:       filepath.Join("data", "operator.pid"),
 			}, 0)
 		case "wui":
 			return wui.Run(ctx, wui.Paths{

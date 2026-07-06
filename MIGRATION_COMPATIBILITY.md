@@ -141,6 +141,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. | operator/CLI/API | partially compatible |
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text. | scheduler | not started |
+| `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream. | wrapper/operator | not started |
 | `log/operator` | Operator log stream. | wrapper/WUI | not started |
 | `log/wui` | WUI log stream. | wrapper/WUI | not started |
@@ -220,7 +221,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
 - Go WUI `log/:name/stream.txt` currently returns the padding plus current log contents and does not keep a live `tail -f` subprocess open.
 - Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
-- Go WUI status includes operator/scheduler PID values when PID files are present, but does not yet verify process liveness beyond PID file presence.
+- Go WUI status includes operator/scheduler PID values when PID files are present. Go operator now maintains `data/operator.pid`; process liveness checks beyond PID file presence remain incomplete.
 - Go WUI recorded/recording watch supports XSPF and direct m2ts file serving. Recording watch currently serves the current file contents and does not keep a live `tail -f` stream open.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm.
 
@@ -237,7 +238,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Recorded filename format | partially compatible |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible; active `abort:true` polling and `recordedCommand` execution implemented, but low-storage actions, exact logs, and signal side effects remain incomplete. |
+| Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, and `data/operator.pid` lifecycle implemented, but low-storage actions, exact logs, and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | not started |
