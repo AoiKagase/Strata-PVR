@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,6 +80,8 @@ func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
 
 func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	dir := t.TempDir()
+	mirakurun := newCompatMirakurun(t)
+	defer mirakurun.Close()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {
@@ -90,7 +94,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"config.json":         `{"recordedDir":"recorded"}`,
+		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
 		"rules.json":          `[]`,
 		"data/schedule.json":  `[]`,
 		"data/reserves.json":  `[]`,
@@ -117,6 +121,9 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"OK data/reserves.json",
 		"OK data/recording.json",
 		"OK data/recorded.json",
+		"OK Mirakurun services",
+		"OK Mirakurun programs",
+		"OK Mirakurun tuners",
 		"OK Node.js runtime",
 	} {
 		if !strings.Contains(text, want) {
@@ -127,6 +134,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 
 func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
 	dir := t.TempDir()
+	mirakurun := newCompatMirakurun(t)
+	defer mirakurun.Close()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {
@@ -139,7 +148,7 @@ func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, data := range map[string]string{
-		"config.json":         `{"recordedDir":"recorded"}`,
+		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
 		"rules.json":          `[]`,
 		"data/reserves.json":  `[]`,
 		"data/recording.json": `[]`,
@@ -158,6 +167,55 @@ func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
 	if !strings.Contains(out.String(), "NG data/schedule.json") {
 		t.Fatalf("compat output missing missing schedule failure: %s", out.String())
 	}
+}
+
+func TestCompatCheckFailsWhenMirakurunUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("recorded", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"http://127.0.0.1:1"}`,
+		"rules.json":          `[]`,
+		"data/schedule.json":  `[]`,
+		"data/reserves.json":  `[]`,
+		"data/recording.json": `[]`,
+		"data/recorded.json":  `[]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{})
+	if err == nil {
+		t.Fatalf("expected Mirakurun failure, output=%s", out.String())
+	}
+	if !strings.Contains(out.String(), "NG Mirakurun services") {
+		t.Fatalf("compat output missing Mirakurun failure: %s", out.String())
+	}
+}
+
+func newCompatMirakurun(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/services", "/api/programs", "/api/tuners":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 }
 
 func TestProgramListPrintsLegacyColumns(t *testing.T) {

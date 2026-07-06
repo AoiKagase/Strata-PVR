@@ -14,6 +14,7 @@ import (
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
+	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/operator"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
@@ -62,7 +63,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "Use WUI/API or build an external bot against the Go API.")
 		return nil
 	case "compat":
-		return compat(args[1:], stdout)
+		return compat(ctx, args[1:], stdout)
 	case "service":
 		return service(ctx, p, args[1:], stdout)
 	case "reserve":
@@ -1012,7 +1013,7 @@ esac
 `, name)
 }
 
-func compat(args []string, stdout io.Writer) error {
+func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("Usage: chinachu-go compat <check|doctor>")
 	}
@@ -1023,6 +1024,7 @@ func compat(args []string, stdout io.Writer) error {
 		if cfgErr == nil {
 			recordedDirErr = validateWritableDir(cfg.RecordedDir)
 		}
+		servicesErr, programsErr, tunersErr := validateMirakurun(ctx, cfg, cfgErr)
 		checks := []struct {
 			name string
 			err  error
@@ -1035,6 +1037,9 @@ func compat(args []string, stdout io.Writer) error {
 			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},
 			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "")},
 			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
+			{"Mirakurun services", servicesErr},
+			{"Mirakurun programs", programsErr},
+			{"Mirakurun tuners", tunersErr},
 			{"Node.js runtime", nil},
 		}
 		failed := false
@@ -1085,6 +1090,22 @@ func validateWritableDir(path string) error {
 		return err
 	}
 	return os.Remove(name)
+}
+
+func validateMirakurun(ctx context.Context, cfg *config.Config, cfgErr error) (servicesErr, programsErr, tunersErr error) {
+	if cfgErr != nil {
+		return cfgErr, cfgErr, cfgErr
+	}
+	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
+	if err != nil {
+		return err, err, err
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, servicesErr = client.Services(checkCtx)
+	_, programsErr = client.Programs(checkCtx)
+	_, tunersErr = client.Tuners(checkCtx)
+	return servicesErr, programsErr, tunersErr
 }
 
 func hasFlag(args []string, names ...string) bool {
