@@ -183,7 +183,7 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, recorded file streaming, compression, and exact status fields remain incomplete.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, compression, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
@@ -217,6 +217,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Go operator does not yet poll `abort:true` during an active stream, run `recordedCommand`, apply low-storage actions, or mirror every signal/log side effect.
 - Cleanup removes missing file entries from `data/recorded.json`.
 - WUI/API may rewrite config, rules, reserves, recording, recorded.
+- Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm.
 
 ## Compatibility Status Matrix

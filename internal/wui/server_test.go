@@ -3,6 +3,7 @@ package wui
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -196,6 +197,67 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	}
 	if len(reserves) != 1 || !reserves[0].IsSkip {
 		t.Fatalf("reserve was not skipped: %#v", reserves)
+	}
+}
+
+func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("json status = %d body=%s", res.Code, res.Body.String())
+	}
+	var stat map[string]any
+	if err := json.Unmarshal(res.Body.Bytes(), &stat); err != nil {
+		t.Fatal(err)
+	}
+	if stat["size"].(float64) != 6 {
+		t.Fatalf("size = %#v", stat["size"])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("m2ts status = %d body=%s", res.Code, res.Body.String())
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "tsdata" {
+		t.Fatalf("m2ts body = %q", body)
+	}
+	if got := res.Header().Get("Content-Disposition"); !strings.Contains(got, `filename="abc.m2ts"`) {
+		t.Fatalf("content-disposition = %q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/recorded/abc/file.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	if _, err := os.Stat(recordedPath); !os.IsNotExist(err) {
+		t.Fatalf("recorded file still exists or unexpected stat error: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusGone {
+		t.Fatalf("gone status = %d body=%s", res.Code, res.Body.String())
 	}
 }
 

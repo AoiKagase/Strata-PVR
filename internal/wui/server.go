@@ -139,6 +139,7 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/")
+	apiType := apiExtension(path)
 	path = trimLastExtension(path)
 	parts := splitPath(path)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -168,6 +169,8 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleRecordingProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recorded":
 		s.handleRecorded(w, r)
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
+		s.handleRecordedFile(w, r, parts[1], apiType)
 	case len(parts) >= 2 && parts[0] == "recorded":
 		s.handleRecordedProgram(w, r, parts[1:])
 	case len(parts) == 2 && parts[0] == "program":
@@ -470,6 +473,61 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	}
 }
 
+func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
+	var recorded []chinachu.Program
+	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	index := findProgram(recorded, id)
+	if index == -1 {
+		http.NotFound(w, r)
+		return
+	}
+	path := filepath.FromSlash(recorded[index].Recorded)
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "410 Gone", http.StatusGone)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		switch apiType {
+		case "m2ts":
+			file, err := os.Open(path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer file.Close()
+			w.Header().Set("Content-Type", "video/MP2T")
+			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.m2ts"`, id))
+			http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+		case "json", "":
+			writeJSON(w, http.StatusOK, fileStatJSON(info))
+		default:
+			http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		}
+	case http.MethodDelete:
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if apiType == "m2ts" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{})
+	default:
+		w.Header().Set("Allow", "GET, HEAD, DELETE")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
@@ -600,6 +658,25 @@ func withRemovedFlag(program chinachu.Program) map[string]any {
 	return v
 }
 
+func fileStatJSON(info os.FileInfo) map[string]any {
+	modTimeMS := info.ModTime().UnixMilli()
+	return map[string]any{
+		"dev":     0,
+		"ino":     0,
+		"mode":    uint32(info.Mode()),
+		"ulink":   0,
+		"uid":     0,
+		"gid":     0,
+		"rdev":    0,
+		"size":    info.Size(),
+		"blksize": 0,
+		"blocks":  0,
+		"atime":   modTimeMS,
+		"mtime":   modTimeMS,
+		"ctime":   modTimeMS,
+	}
+}
+
 func findWebRoot(configured string) string {
 	candidates := []string{configured, "web", filepath.Join("..", "Chinachu", "web")}
 	for _, candidate := range candidates {
@@ -622,6 +699,15 @@ func splitPath(path string) []string {
 		}
 	}
 	return out
+}
+
+func apiExtension(path string) string {
+	slash := strings.LastIndex(path, "/")
+	dot := strings.LastIndex(path, ".")
+	if dot > slash {
+		return path[dot+1:]
+	}
+	return ""
 }
 
 func trimLastExtension(path string) string {
