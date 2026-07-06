@@ -124,8 +124,8 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
-	if len(reserves) != 0 {
-		t.Fatalf("reserves not cleared: %#v", reserves)
+	if len(reserves) != 1 || reserves[0].ID != program.ID {
+		t.Fatalf("auto reserve should remain like legacy operator: %#v", reserves)
 	}
 	var recording []chinachu.Program
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
@@ -165,6 +165,50 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		if !strings.Contains(string(logData), want) {
 			t.Fatalf("operator log missing %q: %s", want, string(logData))
 		}
+	}
+}
+
+func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := Paths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	program := chinachu.Program{
+		ID:               "21i3v9",
+		Title:            "Manual",
+		Start:            now.UnixMilli(),
+		End:              now.Add(time.Hour).UnixMilli(),
+		Channel:          chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		IsManualReserved: true,
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "tsdata"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Completed != 1 {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 0 {
+		t.Fatalf("manual reserve was not removed: %#v", reserves)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
+		t.Fatalf("manual reserve write log missing: %s", string(logData))
 	}
 }
 
