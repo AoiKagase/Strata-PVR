@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -63,7 +64,7 @@ func Run(ctx context.Context, paths Paths) error {
 		go func(s runningServer) {
 			var err error
 			if s.tls {
-				err = s.server.ListenAndServeTLS(cfg.WUITlsCertPath, cfg.WUITlsKeyPath)
+				err = s.server.ListenAndServeTLS("", "")
 			} else {
 				err = s.server.ListenAndServe()
 			}
@@ -209,6 +210,11 @@ func buildTLSConfig(cfg *config.Config) (*tls.Config, error) {
 		return nil, nil
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS10}
+	cert, err := loadTLSCertificate(cfg.WUITlsCertPath, cfg.WUITlsKeyPath, cfg.WUITlsPassphrase)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.Certificates = []tls.Certificate{cert}
 	if cfg.WUITlsRequestCert {
 		tlsConfig.ClientAuth = tls.RequestClientCert
 		if cfg.WUITlsRejectUnauthorized {
@@ -227,6 +233,52 @@ func buildTLSConfig(cfg *config.Config) (*tls.Config, error) {
 		tlsConfig.ClientCAs = pool
 	}
 	return tlsConfig, nil
+}
+
+func loadTLSCertificate(certPath, keyPath, passphrase string) (tls.Certificate, error) {
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	if passphrase != "" {
+		decrypted, err := decryptPEMKey(keyPEM, []byte(passphrase))
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+		keyPEM = decrypted
+	}
+	return tls.X509KeyPair(certPEM, keyPEM)
+}
+
+func decryptPEMKey(keyPEM, passphrase []byte) ([]byte, error) {
+	var out []byte
+	rest := keyPEM
+	decryptedAny := false
+	for {
+		block, next := pem.Decode(rest)
+		if block == nil {
+			out = append(out, rest...)
+			break
+		}
+		if x509.IsEncryptedPEMBlock(block) {
+			der, err := x509.DecryptPEMBlock(block, passphrase)
+			if err != nil {
+				return nil, err
+			}
+			block = &pem.Block{Type: block.Type, Bytes: der}
+			decryptedAny = true
+		}
+		out = append(out, pem.EncodeToMemory(block)...)
+		rest = next
+	}
+	if !decryptedAny {
+		return keyPEM, nil
+	}
+	return out, nil
 }
 
 func shutdownServers(paths Paths, servers []runningServer) error {

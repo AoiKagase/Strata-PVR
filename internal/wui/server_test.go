@@ -2,10 +2,16 @@ package wui
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1258,9 +1264,11 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 }
 
 func TestBuildTLSConfigClientAuth(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath := writeTestCertificate(t, dir, "")
 	cfg := &config.Config{
-		WUITlsKeyPath:            "key.pem",
-		WUITlsCertPath:           "cert.pem",
+		WUITlsKeyPath:            keyPath,
+		WUITlsCertPath:           certPath,
 		WUITlsRequestCert:        true,
 		WUITlsRejectUnauthorized: true,
 	}
@@ -1274,22 +1282,97 @@ func TestBuildTLSConfigClientAuth(t *testing.T) {
 	if tlsConfig.ClientAuth != tls.RequireAndVerifyClientCert {
 		t.Fatalf("client auth = %s", tlsConfig.ClientAuth)
 	}
+	if len(tlsConfig.Certificates) != 1 {
+		t.Fatalf("certificates = %d", len(tlsConfig.Certificates))
+	}
+}
+
+func TestBuildTLSConfigEncryptedKeyPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath := writeTestCertificate(t, dir, "secret")
+	cfg := &config.Config{
+		WUITlsKeyPath:     keyPath,
+		WUITlsCertPath:    certPath,
+		WUITlsPassphrase:  "secret",
+		WUITlsRequestCert: true,
+	}
+	tlsConfig, err := buildTLSConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tlsConfig.Certificates) != 1 {
+		t.Fatalf("certificates = %d", len(tlsConfig.Certificates))
+	}
+	if tlsConfig.ClientAuth != tls.RequestClientCert {
+		t.Fatalf("client auth = %s", tlsConfig.ClientAuth)
+	}
+}
+
+func TestBuildTLSConfigEncryptedKeyWrongPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath := writeTestCertificate(t, dir, "secret")
+	cfg := &config.Config{
+		WUITlsKeyPath:    keyPath,
+		WUITlsCertPath:   certPath,
+		WUITlsPassphrase: "wrong",
+	}
+	if _, err := buildTLSConfig(cfg); err == nil {
+		t.Fatal("expected encrypted key passphrase error")
+	}
 }
 
 func TestBuildTLSConfigCAError(t *testing.T) {
 	dir := t.TempDir()
+	certPath, keyPath := writeTestCertificate(t, dir, "")
 	caPath := filepath.Join(dir, "ca.pem")
 	if err := os.WriteFile(caPath, []byte("not a certificate"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
-		WUITlsKeyPath:  "key.pem",
-		WUITlsCertPath: "cert.pem",
+		WUITlsKeyPath:  keyPath,
+		WUITlsCertPath: certPath,
 		WUITlsCaPath:   caPath,
 	}
 	if _, err := buildTLSConfig(cfg); err == nil {
 		t.Fatal("expected CA parse error")
 	}
+}
+
+func writeTestCertificate(t *testing.T, dir, passphrase string) (certPath, keyPath string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "localhost"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyDER := x509.MarshalPKCS1PrivateKey(key)
+	keyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER}
+	if passphrase != "" {
+		keyBlock, err = x509.EncryptPEMBlock(rand.Reader, keyBlock.Type, keyDER, []byte(passphrase), x509.PEMCipherAES256)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(keyBlock), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certPath, keyPath
 }
 
 func TestPrivateIPv4FromAddrs(t *testing.T) {
