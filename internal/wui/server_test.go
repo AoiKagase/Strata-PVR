@@ -811,6 +811,10 @@ func TestAPIStorage(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("12345"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	recordedInfo, err := os.Stat(recordedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -825,7 +829,7 @@ func TestAPIStorage(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &usage); err != nil {
 		t.Fatal(err)
 	}
-	if usage["recorded"].(float64) != 5 {
+	if usage["recorded"].(float64) != float64(allocatedFileSize(recordedInfo)) {
 		t.Fatalf("recorded = %#v", usage["recorded"])
 	}
 	if usage["size"].(float64) <= 0 || usage["avail"].(float64) <= 0 {

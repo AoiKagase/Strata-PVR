@@ -650,7 +650,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		}
 		info, err := os.Stat(filepath.FromSlash(program.Recorded))
 		if err == nil && info.Mode().IsRegular() {
-			recordedSize += info.Size()
+			recordedSize += allocatedFileSize(info)
 		}
 	}
 	recordedDir := s.cfg.RecordedDir
