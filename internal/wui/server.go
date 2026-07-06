@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -39,6 +40,10 @@ type Paths struct {
 	SchedulerPID string
 	OperatorPID  string
 	Scheduler    func(context.Context, bool) error
+}
+
+var runFFmpegPreview = func(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "ffmpeg", args...).Output()
 }
 
 func Run(ctx context.Context, paths Paths) error {
@@ -1497,11 +1502,107 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if findProgram(programs, id) == -1 {
+	index := findProgram(programs, id)
+	if index == -1 {
 		http.NotFound(w, r)
 		return
 	}
-	http.Error(w, "403 Forbidden", http.StatusForbidden)
+	program := programs[index]
+	if path == s.paths.Recording && !programHasPID(program) {
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if programIsScrambling(program) {
+		http.Error(w, "409 Conflict", http.StatusConflict)
+		return
+	}
+	if program.Recorded == "" {
+		http.Error(w, "410 Gone", http.StatusGone)
+		return
+	}
+	filePath := filepath.FromSlash(program.Recorded)
+	if _, err := os.Stat(filePath); err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "410 Gone", http.StatusGone)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	width, height := previewSize(r)
+	codec := "mjpeg"
+	if r.URL.Query().Get("type") == "png" || apiType == "png" {
+		codec = "png"
+	}
+	pos := previewPosition(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	output, err := runFFmpegPreview(ctx,
+		"-f", "mpegts",
+		"-ss", pos,
+		"-r", "10",
+		"-i", filePath,
+		"-ss", "1.5",
+		"-r", "10",
+		"-frames:v", "1",
+		"-c:v", codec,
+		"-an",
+		"-f", "image2",
+		"-s", width+"x"+height,
+		"-map", "0:0",
+		"-y", "pipe:1",
+	)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	if apiType == "txt" {
+		if codec == "png" {
+			_, _ = w.Write([]byte("data:image/png;base64,"))
+		} else {
+			_, _ = w.Write([]byte("data:image/jpeg;base64,"))
+		}
+		_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString(output)))
+		return
+	}
+	_, _ = w.Write(output)
+}
+
+func previewSize(r *http.Request) (string, string) {
+	width := r.URL.Query().Get("width")
+	height := r.URL.Query().Get("height")
+	size := r.URL.Query().Get("size")
+	if parts := strings.Split(size, "x"); len(parts) == 2 && validPreviewDimension(parts[0]) && validPreviewDimension(parts[1]) {
+		width = parts[0]
+		height = parts[1]
+	}
+	if !validPreviewDimension(width) {
+		width = "320"
+	}
+	if !validPreviewDimension(height) {
+		height = "180"
+	}
+	return width, height
+}
+
+func validPreviewDimension(value string) bool {
+	if value == "" || len(value) > 4 {
+		return false
+	}
+	n, err := strconv.Atoi(value)
+	return err == nil && n > 0
+}
+
+func previewPosition(r *http.Request) string {
+	pos := r.URL.Query().Get("pos")
+	n, err := strconv.Atoi(pos)
+	if err != nil {
+		n = 5
+	}
+	return strconv.FormatFloat(float64(n)-1.5, 'f', -1, 64)
 }
 
 func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string) {
@@ -1719,7 +1820,7 @@ func (s *server) status() map[string]any {
 	return map[string]any{
 		"connectedCount": 0,
 		"feature": map[string]any{
-			"previewer":         false,
+			"previewer":         true,
 			"streamer":          true,
 			"filer":             true,
 			"configurator":      true,

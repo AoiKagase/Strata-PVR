@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -704,37 +705,114 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	}
 }
 
-func TestAPIProgramPreviewDisabled(t *testing.T) {
+func TestAPIProgramPreview(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded"}}, false); err != nil {
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("ts"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "recording"}}, false); err != nil {
+	restore := installFakeFFmpeg(t, "preview-image")
+	defer restore()
+
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
 
-	for _, target := range []string{
-		"/api/recorded/recorded/preview.png",
-		"/api/recorded/recorded/preview.jpg",
-		"/api/recorded/recorded/preview.txt",
-		"/api/recording/recording/preview.png",
-	} {
+	for _, target := range []string{"/api/recorded/recorded/preview.png", "/api/recorded/recorded/preview.jpg", "/api/recording/recording/preview.png"} {
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
-		if res.Code != http.StatusForbidden {
+		if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
 			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
 		}
 	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview.png", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.txt?type=png&size=640x360&pos=9", nil)
 	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "data:image/png;base64,cHJldmlldy1pbWFnZQ==" {
+		t.Fatalf("preview txt status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview.png", nil)
+	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("missing preview status=%d body=%q", res.Code, res.Body.String())
 	}
+}
+
+func TestAPIProgramPreviewLegacyErrors(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	missingPath := filepath.Join(dir, "missing.m2ts")
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{
+		{ID: "scrambled", Recorded: filepath.ToSlash(missingPath), Raw: map[string]json.RawMessage{"tuner": json.RawMessage(`{"isScrambling":true}`)}},
+		{ID: "gone", Recorded: filepath.ToSlash(missingPath)},
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "nopid", Recorded: filepath.ToSlash(missingPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	for _, tc := range []struct {
+		path string
+		code int
+	}{
+		{"/api/recording/nopid/preview.png", http.StatusServiceUnavailable},
+		{"/api/recorded/scrambled/preview.png", http.StatusConflict},
+		{"/api/recorded/gone/preview.png", http.StatusGone},
+		{"/api/recorded/gone/preview.gif", http.StatusUnsupportedMediaType},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != tc.code {
+			t.Fatalf("%s status=%d body=%q", tc.path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestAPIProgramPreviewFFmpegError(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := installFakeFFmpeg(t, "", 9)
+	defer restore()
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.png", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ffmpeg error status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func installFakeFFmpeg(t *testing.T, output string, exitCode ...int) func() {
+	t.Helper()
+	code := 0
+	if len(exitCode) > 0 {
+		code = exitCode[0]
+	}
+	old := runFFmpegPreview
+	runFFmpegPreview = func(context.Context, ...string) ([]byte, error) {
+		if code != 0 {
+			return nil, fmt.Errorf("fake ffmpeg exit %d", code)
+		}
+		return []byte(output), nil
+	}
+	return func() { runFFmpegPreview = old }
 }
 
 func TestAPIRecordingWatchRequiresPID(t *testing.T) {
@@ -1172,7 +1250,7 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	if status.Scheduler["pid"] != nil || status.Scheduler["alive"] != false {
 		t.Fatalf("unexpected status: %#v", status)
 	}
-	if status.Feature["streamer"] != true || status.Feature["previewer"] != false || status.Feature["filer"] != true || status.Feature["configurator"] != true {
+	if status.Feature["streamer"] != true || status.Feature["previewer"] != true || status.Feature["filer"] != true || status.Feature["configurator"] != true {
 		t.Fatalf("unexpected feature flags: %#v", status.Feature)
 	}
 }
@@ -1475,5 +1553,6 @@ func testPaths(dir string) Paths {
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		LogDir:    filepath.Join(dir, "log"),
 	}
 }
