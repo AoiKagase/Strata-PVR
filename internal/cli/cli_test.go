@@ -172,6 +172,43 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	}
 }
 
+func TestRulesPrintsLegacyTable(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	rules := []chinachu.Rule{
+		{
+			Types:         []string{"GR"},
+			Categories:    []string{"anime"},
+			ReserveTitles: []string{"ニュース", "映画"},
+			Hour:          &chinachu.RangeRule{Start: 1, End: 4},
+		},
+	}
+	if err := storage.WriteJSONAtomic("rules.json", rules, false); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"rules"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{"#\ttypes\tcategories", "0\tGR\tanime", "1, 4", "[2]"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("rules output missing %q: %s", want, text)
+		}
+	}
+	out.Reset()
+	if err := Run(context.Background(), []string{"rules", "-detail"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "ニュース, 映画") {
+		t.Fatalf("detailed rules output missing titles: %s", out.String())
+	}
+}
+
 func TestReserve(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

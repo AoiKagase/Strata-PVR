@@ -34,7 +34,7 @@ Top-level commands accepted by `./chinachu`:
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
 | `rmrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --remove`. |
-| `rules` | partially compatible | JSON/table formatting incomplete. |
+| `rules` | partially compatible | Prints a legacy-style rule table with `-n` and `-detail`; exact `easy-table` spacing/transposed single-row output still incomplete. |
 | `reserves` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recording` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recorded` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |

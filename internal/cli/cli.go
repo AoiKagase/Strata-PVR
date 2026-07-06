@@ -71,7 +71,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "stop":
 		return stopRecording(p, args[1:], stdout)
 	case "rules":
-		return dumpJSONFile(p.rules, "[]", stdout)
+		return ruleList(p.rules, args[1:], stdout)
 	case "reserves":
 		return programList(p.reserves, args[1:], stdout)
 	case "recording":
@@ -382,6 +382,91 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 		return nil
 	}
 	return storage.WriteJSONAtomic(p.rules, rules, true)
+}
+
+func ruleList(path string, args []string, stdout io.Writer) error {
+	opts, _, err := parseRuleArgs(args)
+	if err != nil {
+		return err
+	}
+	detail := hasFlag(args, "-detail", "--detail")
+	var rules []chinachu.Rule
+	if err := storage.ReadJSON(path, &rules, "[]"); err != nil {
+		return err
+	}
+	keys := []string{
+		"types", "categories", "channels", "ignore_channels", "reserve_flags",
+		"ignore_flags", "hour", "duration", "reserve_titles", "ignore_titles",
+		"reserve_descriptions", "ignore_descriptions",
+	}
+	headers := append([]string{"#"}, keys...)
+	rows := [][]string{}
+	for i, rule := range rules {
+		if opts.hasNum && i != opts.num {
+			continue
+		}
+		row := []string{strconv.Itoa(i)}
+		for _, key := range keys {
+			row = append(row, ruleListValue(rule, key, detail))
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(stdout, "見つかりません")
+		return nil
+	}
+	fmt.Fprintln(stdout, strings.Join(headers, "\t"))
+	for _, row := range rows {
+		fmt.Fprintln(stdout, strings.Join(row, "\t"))
+	}
+	return nil
+}
+
+func ruleListValue(rule chinachu.Rule, key string, detail bool) string {
+	switch key {
+	case "types":
+		return ruleStringList(rule.Types, false)
+	case "categories":
+		return ruleStringList(rule.Categories, false)
+	case "channels":
+		return ruleStringList(rule.Channels, false)
+	case "ignore_channels":
+		return ruleStringList(rule.IgnoreChannels, false)
+	case "reserve_flags":
+		return ruleStringList(rule.ReserveFlags, false)
+	case "ignore_flags":
+		return ruleStringList(rule.IgnoreFlags, false)
+	case "hour":
+		if rule.Hour == nil {
+			return "-"
+		}
+		return fmt.Sprintf("%d, %d", rule.Hour.Start, rule.Hour.End)
+	case "duration":
+		if rule.Duration == nil {
+			return "-"
+		}
+		return fmt.Sprintf("%d, %d", rule.Duration.Min, rule.Duration.Max)
+	case "reserve_titles":
+		return ruleStringList(rule.ReserveTitles, !detail)
+	case "ignore_titles":
+		return ruleStringList(rule.IgnoreTitles, !detail)
+	case "reserve_descriptions":
+		return ruleStringList(rule.ReserveDescriptions, !detail)
+	case "ignore_descriptions":
+		return ruleStringList(rule.IgnoreDescriptions, !detail)
+	default:
+		return "-"
+	}
+}
+
+func ruleStringList(values []string, countOnly bool) string {
+	if values == nil {
+		return "-"
+	}
+	if countOnly {
+		return fmt.Sprintf("[%d]", len(values))
+	}
+	return strings.Join(values, ", ")
 }
 
 type ruleOptions struct {
