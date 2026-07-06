@@ -771,6 +771,52 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	}
 }
 
+func TestAPIProgramWatchRejectsScramblingLikeLegacy(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Recorded), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recordedJSON := `[{"id":"recorded","title":"Scrambled","recorded":"` + filepath.ToSlash(recordedPath) + `","tuner":{"isScrambling":true}}]`
+	if err := os.WriteFile(paths.Recorded, []byte(recordedJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recordingJSON := `[{"id":"recording","title":"Scrambled","recorded":"` + filepath.ToSlash(recordedPath) + `","tuner":{"isScrambling":true}}]`
+	if err := os.WriteFile(paths.Recording, []byte(recordingJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/watch.m2ts", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("recorded scrambling status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recording/recording/watch.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("recording without pid status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	recordingJSON = `[{"id":"recording","title":"Scrambled","recorded":"` + filepath.ToSlash(recordedPath) + `","pid":123,"tuner":{"isScrambling":true}}]`
+	if err := os.WriteFile(paths.Recording, []byte(recordingJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/recording/recording/watch.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("recording scrambling status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

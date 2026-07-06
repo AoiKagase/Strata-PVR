@@ -1308,6 +1308,10 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	if programIsScrambling(program) {
+		http.Error(w, "409 Conflict", http.StatusConflict)
+		return
+	}
 	if program.Recorded == "" {
 		http.Error(w, "410 Gone", http.StatusGone)
 		return
@@ -1840,6 +1844,20 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 
 func programHasPID(program chinachu.Program) bool {
 	return program.PID > 0
+}
+
+func programIsScrambling(program chinachu.Program) bool {
+	raw, ok := program.Raw["tuner"]
+	if !ok || len(raw) == 0 {
+		return false
+	}
+	var tuner struct {
+		IsScrambling bool `json:"isScrambling"`
+	}
+	if err := json.Unmarshal(raw, &tuner); err != nil {
+		return false
+	}
+	return tuner.IsScrambling
 }
 
 func writeXSPF(w io.Writer, target, title string) {
