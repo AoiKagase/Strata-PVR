@@ -77,6 +77,7 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
 	}
 	program := chinachu.Program{
 		ID:       "21i3v9",
@@ -131,6 +132,13 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	}
 	if string(data) != "tsdata" {
 		t.Fatalf("recorded data = %q", data)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "START: 21i3v9") || !strings.Contains(string(logData), "FIN: 21i3v9") {
+		t.Fatalf("operator log missing expected lines: %s", string(logData))
 	}
 }
 

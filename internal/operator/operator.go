@@ -15,6 +15,7 @@ import (
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
+	"chinachu-go/internal/logging"
 	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/storage"
 )
@@ -31,6 +32,7 @@ type Paths struct {
 	Recording string
 	Recorded  string
 	PID       string
+	Log       string
 }
 
 type Result struct {
@@ -110,6 +112,9 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
 			return result, err
 		}
+		if err := logging.AppendLine(paths.Log, "START: %s [%s] %s", reserve.ID, reserve.Channel.Name, reserve.Title); err != nil {
+			return result, err
+		}
 		result.Started++
 
 		completed, err := recordProgram(ctx, paths.Recording, cfg, source, reserve)
@@ -128,6 +133,9 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			return result, err
 		}
 		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
+			return result, err
+		}
+		if err := logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title); err != nil {
 			return result, err
 		}
 		if err := runRecordedCommand(ctx, cfg.RecordedCommand, completed); err != nil {

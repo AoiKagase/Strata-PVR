@@ -11,6 +11,7 @@ import (
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
+	"chinachu-go/internal/logging"
 	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/storage"
 )
@@ -27,6 +28,7 @@ type Paths struct {
 	Schedule string
 	Reserves string
 	PID      string
+	Log      string
 }
 
 type Result struct {
@@ -71,6 +73,9 @@ func removePIDFile(path string) {
 }
 
 func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
+	if err := logging.AppendLine(paths.Log, "RUNNING SCHEDULER."); err != nil {
+		return Result{}, err
+	}
 	services, err := source.Services(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("get Mirakurun services: %w", err)
@@ -96,6 +101,18 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 
 	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
+	for _, reserve := range reserves {
+		switch {
+		case reserve.IsConflict:
+			if err := logging.AppendLine(paths.Log, "CONFLICT: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+				return Result{}, err
+			}
+		case !reserve.IsSkip:
+			if err := logging.AppendLine(paths.Log, "RESERVE: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+				return Result{}, err
+			}
+		}
+	}
 	if !simulation {
 		if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 			return Result{}, err

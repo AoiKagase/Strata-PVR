@@ -142,8 +142,8 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
-| `log/scheduler` | Scheduler log stream. | wrapper/operator | not started |
-| `log/operator` | Operator log stream. | wrapper/WUI | not started |
+| `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, and `CONFLICT:` lines for WUI status parsing. | scheduler/WUI | partially compatible |
+| `log/operator` | Operator log stream with `START:` and `FIN:` lines. | operator/WUI | partially compatible |
 | `log/wui` | WUI log stream. | wrapper/WUI | not started |
 
 Writes in Go use temp-file-and-rename atomic JSON helpers.
@@ -241,6 +241,6 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, and `data/operator.pid` lifecycle implemented, but low-storage actions, exact logs, and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
-| Logging | not started |
+| Logging | partially compatible |
 | Compat doctor/check | implemented |
 | Tests | partially compatible |

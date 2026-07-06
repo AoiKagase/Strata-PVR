@@ -472,6 +472,7 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 		Schedule: p.schedule,
 		Reserves: p.reserves,
 		PID:      filepath.Join("data", "scheduler.pid"),
+		Log:      filepath.Join("log", "scheduler"),
 	}, simulation)
 	if err != nil {
 		return err
@@ -643,6 +644,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				Recording: p.recording,
 				Recorded:  p.recorded,
 				PID:       filepath.Join("data", "operator.pid"),
+				Log:       filepath.Join("log", "operator"),
 			}, 0)
 		case "wui":
 			return wui.Run(ctx, wui.Paths{

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,7 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
 	}
 	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Title"]}]`), 0o644); err != nil {
 		t.Fatal(err)
@@ -85,6 +87,13 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 	if _, err := os.Stat(paths.Schedule); err != nil {
 		t.Fatal(err)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "RUNNING SCHEDULER.") || !strings.Contains(string(logData), "RESERVE:") {
+		t.Fatalf("scheduler log missing expected lines: %s", string(logData))
 	}
 }
 
