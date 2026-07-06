@@ -91,7 +91,7 @@ Fields from `config.sample.json` and JS references:
 | `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | partially compatible; fields are parsed from existing config, but preview/transcode use is not implemented yet. |
 | `excludeServices` | Mirakurun service IDs excluded from schedule import. | implemented |
 | `serviceOrder` | Service IDs moved to the front in schedule order. | implemented |
-| `wuiUsers` | Basic auth users as `user:pass`. | implemented for the authenticated listener. |
+| `wuiUsers` | Basic auth users as `user:pass`. | implemented for the authenticated listener, including the legacy `WWW-Authenticate: Basic realm="Authentication."` challenge. |
 | `wuiAllowCountries` | GeoIP country allow list. | not started |
 | `wuiPort`, `wuiHost` | Deprecated authenticated listener. | partially compatible; starts a separate authenticated HTTP/HTTPS server when `wuiPort` is set. |
 | `wuiTlsKeyPath`, `wuiTlsCertPath`, `wuiTlsPassphrase`, `wuiTlsRequestCert`, `wuiTlsRejectUnauthorized`, `wuiTlsCaPath` | TLS listener settings. | partially compatible; cert/key listener, client certificate request/verification, and CA pool loading are implemented. Encrypted key passphrase handling remains incomplete. |

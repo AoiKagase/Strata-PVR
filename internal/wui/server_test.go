@@ -1030,6 +1030,9 @@ func TestAPIAuth(t *testing.T) {
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("status without auth = %d", res.Code)
 	}
+	if got := res.Header().Get("WWW-Authenticate"); got != `Basic realm="Authentication."` {
+		t.Fatalf("WWW-Authenticate = %q", got)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:pass")))

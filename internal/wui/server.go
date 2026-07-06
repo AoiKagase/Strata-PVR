@@ -273,7 +273,7 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Basic ")
 		decoded, err := base64.StdEncoding.DecodeString(auth)
 		if err != nil || !stringIn(s.cfg.WUIUsers, string(decoded)) {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Chinachu"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Authentication."`)
 			http.Error(w, "401 Authorization Required", http.StatusUnauthorized)
 			return
 		}
