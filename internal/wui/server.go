@@ -233,7 +233,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
 		s.handleLog(w, r, parts[1], true)
 	case len(parts) == 1 && parts[0] == "config":
-		s.handleJSONFile(w, r, s.paths.Config, "{}")
+		s.handleConfig(w, r)
 	case len(parts) == 1 && parts[0] == "rules":
 		s.handleRules(w, r)
 	case len(parts) == 2 && parts[0] == "rules":
@@ -285,6 +285,52 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 		return
 	}
 	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
+		w.Header().Set("Allow", "HEAD, GET, PUT")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := os.Stat(s.paths.Config); err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "410 Gone", http.StatusGone)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if r.Method == http.MethodPut {
+		raw := r.URL.Query().Get("json")
+		if raw == "" {
+			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			return
+		}
+		var obj any
+		if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			return
+		}
+		if err := storage.WriteFileAtomic(s.paths.Config, []byte(raw)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write([]byte(raw))
+		}
+		return
+	}
+	data, err := os.ReadFile(s.paths.Config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(data)
+	}
 }
 
 func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) {

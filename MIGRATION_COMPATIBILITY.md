@@ -134,7 +134,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 
 | File | Schema | Writer(s) | Status |
 | --- | --- | --- | --- |
-| `config.json` | JSON object, unknown fields allowed. | API config PUT | partially compatible |
+| `config.json` | JSON object, unknown fields allowed. | API config PUT writes the supplied `json` query value after validation. | partially compatible |
 | `rules.json` | Array of rule objects. Pretty printed by rule/API writes. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
 | `data/reserves.json` | Array of program objects. | scheduler/CLI/API/operator | partially compatible |
@@ -184,7 +184,7 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, scheduler status/log/update/force, storage usage, log reads, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, recorded/recording watch XSPF and m2ts, channel logo, channel watch XSPF, channel watch m2ts proxy, recorded cleanup via PUT, and recorded/reserve/recording item reads. Preview, mp4 transcode, compression, live log tailing, and exact status fields remain incomplete.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, config PUT with the `json` query parameter, scheduler status/log/update/force, storage usage, log reads, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, recorded/recording watch XSPF and m2ts, channel logo, channel watch XSPF, channel watch m2ts proxy, recorded cleanup via PUT, and recorded/reserve/recording item reads. Preview, mp4 transcode, compression, live log tailing, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
@@ -217,7 +217,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
 - Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage command plus `remove`/`stop` actions are partially implemented; mail notification, exact operator logs, and every signal side effect remain incomplete.
 - Cleanup removes missing file entries from `data/recorded.json`.
-- WUI/API may rewrite config, rules, reserves, recording, recorded.
+- WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
 - Go WUI `log/:name/stream.txt` currently returns the padding plus current log contents and does not keep a live `tail -f` subprocess open.
 - Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.

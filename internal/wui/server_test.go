@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -638,6 +639,57 @@ func TestAPIAuth(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("status with auth = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIConfigGetAndPut(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := os.MkdirAll(filepath.Dir(paths.Config), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initial := `{"wuiOpenServer":true}`
+	if err := os.WriteFile(paths.Config, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/config.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || strings.TrimSpace(res.Body.String()) != initial {
+		t.Fatalf("config get status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	next := `{"wuiOpenServer":false,"wuiOpenPort":20772}`
+	req = httptest.NewRequest(http.MethodPut, "/api/config.json?json="+url.QueryEscape(next), nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != next {
+		t.Fatalf("config put status=%d body=%q", res.Code, res.Body.String())
+	}
+	data, err := os.ReadFile(paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != next {
+		t.Fatalf("config file = %q", data)
+	}
+}
+
+func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := os.WriteFile(paths.Config, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	for _, target := range []string{"/api/config.json", "/api/config.json?json=%7B"} {
+		req := httptest.NewRequest(http.MethodPut, target, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d", target, res.Code)
+		}
 	}
 }
 
