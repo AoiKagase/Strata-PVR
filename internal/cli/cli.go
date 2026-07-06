@@ -602,6 +602,11 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	for i := range recording {
 		if recording[i].ID == args[0] {
 			recording[i].Abort = true
+			if !recording[i].IsManualReserved {
+				if err := markReserveSkip(p.reserves, recording[i].ID); err != nil {
+					return err
+				}
+			}
 			if err := storage.WriteJSONAtomic(p.recording, recording, false); err != nil {
 				return err
 			}
@@ -610,6 +615,25 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 		}
 	}
 	return fmt.Errorf("見つかりません")
+}
+
+func markReserveSkip(path, id string) error {
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(path, &reserves, "[]"); err != nil {
+		return err
+	}
+	changed := false
+	for i := range reserves {
+		if reserves[i].ID == id {
+			reserves[i].IsSkip = true
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return storage.WriteJSONAtomic(path, reserves, false)
 }
 
 func cleanup(p paths, stdout io.Writer) error {

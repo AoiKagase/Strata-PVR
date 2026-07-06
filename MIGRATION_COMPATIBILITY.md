@@ -29,7 +29,7 @@ Top-level commands accepted by `./chinachu`:
 | `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `skip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `unskip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
-| `stop <pgid>` | partially compatible | Marks recording entry with `abort:true`. |
+| `stop <pgid>` | partially compatible | Marks recording entry with `abort:true` and sets the matching auto reserve to `isSkip:true` like the Node CLI. |
 | `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; table output still needs more work. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
@@ -138,7 +138,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `rules.json` | Array of rule objects. Pretty printed by rule/API writes. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
 | `data/reserves.json` | Array of program objects. | scheduler/CLI/API/operator | partially compatible |
-| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. | operator/CLI/API | partially compatible |
+| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. | operator/CLI/API | partially compatible |
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |

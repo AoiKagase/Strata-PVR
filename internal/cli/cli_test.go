@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"chinachu-go/internal/chinachu"
+	"chinachu-go/internal/storage"
 )
 
 func TestHelp(t *testing.T) {
@@ -166,5 +169,40 @@ func TestSearchFiltersSchedule(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "p1") || strings.Contains(out.String(), "p2") {
 		t.Fatalf("unexpected search output: %s", out.String())
+	}
+}
+
+func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []chinachu.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"stop", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var recording []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if !recording[0].Abort {
+		t.Fatalf("recording abort was not set: %#v", recording)
+	}
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if !reserves[0].IsSkip || reserves[1].IsSkip {
+		t.Fatalf("auto reserve skip was not updated correctly: %#v", reserves)
 	}
 }
