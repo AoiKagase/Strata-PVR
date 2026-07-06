@@ -78,10 +78,17 @@ func (r *DurationRule) UnmarshalJSON(data []byte) error {
 
 func (r DurationRule) MarshalJSON() ([]byte, error) {
 	type wire struct {
-		Min int64 `json:"min"`
-		Max int64 `json:"max"`
+		Min *int64 `json:"min,omitempty"`
+		Max *int64 `json:"max,omitempty"`
 	}
-	return json.Marshal(wire{Min: r.Min, Max: r.Max})
+	out := wire{}
+	if r.HasMin || (!r.HasMin && !r.HasMax) {
+		out.Min = &r.Min
+	}
+	if r.HasMax || (!r.HasMin && !r.HasMax) {
+		out.Max = &r.Max
+	}
+	return json.Marshal(out)
 }
 
 type Rule struct {

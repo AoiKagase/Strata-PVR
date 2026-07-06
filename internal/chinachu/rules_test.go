@@ -36,6 +36,13 @@ func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"duration":{"min":99999}}`), &rule); err != nil {
 		t.Fatal(err)
 	}
+	encoded, err := json.Marshal(rule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != `{"duration":{"min":99999}}` {
+		t.Fatalf("incomplete duration was not preserved: %s", encoded)
+	}
 	program := Program{Seconds: 60, FullTitle: "Example", Channel: Channel{Type: "GR"}}
 	if !ProgramMatchesRule(rule, program) {
 		t.Fatal("expected incomplete duration rule to be ignored like legacy Chinachu")
