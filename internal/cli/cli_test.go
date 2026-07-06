@@ -270,6 +270,76 @@ func TestCompatCheckFailsWhenMirakurunUnavailable(t *testing.T) {
 	}
 }
 
+func TestCompatBackupCopiesExistingStateFiles(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"config.json":         `{"config":true}`,
+		"rules.json":          `[{"rule":true}]`,
+		"data/schedule.json":  `[{"schedule":true}]`,
+		"data/reserves.json":  `[{"reserve":true}]`,
+		"data/recording.json": `[{"recording":true}]`,
+		"data/recorded.json":  `[{"recorded":true}]`,
+	}
+	for name, data := range files {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "backup"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "OK backup: backup"+string(os.PathSeparator)+"chinachu-go-") {
+		t.Fatalf("backup output missing success path: %s", out.String())
+	}
+	for name, want := range files {
+		matches, err := filepath.Glob(filepath.Join("backup", "chinachu-go-*", filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("backup for %s matches = %v", name, matches)
+		}
+		data, err := os.ReadFile(matches[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != want {
+			t.Fatalf("backup %s = %q, want %q", matches[0], data, want)
+		}
+	}
+}
+
+func TestCompatBackupSkipsMissingOptionalStateFiles(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("config.json", []byte(`{"config":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "backup"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "BACKUP config.json ->") || !strings.Contains(text, "SKIP rules.json: not found") || !strings.Contains(text, "OK backup:") {
+		t.Fatalf("unexpected backup output: %s", text)
+	}
+}
+
 func newCompatMirakurun(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

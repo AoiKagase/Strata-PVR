@@ -1064,7 +1064,7 @@ exit 0
 
 func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor>")
+		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|backup>")
 	}
 	switch args[0] {
 	case "check", "doctor":
@@ -1109,9 +1109,55 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			return fmt.Errorf("compat check failed")
 		}
 		return nil
+	case "backup":
+		return compatBackup(stdout)
 	default:
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor>")
+		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|backup>")
 	}
+}
+
+func compatBackup(stdout io.Writer) error {
+	dir := filepath.Join("backup", "chinachu-go-"+time.Now().Format("20060102150405"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	files := []string{
+		"config.json",
+		"rules.json",
+		filepath.Join("data", "schedule.json"),
+		filepath.Join("data", "reserves.json"),
+		filepath.Join("data", "recording.json"),
+		filepath.Join("data", "recorded.json"),
+	}
+	copied := 0
+	for _, src := range files {
+		dst := filepath.Join(dir, filepath.ToSlash(src))
+		if err := copyBackupFile(src, dst); err != nil {
+			if os.IsNotExist(err) {
+				fmt.Fprintf(stdout, "SKIP %s: not found\n", src)
+				continue
+			}
+			return err
+		}
+		copied++
+		fmt.Fprintf(stdout, "BACKUP %s -> %s\n", src, dst)
+	}
+	if copied == 0 {
+		return fmt.Errorf("compat backup failed: no files copied")
+	}
+	fmt.Fprintf(stdout, "OK backup: %s\n", dir)
+	return nil
+}
+
+func copyBackupFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func validateJSONFile(path, empty string) error {
@@ -1425,7 +1471,8 @@ recorded                Show a list of recorded programs.
 
 cleanup                 Clean-up the recorded list.
 
-compat <check|doctor>   Check Chinachu-Go compatibility prerequisites.
+compat <check|doctor|backup>
+                        Check or back up Chinachu-Go compatibility state.
 
 ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)
 
