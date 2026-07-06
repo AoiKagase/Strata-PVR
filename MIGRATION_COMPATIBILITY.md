@@ -22,7 +22,7 @@ Top-level commands accepted by `./chinachu`:
 | --- | --- | --- |
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | not started | Existing command uses git, prompts, and optional installer. |
-| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` is still stubbed. |
+| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic. Logging/hooks/PID are incomplete. |
 | `search` | partially compatible | Basic filtering/listing scaffold only. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
@@ -183,11 +183,11 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: not started.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, reserve skip/unskip/delete, recording abort marking, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, full rule mutation, recorded file streaming, compression, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
-The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, and API dispatch under `/api/`. The Go implementation should serve existing static assets without a Node build step. Current status: not started.
+The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to `../Chinachu/web` during development. Current status: partially compatible; Node-based frontend builds are not required.
 
 ## Mirakurun Endpoints Used
 
@@ -233,7 +233,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
 | Operator/recorder | partially compatible |
-| WUI/API | not started |
+| WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | not started |
 | Compat doctor/check | implemented |

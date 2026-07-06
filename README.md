@@ -22,6 +22,8 @@ Phase 1/2 scaffolding is present:
 - `chinachu-go service operator execute` runs the first Go operator loop, starts
   due reservations, records Mirakurun program streams, and updates legacy JSON
   state.
+- `chinachu-go service wui execute` starts a Go WUI/API server with Basic auth,
+  static asset serving, and the first compatible JSON API endpoints.
 - CLI command names are accepted, with reservation state and rule operations
   partially implemented.
 

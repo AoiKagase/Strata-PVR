@@ -15,6 +15,7 @@ import (
 	"chinachu-go/internal/operator"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
+	"chinachu-go/internal/wui"
 )
 
 type paths struct {
@@ -482,7 +483,15 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				Recorded:  p.recorded,
 			}, 0)
 		case "wui":
-			return fmt.Errorf("service wui execute: not implemented")
+			return wui.Run(ctx, wui.Paths{
+				Config:    p.config,
+				Rules:     p.rules,
+				Schedule:  p.schedule,
+				Reserves:  p.reserves,
+				Recording: p.recording,
+				Recorded:  p.recorded,
+				WebRoot:   "web",
+			})
 		default:
 			return fmt.Errorf("Usage: ./chinachu service <name> <action>")
 		}
