@@ -415,6 +415,12 @@ func ruleList(path string, args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "見つかりません")
 		return nil
 	}
+	if len(rows) == 1 {
+		for i, header := range headers {
+			fmt.Fprintf(stdout, "%s\t%s\n", header, rows[0][i])
+		}
+		return nil
+	}
 	fmt.Fprintln(stdout, strings.Join(headers, "\t"))
 	for _, row := range rows {
 		fmt.Fprintln(stdout, strings.Join(row, "\t"))

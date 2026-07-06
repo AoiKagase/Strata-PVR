@@ -195,7 +195,7 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, want := range []string{"#\ttypes\tcategories", "0\tGR\tanime", "1, 4", "[2]"} {
+	for _, want := range []string{"#\t0", "types\tGR", "categories\tanime", "hour\t1, 4", "reserve_titles\t[2]"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("rules output missing %q: %s", want, text)
 		}
@@ -206,6 +206,17 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ニュース, 映画") {
 		t.Fatalf("detailed rules output missing titles: %s", out.String())
+	}
+	rules = append(rules, chinachu.Rule{Types: []string{"BS"}})
+	if err := storage.WriteJSONAtomic("rules.json", rules, false); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := Run(context.Background(), []string{"rules"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "#\ttypes\tcategories") || !strings.Contains(out.String(), "1\tBS\t-") {
+		t.Fatalf("multi-rule table output missing: %s", out.String())
 	}
 }
 
