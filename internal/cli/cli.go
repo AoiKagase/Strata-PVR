@@ -73,11 +73,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "rules":
 		return dumpJSONFile(p.rules, "[]", stdout)
 	case "reserves":
-		return dumpJSONFile(p.reserves, "[]", stdout)
+		return programList(p.reserves, args[1:], stdout)
 	case "recording":
-		return dumpJSONFile(p.recording, "[]", stdout)
+		return programList(p.recording, args[1:], stdout)
 	case "recorded":
-		return dumpJSONFile(p.recorded, "[]", stdout)
+		return programList(p.recorded, args[1:], stdout)
 	case "cleanup":
 		return cleanup(p, stdout)
 	case "update":
@@ -143,6 +143,31 @@ func search(p paths, args []string, stdout io.Writer) error {
 		return nil
 	}
 	writeProgramSearchTable(stdout, matches, opts)
+	return nil
+}
+
+func programList(path string, args []string, stdout io.Writer) error {
+	opts, err := parseSearchArgs(args)
+	if err != nil {
+		return err
+	}
+	var programs []chinachu.Program
+	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+		return err
+	}
+	now := time.Now()
+	matches := make([]chinachu.Program, 0, len(programs))
+	for _, program := range programs {
+		if searchMatches(opts, program, now) {
+			matches = append(matches, program)
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Start < matches[j].Start })
+	if len(matches) == 0 {
+		fmt.Fprintln(stdout, "見つかりません")
+		return nil
+	}
+	writeProgramListTable(stdout, matches, opts)
 	return nil
 }
 
@@ -243,6 +268,51 @@ func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts sear
 		}
 		fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
+}
+
+func writeProgramListTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {
+	headers := []string{"#", "Type:CH", "Cat", "By", "Datetime", "Dur", "Title"}
+	if !opts.simple || opts.detail {
+		headers = insertString(headers, 1, "Program ID")
+	}
+	if opts.detail {
+		headers = insertString(headers, indexOfString(headers, "Cat"), "SID")
+		headers = append(headers, "Description")
+	}
+	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	for i, program := range programs {
+		if opts.hasNum && i != opts.num {
+			continue
+		}
+		datetimeLayout := "06/01/02 15:04"
+		if opts.simple {
+			datetimeLayout = "02 15:04"
+		}
+		row := []string{
+			strconv.Itoa(i),
+			program.Channel.Type + ":" + program.Channel.Channel,
+			program.Category,
+			reservationOwner(program),
+			time.UnixMilli(program.Start).Local().Format(datetimeLayout),
+			fmt.Sprintf("%dm", program.Seconds/60),
+			program.Title,
+		}
+		if !opts.simple || opts.detail {
+			row = insertString(row, 1, program.ID)
+		}
+		if opts.detail {
+			row = insertString(row, indexOfString(headers, "SID"), strconv.FormatInt(program.Channel.SID, 10))
+			row = append(row, program.Detail)
+		}
+		fmt.Fprintln(w, strings.Join(row, "\t"))
+	}
+}
+
+func reservationOwner(program chinachu.Program) string {
+	if program.IsManualReserved {
+		return "user"
+	}
+	return "rule"
 }
 
 func insertString(values []string, index int, value string) []string {

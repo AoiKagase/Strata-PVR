@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/storage"
@@ -72,6 +73,58 @@ func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
 	text := out.String()
 	if !strings.Contains(text, "experimental Node-era IRC bot is not implemented") || !strings.Contains(text, "Go API") {
 		t.Fatalf("unexpected ircbot output: %s", text)
+	}
+}
+
+func TestProgramListPrintsLegacyColumns(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	programs := []chinachu.Program{
+		{
+			ID:       "later",
+			Title:    "Late",
+			Category: "anime",
+			Start:    time.Date(2026, 1, 2, 3, 4, 0, 0, time.Local).UnixMilli(),
+			End:      time.Date(2026, 1, 2, 3, 34, 0, 0, time.Local).UnixMilli(),
+			Seconds:  1800,
+			Channel:  chinachu.Channel{Type: "GR", Channel: "27", SID: 101},
+		},
+		{
+			ID:               "earlier",
+			Title:            "Early",
+			Category:         "news",
+			Start:            time.Date(2026, 1, 1, 1, 2, 0, 0, time.Local).UnixMilli(),
+			End:              time.Date(2026, 1, 1, 1, 32, 0, 0, time.Local).UnixMilli(),
+			Seconds:          1800,
+			IsManualReserved: true,
+			Channel:          chinachu.Channel{Type: "BS", Channel: "BS1", SID: 201},
+		},
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), programs, false); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"reserves"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{"Program ID", "Type:CH", "Cat", "By", "Datetime", "Dur", "Title"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("program list missing %q: %s", want, text)
+		}
+	}
+	if !strings.Contains(text, "0\tearlier\tBS:BS1\tnews\tuser") {
+		t.Fatalf("manual reserve row missing or unsorted: %s", text)
+	}
+	if !strings.Contains(text, "1\tlater\tGR:27\tanime\trule") {
+		t.Fatalf("auto reserve row missing: %s", text)
 	}
 }
 

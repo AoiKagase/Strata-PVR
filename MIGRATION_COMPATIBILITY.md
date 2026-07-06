@@ -35,9 +35,9 @@ Top-level commands accepted by `./chinachu`:
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
 | `rmrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --remove`. |
 | `rules` | partially compatible | JSON/table formatting incomplete. |
-| `reserves` | partially compatible | Basic list scaffold only. |
-| `recording` | partially compatible | Basic list scaffold only. |
-| `recorded` | partially compatible | Basic list scaffold only. |
+| `reserves` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
+| `recording` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
+| `recorded` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `cleanup` | partially compatible | Removes missing recorded entries; prompt not yet matched. |
 | `compat check`, `compat doctor` | implemented | New Go-only safety checks; does not alter legacy command behavior. |
 | `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
