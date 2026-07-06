@@ -197,6 +197,20 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	}
 }
 
+func TestHostHeaderRequiredMatchesLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req.Host = ""
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIRulesMutation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

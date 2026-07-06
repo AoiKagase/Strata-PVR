@@ -101,6 +101,7 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 		handler = server.withAuth(handler)
 	}
 	handler = server.withMethodOverride(handler)
+	handler = server.withHostRequired(handler)
 	handler = server.withAccessLog(handler)
 	return server.withCommonHeaders(handler)
 }
@@ -289,6 +290,16 @@ func (s *server) withMethodOverride(next http.Handler) http.Handler {
 		if method := r.URL.Query().Get("_method"); method != "" {
 			r = r.Clone(r.Context())
 			r.Method = strings.ToUpper(method)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) withHostRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == "" {
+			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
