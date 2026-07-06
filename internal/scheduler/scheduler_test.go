@@ -155,6 +155,20 @@ func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
 	if !strings.Contains(string(logData), "!CONFLICT:") {
 		t.Fatalf("scheduler log missing legacy conflict prefix: %s", string(logData))
 	}
+	if strings.Contains(string(logData), "+00:00") || strings.Contains(string(logData), "+09:00") {
+		t.Fatalf("scheduler log used RFC3339 timezone instead of legacy isoDateTime: %s", string(logData))
+	}
+}
+
+func TestLegacyISODateTimeUsesDateformatOffset(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	ts := time.Date(2024, 7, 1, 20, 30, 45, 0, time.Local).UnixMilli()
+	if got := legacyISODateTime(ts); got != "2024-07-01T20:30:45+0900" {
+		t.Fatalf("legacyISODateTime = %q", got)
+	}
 }
 
 func TestPIDFileLifecycle(t *testing.T) {

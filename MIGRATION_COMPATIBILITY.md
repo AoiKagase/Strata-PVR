@@ -215,7 +215,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
 - Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
-- Scheduler logs reserve/conflict/skip lines and the Node-style result counters, including legacy `!CONFLICT:` conflict lines.
+- Scheduler logs reserve/conflict/skip lines and the Node-style result counters, including legacy `!CONFLICT:` conflict lines and `dateformat`-style `isoDateTime` timestamps without a timezone colon.
 - Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. Go waits for these hooks to finish.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.

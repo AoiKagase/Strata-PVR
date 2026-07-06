@@ -120,9 +120,10 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 
 	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
 	for _, reserve := range reserves {
+		startText := legacyISODateTime(reserve.Start)
 		switch {
 		case reserve.IsConflict:
-			if err := logging.AppendLine(paths.Log, "!CONFLICT: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+			if err := logging.AppendLine(paths.Log, "!CONFLICT: %s %s [%s] %s", reserve.ID, startText, reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
 			payload, err := json.Marshal(reserve)
@@ -132,7 +133,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			args := []string{
 				strconv.Itoa(os.Getpid()),
 				reserve.ID,
-				time.UnixMilli(reserve.Start).Format(time.RFC3339),
+				startText,
 				reserve.Channel.Name,
 				reserve.Title,
 				string(payload),
@@ -141,11 +142,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 				return Result{}, err
 			}
 		case reserve.IsSkip:
-			if err := logging.AppendLine(paths.Log, "SKIP: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+			if err := logging.AppendLine(paths.Log, "SKIP: %s %s [%s] %s", reserve.ID, startText, reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
 		case !reserve.IsSkip:
-			if err := logging.AppendLine(paths.Log, "RESERVE: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+			if err := logging.AppendLine(paths.Log, "RESERVE: %s %s [%s] %s", reserve.ID, startText, reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
 		}
@@ -191,6 +192,10 @@ func appendResultLogs(logPath string, result Result) error {
 		}
 	}
 	return nil
+}
+
+func legacyISODateTime(timestampMS int64) string {
+	return time.UnixMilli(timestampMS).In(time.Local).Format("2006-01-02T15:04:05-0700")
 }
 
 func schedulerHookArgs(paths Paths) []string {
