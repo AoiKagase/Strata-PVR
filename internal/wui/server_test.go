@@ -45,6 +45,49 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	}
 }
 
+func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	webRoot := filepath.Join(dir, "web")
+	if err := os.MkdirAll(webRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "favicon.ico"), []byte("ico"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "logo.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<!doctype html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := testPaths(dir)
+	paths.WebRoot = webRoot
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, path := range []string{"/favicon.ico", "/logo.png"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d body=%s", path, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Cache-Control"); got != "private, max-age=86400" {
+			t.Fatalf("%s Cache-Control = %q", path, got)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("index status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("index Cache-Control = %q", got)
+	}
+}
+
 func TestAPIReserveSkipAndDelete(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

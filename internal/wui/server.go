@@ -338,6 +338,10 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	switch strings.ToLower(filepath.Ext(r.URL.Path)) {
+	case ".ico", ".png":
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+	}
 	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
 }
 

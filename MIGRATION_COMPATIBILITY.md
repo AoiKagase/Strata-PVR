@@ -188,7 +188,7 @@ API implementation status: partially compatible. The Go WUI currently implements
 
 ## WUI / Static Assets
 
-The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to `../Chinachu/web` during development. Current status: partially compatible; Node-based frontend builds are not required.
+The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to `../Chinachu/web` during development. Static `.ico` and `.png` assets now preserve the legacy `Cache-Control: private, max-age=86400` behavior while other static assets keep `no-cache`. Current status: partially compatible; Node-based frontend builds are not required.
 
 ## Mirakurun Endpoints Used
 
