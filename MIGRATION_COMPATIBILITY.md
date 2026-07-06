@@ -95,7 +95,7 @@ Fields from `config.sample.json` and JS references:
 | `wuiAllowCountries` | GeoIP country allow list. | not started |
 | `wuiPort`, `wuiHost` | Deprecated authenticated listener. | partially compatible; starts a separate authenticated HTTP/HTTPS server when `wuiPort` is set. |
 | `wuiTlsKeyPath`, `wuiTlsCertPath`, `wuiTlsPassphrase`, `wuiTlsRequestCert`, `wuiTlsRejectUnauthorized`, `wuiTlsCaPath` | TLS listener settings. | partially compatible; cert/key listener, client certificate request/verification, and CA pool loading are implemented. Encrypted key passphrase handling remains incomplete. |
-| `wuiOpenServer`, `wuiOpenHost`, `wuiOpenPort` | Unauthenticated LAN listener. | partially compatible; starts a separate HTTP server without Basic auth. Automatic private IPv4 selection and mDNS remain incomplete. |
+| `wuiOpenServer`, `wuiOpenHost`, `wuiOpenPort` | Unauthenticated LAN listener. | partially compatible; starts a separate HTTP server without Basic auth and selects a private IPv4 when `wuiOpenHost` is unset. mDNS remains incomplete. |
 | `wuiXFF` | Trust first `X-Forwarded-For` IP. | partially compatible; access logging uses the first forwarded address and normalizes IPv4-mapped IPv6. GeoIP country filtering is still not implemented. |
 | `wuiMdnsAdvertisement` | mDNS advertisement. | not started |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |

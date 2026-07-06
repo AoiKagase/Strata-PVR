@@ -146,9 +146,13 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 		if port == 0 {
 			port = 20772
 		}
+		host := cfg.WUIOpenHost
+		if host == "" {
+			host = detectPrivateIPv4()
+		}
 		servers = append(servers, runningServer{
 			server: &http.Server{
-				Addr:              listenAddress(cfg.WUIOpenHost, port),
+				Addr:              listenAddress(host, port),
 				Handler:           newHandler(paths, cfg, false),
 				ReadHeaderTimeout: 10 * time.Second,
 			},
@@ -156,6 +160,43 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 		})
 	}
 	return servers, nil
+}
+
+func detectPrivateIPv4() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		if ip := privateIPv4FromAddrs(addrs); ip != "" {
+			return ip
+		}
+	}
+	return ""
+}
+
+func privateIPv4FromAddrs(addrs []net.Addr) string {
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		ip = ip.To4()
+		if ip != nil && ip.IsPrivate() {
+			return ip.String()
+		}
+	}
+	return ""
 }
 
 func buildTLSConfig(cfg *config.Config) (*tls.Config, error) {

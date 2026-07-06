@@ -866,6 +866,27 @@ func TestBuildTLSConfigCAError(t *testing.T) {
 	}
 }
 
+func TestPrivateIPv4FromAddrs(t *testing.T) {
+	_, publicNet, err := net.ParseCIDR("203.0.113.10/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicNet.IP = net.ParseIP("203.0.113.10")
+	_, privateNet, err := net.ParseCIDR("192.168.10.20/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateNet.IP = net.ParseIP("192.168.10.20")
+	got := privateIPv4FromAddrs([]net.Addr{
+		&net.IPAddr{IP: net.ParseIP("2001:db8::1")},
+		publicNet,
+		privateNet,
+	})
+	if got != "192.168.10.20" {
+		t.Fatalf("private IPv4 = %q", got)
+	}
+}
+
 func TestStaticServingUsesWebRoot(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
