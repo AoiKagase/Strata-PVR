@@ -122,7 +122,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	for _, reserve := range reserves {
 		switch {
 		case reserve.IsConflict:
-			if err := logging.AppendLine(paths.Log, "CONFLICT: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+			if err := logging.AppendLine(paths.Log, "!CONFLICT: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
 			payload, err := json.Marshal(reserve)

@@ -1055,7 +1055,7 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\nCONFLICT: bbb\n"
+	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\n!CONFLICT: bbb\n"
 	if err := os.WriteFile(filepath.Join(paths.LogDir, "scheduler"), []byte(logData), 0o644); err != nil {
 		t.Fatal(err)
 	}

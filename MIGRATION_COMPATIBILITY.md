@@ -149,7 +149,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
-| `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, `CONFLICT:`, `SKIP:`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
+| `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, `!CONFLICT:`, `SKIP:`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
 | `log/operator` | Operator log stream with `START:` and `FIN:` lines. | operator/WUI | partially compatible |
 | `log/wui` | WUI log stream with HTTP/HTTPS server start/close/error lines. | WUI/API | partially compatible |
 
@@ -215,7 +215,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
 - Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
-- Scheduler logs reserve/conflict/skip lines and the Node-style result counters. Difference: conflict lines currently use `CONFLICT:` instead of Node's `!CONFLICT:` so the Go WUI parser can continue reading them.
+- Scheduler logs reserve/conflict/skip lines and the Node-style result counters, including legacy `!CONFLICT:` conflict lines.
 - Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. Go waits for these hooks to finish.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.
@@ -228,7 +228,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`; Unix builds fill device/inode/uid/gid/block fields from `stat(2)` where available, while fallback platforms may return zero for unavailable fields.
 - Go WUI `log/:name/stream.txt` writes the legacy padding, the last 100 log lines, and follows appended log data until the request is closed.
-- Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
+- Go WUI scheduler JSON parses `RESERVE:` and legacy `!CONFLICT:`/`CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
 - Go WUI status includes operator/scheduler PID values when PID files are present and checks whether the referenced process is alive before setting `alive:true`.
 - Go WUI recorded/recording watch supports XSPF and m2ts serving. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.

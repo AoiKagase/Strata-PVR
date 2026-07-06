@@ -113,6 +113,50 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 }
 
+func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Title"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(time.Hour).UnixMilli()
+	src := fakeSource{
+		services: []mirakurun.Service{{ID: 1, ServiceID: 101, NetworkID: 1, Name: "svc"}},
+		programs: []mirakurun.Program{
+			{ID: 10, NetworkID: 1, ServiceID: 101, Name: "Title A", StartAt: start, Duration: 3600000},
+			{ID: 11, NetworkID: 1, ServiceID: 101, Name: "Title B", StartAt: start, Duration: 3600000},
+		},
+		tuners: []mirakurun.Tuner{{Types: []string{"GR"}}},
+	}
+	src.services[0].Channel.Type = "GR"
+	src.services[0].Channel.Channel = "27"
+	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Conflicts != 1 {
+		t.Fatalf("conflicts = %d", result.Conflicts)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "!CONFLICT:") {
+		t.Fatalf("scheduler log missing legacy conflict prefix: %s", string(logData))
+	}
+}
+
 func TestPIDFileLifecycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data", "scheduler.pid")
 	if err := writePIDFile(path); err != nil {
