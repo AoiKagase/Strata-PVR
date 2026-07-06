@@ -375,6 +375,7 @@ func (s *server) runScheduler(ctx context.Context, simulation bool) error {
 		Rules:    s.paths.Rules,
 		Schedule: s.paths.Schedule,
 		Reserves: s.paths.Reserves,
+		PID:      s.pidPath("scheduler"),
 	}, simulation)
 	return err
 }

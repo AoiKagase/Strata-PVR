@@ -471,6 +471,7 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 		Rules:    p.rules,
 		Schedule: p.schedule,
 		Reserves: p.reserves,
+		PID:      filepath.Join("data", "scheduler.pid"),
 	}, simulation)
 	if err != nil {
 		return err

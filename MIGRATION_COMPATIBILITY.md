@@ -23,7 +23,7 @@ Top-level commands accepted by `./chinachu`:
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | not started | Existing command uses git, prompts, and optional installer. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
-| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic. Logging/hooks/PID are incomplete. |
+| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, and maintains `data/scheduler.pid` while running. Logging/hooks remain incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
 | `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
@@ -140,7 +140,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/reserves.json` | Array of program objects. | scheduler/CLI/API/operator | partially compatible |
 | `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. | operator/CLI/API | partially compatible |
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
-| `data/scheduler.pid` | Scheduler process id text. | scheduler | not started |
+| `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream. | wrapper/operator | not started |
 | `log/operator` | Operator log stream. | wrapper/WUI | not started |
@@ -207,7 +207,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
-- Scheduler writes `data/schedule.json`, `data/reserves.json`; `data/scheduler.pid` is not implemented yet.
+- Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
 - Scheduler runs hook commands with paths and counters.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.

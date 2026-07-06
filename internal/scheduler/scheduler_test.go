@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -84,5 +85,24 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 	if _, err := os.Stat(paths.Schedule); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPIDFileLifecycle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data", "scheduler.pid")
+	if err := writePIDFile(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strconv.Itoa(os.Getpid()) + "\n"
+	if string(data) != want {
+		t.Fatalf("pid file = %q, want %q", data, want)
+	}
+	removePIDFile(path)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("pid file was not removed: %v", err)
 	}
 }

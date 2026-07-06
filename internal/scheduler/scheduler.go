@@ -3,7 +3,10 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"chinachu-go/internal/chinachu"
@@ -23,6 +26,7 @@ type Paths struct {
 	Rules    string
 	Schedule string
 	Reserves string
+	PID      string
 }
 
 type Result struct {
@@ -34,6 +38,11 @@ type Result struct {
 }
 
 func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
+	if err := writePIDFile(paths.PID); err != nil {
+		return Result{}, err
+	}
+	defer removePIDFile(paths.PID)
+
 	cfg, err := config.Load(paths.Config)
 	if err != nil {
 		return Result{}, err
@@ -43,6 +52,22 @@ func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
 		return Result{}, err
 	}
 	return RunWithSource(ctx, paths, cfg, client, simulation, time.Now())
+}
+
+func writePIDFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
+}
+
+func removePIDFile(path string) {
+	if path != "" {
+		_ = os.Remove(path)
+	}
 }
 
 func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
