@@ -94,7 +94,7 @@ Fields from `config.sample.json` and JS references:
 | `uid`, `gid` | Drop privileges when started as root. | partially compatible; operator and WUI call `setgid` then `setuid` on Unix, defaulting missing `gid` to `video` and requiring `uid` when running as root. |
 | `mirakurunPath` | Mirakurun base URL; supports HTTP, `http+unix`, and legacy `http://unix:` socket URLs. | partially compatible |
 | `schedulerMirakurunPath` | Legacy fallback for Mirakurun URL. | partially compatible |
-| `recordedDir` | Directory prefix for recorded files. | partially compatible |
+| `recordedDir` | Directory prefix for recorded files. | partially compatible; operator startup creates it when missing and logs legacy `MKDIR:`. |
 | `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | partially compatible; fields are parsed from existing config, but preview/transcode use is not implemented yet. |
 | `excludeServices` | Mirakurun service IDs excluded from schedule import. | implemented |
 | `serviceOrder` | Service IDs moved to the front in schedule order. | implemented |
@@ -150,7 +150,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `GETTING EPG from Mirakurun.`, `Mirakurun -> ...` fetch counts, `RESERVE:`, `!CONFLICT:`, `SKIP:`, `OVERRIDEBYRULE:`, `WRITE:`, `TUNERS:`, duplicate ID `**WARNING**`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
-| `log/operator` | Operator log stream with legacy-style `PREPARE:`, `RECORD:`, `STREAM:`, `WRITE:`, `SPAWN:`, and `FIN:` lines plus Go `START:` compatibility lines. | operator/WUI | partially compatible |
+| `log/operator` | Operator log stream with legacy-style `MKDIR:`, `PREPARE:`, `RECORD:`, `STREAM:`, `WRITE:`, `SPAWN:`, and `FIN:` lines plus Go `START:` compatibility lines. | operator/WUI | partially compatible |
 | `log/wui` | WUI log stream with HTTP/HTTPS server start/close/error lines. | WUI/API | partially compatible |
 
 Writes in Go use temp-file-and-rename atomic JSON helpers.
@@ -223,7 +223,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Operator writes recorded files directly to final path with append mode.
 - Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, updates the active recording entry with legacy runtime fields (`recorded`, `pid:-1`, `priority`, `tuner`, and `command`) after the Mirakurun stream is opened, records the Mirakurun decoded program stream, merges the completed item into `data/recorded.json` with the legacy same-ID replacement/old-ID suffix behavior, and removes the completed reserve only when it is `isManualReserved`, matching the old operator.
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
-- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes, logging the legacy `SPAWN:` line after process start. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; `remove` creates a timestamped `recorded.json` backup before rewriting the list. Operator logs now include the main legacy `PREPARE`/`RECORD`/`STREAM`/`WRITE`/`SPAWN`/`FIN` recording lines, but every signal side effect remains incomplete.
+- Go operator startup clears `data/recording.json` to `[]`, creates missing `recordedDir` with legacy `MKDIR:` logging, polls `abort:true` during an active stream, and runs `recordedCommand` with recorded file path plus program JSON after state writes, logging the legacy `SPAWN:` line after process start. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; `remove` creates a timestamped `recorded.json` backup before rewriting the list. Operator logs now include the main legacy `PREPARE`/`RECORD`/`STREAM`/`WRITE`/`SPAWN`/`FIN` recording lines, but every signal side effect remains incomplete.
 - CLI and WUI/API cleanup remove missing file entries from `data/recorded.json` and create a timestamped backup before destructive writes.
 - WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`; Unix builds fill device/inode/uid/gid/block fields from `stat(2)` where available, while fallback platforms may return zero for unavailable fields.
@@ -246,7 +246,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Recorded filename format | partially compatible; legacy tuner and episode tokens are implemented, but dateformat edge cases still need JS oracle tests. |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and signal side effects remain incomplete. |
+| Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | partially compatible |

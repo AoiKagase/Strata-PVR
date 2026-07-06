@@ -65,6 +65,9 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 		return err
 	}
 	defer removePIDFile(paths.PID)
+	if err := initializeRuntimeState(paths, cfg); err != nil {
+		return err
+	}
 
 	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
 	if err != nil {
@@ -85,6 +88,25 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func initializeRuntimeState(paths Paths, cfg *config.Config) error {
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{}, false); err != nil {
+		return err
+	}
+	recordedDir := cfg.RecordedDir
+	if recordedDir == "" {
+		recordedDir = "./recorded/"
+	}
+	if _, err := os.Stat(recordedDir); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := logging.AppendLine(paths.Log, "MKDIR: %s", recordedDir); err != nil {
+		return err
+	}
+	return os.MkdirAll(recordedDir, 0o755)
 }
 
 func writePIDFile(path string) error {

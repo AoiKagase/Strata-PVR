@@ -52,6 +52,38 @@ func (f *priorityStreamer) SetPriority(priority int) {
 	f.priority = priority
 }
 
+func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "stale"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	recordedDir := filepath.Join(dir, "recorded")
+	if err := initializeRuntimeState(paths, &config.Config{RecordedDir: recordedDir}); err != nil {
+		t.Fatal(err)
+	}
+	var recording []chinachu.Program
+	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 0 {
+		t.Fatalf("recording state was not cleared: %#v", recording)
+	}
+	if info, err := os.Stat(recordedDir); err != nil || !info.IsDir() {
+		t.Fatalf("recordedDir was not created: info=%v err=%v", info, err)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "MKDIR: "+recordedDir) {
+		t.Fatalf("operator log missing MKDIR line: %s", string(logData))
+	}
+}
+
 type abortableStreamer struct {
 	stream *abortableReadCloser
 }
