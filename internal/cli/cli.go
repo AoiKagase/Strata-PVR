@@ -491,6 +491,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				Recording: p.recording,
 				Recorded:  p.recorded,
 				WebRoot:   "web",
+				LogDir:    "log",
 			})
 		default:
 			return fmt.Errorf("Usage: ./chinachu service <name> <action>")

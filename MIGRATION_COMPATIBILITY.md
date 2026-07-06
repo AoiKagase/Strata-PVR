@@ -183,7 +183,7 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, channel logo, channel watch XSPF, channel watch m2ts proxy, recorded cleanup via PUT, and recorded/reserve/recording item reads. Preview, mp4 transcode, recorded/recording watch routes, scheduler force, compression, and exact status fields remain incomplete.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, storage usage, log reads, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, channel logo, channel watch XSPF, channel watch m2ts proxy, recorded cleanup via PUT, and recorded/reserve/recording item reads. Preview, mp4 transcode, recorded/recording watch routes, scheduler force, compression, live log tailing, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
@@ -218,6 +218,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Cleanup removes missing file entries from `data/recorded.json`.
 - WUI/API may rewrite config, rules, reserves, recording, recorded.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
+- Go WUI `log/:name/stream.txt` currently returns the padding plus current log contents and does not keep a live `tail -f` subprocess open.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm.
 
 ## Compatibility Status Matrix

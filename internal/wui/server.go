@@ -19,6 +19,7 @@ import (
 	"chinachu-go/internal/config"
 	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/storage"
+	"chinachu-go/internal/system"
 )
 
 type Paths struct {
@@ -29,6 +30,7 @@ type Paths struct {
 	Recording string
 	Recorded  string
 	WebRoot   string
+	LogDir    string
 }
 
 func Run(ctx context.Context, paths Paths) error {
@@ -148,6 +150,12 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 1 && parts[0] == "status":
 		writeJSON(w, http.StatusOK, s.status())
+	case len(parts) == 1 && parts[0] == "storage":
+		s.handleStorage(w, r)
+	case len(parts) == 2 && parts[0] == "log":
+		s.handleLog(w, r, parts[1], false)
+	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
+		s.handleLog(w, r, parts[1], true)
 	case len(parts) == 1 && parts[0] == "config":
 		s.handleJSONFile(w, r, s.paths.Config, "{}")
 	case len(parts) == 1 && parts[0] == "rules":
@@ -215,6 +223,75 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 		programs = append(programs, channel.Programs...)
 	}
 	writeJSON(w, http.StatusOK, programs)
+}
+
+func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var recorded []chinachu.Program
+	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var recordedSize int64
+	for _, program := range recorded {
+		if program.Recorded == "" {
+			continue
+		}
+		info, err := os.Stat(filepath.FromSlash(program.Recorded))
+		if err == nil && info.Mode().IsRegular() {
+			recordedSize += info.Size()
+		}
+	}
+	recordedDir := s.cfg.RecordedDir
+	if recordedDir == "" {
+		recordedDir = "."
+	}
+	usage, err := system.GetDiskUsage(recordedDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"recorded": recordedSize,
+		"size":     usage.Size,
+		"used":     usage.Used,
+		"avail":    usage.Avail,
+	})
+}
+
+func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, stream bool) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if name != "wui" && name != "operator" && name != "scheduler" {
+		http.NotFound(w, r)
+		return
+	}
+	path := filepath.Join(s.logDir(), name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	if stream {
+		_, _ = w.Write([]byte(strings.Repeat(" ", 1023)))
+	}
+	_, _ = w.Write(data)
 }
 
 func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
@@ -701,6 +778,13 @@ func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
 		}
 	}
 	return chinachu.ChannelSchedule{}, false
+}
+
+func (s *server) logDir() string {
+	if s.paths.LogDir != "" {
+		return s.paths.LogDir
+	}
+	return "log"
 }
 
 func (s *server) readSchedule() ([]chinachu.ChannelSchedule, error) {

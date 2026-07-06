@@ -334,6 +334,71 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	}
 }
 
+func TestAPIStorage(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("12345"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{RecordedDir: dir})
+	req := httptest.NewRequest(http.MethodGet, "/api/storage.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("storage status=%d body=%q", res.Code, res.Body.String())
+	}
+	var usage map[string]any
+	if err := json.Unmarshal(res.Body.Bytes(), &usage); err != nil {
+		t.Fatal(err)
+	}
+	if usage["recorded"].(float64) != 5 {
+		t.Fatalf("recorded = %#v", usage["recorded"])
+	}
+	if usage["size"].(float64) <= 0 || usage["avail"].(float64) <= 0 {
+		t.Fatalf("unexpected usage: %#v", usage)
+	}
+}
+
+func TestAPILogAndStream(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(paths.LogDir, "wui"), []byte("line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "line\n" {
+		t.Fatalf("log status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("stream status=%d body=%q", res.Code, res.Body.String())
+	}
+	if !strings.HasSuffix(res.Body.String(), "line\n") || len(res.Body.String()) <= len("line\n") {
+		t.Fatalf("stream body missing padding or log: %q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/log/operator.txt", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("missing log status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIAuth(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
