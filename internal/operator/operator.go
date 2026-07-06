@@ -160,14 +160,14 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
 			return result, err
 		}
+		if err := runRecordedCommand(ctx, paths.Log, cfg.RecordedCommand, completed); err != nil {
+			result.Failed++
+			return result, err
+		}
 		if err := logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed)); err != nil {
-			return result, err
-		}
-		if err := runRecordedCommand(ctx, cfg.RecordedCommand, completed); err != nil {
-			result.Failed++
 			return result, err
 		}
 		result.Completed++
@@ -356,7 +356,7 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 	}
 }
 
-func runRecordedCommand(ctx context.Context, command string, program chinachu.Program) error {
+func runRecordedCommand(ctx context.Context, logPath, command string, program chinachu.Program) error {
 	if command == "" {
 		return nil
 	}
@@ -367,6 +367,13 @@ func runRecordedCommand(ctx context.Context, command string, program chinachu.Pr
 	cmd := exec.CommandContext(ctx, command, filepath.FromSlash(program.Recorded), string(payload))
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+	if logPath != "" {
+		if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return err
+		}
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
