@@ -48,3 +48,40 @@ func TestReserve(t *testing.T) {
 		t.Fatalf("reserve file not updated: %s", string(b))
 	}
 }
+
+func TestRuleLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("rules.json", []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"rule", "-type", "GR", "-title", "笑点"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("rules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"types": [`) || !strings.Contains(string(b), `"笑点"`) {
+		t.Fatalf("rule not written: %s", string(b))
+	}
+	if err := Run(context.Background(), []string{"disrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile("rules.json")
+	if !strings.Contains(string(b), `"isDisabled": true`) {
+		t.Fatalf("rule not disabled: %s", string(b))
+	}
+	if err := Run(context.Background(), []string{"rmrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile("rules.json")
+	if strings.TrimSpace(string(b)) != "[]" {
+		t.Fatalf("rule not removed: %s", string(b))
+	}
+}

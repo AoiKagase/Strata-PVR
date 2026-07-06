@@ -17,8 +17,10 @@ Phase 1/2 scaffolding is present:
 - JSON state helpers write through a temp file and rename.
 - Rule matching and recorded filename formatting are partially implemented.
 - A Mirakurun client supports HTTP and `http+unix` setup.
-- CLI command names are accepted, with reservation state operations partially
-  implemented.
+- `chinachu-go update` performs the first scheduler pass against Mirakurun and
+  writes legacy JSON state.
+- CLI command names are accepted, with reservation state and rule operations
+  partially implemented.
 
 ## Build
 

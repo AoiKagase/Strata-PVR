@@ -23,17 +23,17 @@ Top-level commands accepted by `./chinachu`:
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | not started | Existing command uses git, prompts, and optional installer. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape; execute is stubbed. |
-| `update [-s|--simulation]` | not started | JS runs scheduler and logs to `log/scheduler`. |
+| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic. Logging/hooks/PID are incomplete. |
 | `search` | partially compatible | Basic filtering/listing scaffold only. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
 | `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `skip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `unskip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `stop <pgid>` | partially compatible | Marks recording entry with `abort:true`. |
-| `rule` | not started | Options audited below. |
-| `enrule <rule#>` | not started | Alias for `rule -n <rule#> --enable`. |
-| `disrule <rule#>` | not started | Alias for `rule -n <rule#> --disable`. |
-| `rmrule <rule#>` | not started | Alias for `rule -n <rule#> --remove`. |
+| `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Table output and `null` field deletion compatibility need more work. |
+| `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
+| `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
+| `rmrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --remove`. |
 | `rules` | partially compatible | JSON/table formatting incomplete. |
 | `reserves` | partially compatible | Basic list scaffold only. |
 | `recording` | partially compatible | Basic list scaffold only. |
@@ -128,7 +128,7 @@ Known rule fields:
 - `ignore_flags`
 - `recorded_format`
 
-Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases.
+Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases. CLI rule add/update/enable/disable/remove is partially implemented.
 
 ## Data Files And Schemas
 
@@ -206,7 +206,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
-- Scheduler writes `data/scheduler.pid`, `data/schedule.json`, `data/reserves.json`.
+- Scheduler writes `data/schedule.json`, `data/reserves.json`; `data/scheduler.pid` is not implemented yet.
 - Scheduler runs hook commands with paths and counters.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.

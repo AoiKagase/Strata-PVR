@@ -8,8 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 
 	"chinachu-go/internal/chinachu"
+	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
 )
 
@@ -64,12 +67,259 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return dumpJSONFile(p.recorded, "[]", stdout)
 	case "cleanup":
 		return cleanup(p, stdout)
-	case "search", "rule", "enrule", "disrule", "rmrule", "update", "updater", "ircbot", "test":
+	case "update":
+		return update(ctx, p, args[1:], stdout)
+	case "rule":
+		return ruleCommand(p, args[1:], stdout)
+	case "enrule":
+		return ruleCommand(p, ruleAliasArgs(args[1:], "--enable"), stdout)
+	case "disrule":
+		return ruleCommand(p, ruleAliasArgs(args[1:], "--disable"), stdout)
+	case "rmrule":
+		return ruleCommand(p, ruleAliasArgs(args[1:], "--remove"), stdout)
+	case "search", "updater", "ircbot", "test":
 		return fmt.Errorf("%s: compatibility implementation not completed", args[0])
 	default:
 		printHelp(stdout)
 		return nil
 	}
+}
+
+func ruleCommand(p paths, args []string, stdout io.Writer) error {
+	opts, rule, err := parseRuleArgs(args)
+	if err != nil {
+		return err
+	}
+	var rules []chinachu.Rule
+	if err := storage.ReadJSON(p.rules, &rules, "[]"); err != nil {
+		return err
+	}
+	var target chinachu.Rule
+	if opts.hasNum {
+		if opts.num < 0 || opts.num >= len(rules) {
+			return fmt.Errorf("見つかりません")
+		}
+		target = rules[opts.num]
+	}
+	mergeRule(&target, rule)
+	if opts.enable {
+		target.IsDisabled = false
+	}
+	if opts.disable {
+		target.IsDisabled = true
+	}
+	if isZeroRule(target) && !opts.remove {
+		return fmt.Errorf("ルールが空です。一つ以上の条件が必要です。")
+	}
+	if opts.hasNum {
+		if opts.remove {
+			rules = append(rules[:opts.num], rules[opts.num+1:]...)
+			fmt.Fprintln(stdout, "ルールを削除します")
+		} else {
+			rules[opts.num] = target
+			fmt.Fprintln(stdout, "Rule config:")
+			writePretty(stdout, target)
+		}
+	} else {
+		if opts.remove || opts.enable || opts.disable {
+			return fmt.Errorf("見つかりません")
+		}
+		rules = append(rules, target)
+		fmt.Fprintln(stdout, "Rule config:")
+		writePretty(stdout, target)
+	}
+	if opts.simulation {
+		return nil
+	}
+	return storage.WriteJSONAtomic(p.rules, rules, true)
+}
+
+type ruleOptions struct {
+	num        int
+	hasNum     bool
+	enable     bool
+	disable    bool
+	remove     bool
+	simulation bool
+}
+
+func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
+	var opts ruleOptions
+	var rule chinachu.Rule
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		value := func() (string, error) {
+			if i+1 >= len(args) {
+				return "", fmt.Errorf("missing value for %s", arg)
+			}
+			i++
+			return args[i], nil
+		}
+		switch arg {
+		case "-s", "--simulation":
+			opts.simulation = true
+		case "-en", "--enable":
+			opts.enable = true
+		case "-dis", "--disable":
+			opts.disable = true
+		case "-rm", "--remove":
+			opts.remove = true
+		case "-n", "--num":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return opts, rule, err
+			}
+			opts.num = n
+			opts.hasNum = true
+		case "-sid", "--service-id":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			sid, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.SID = sid
+		case "-type", "--type":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.Types = splitCSV(v)
+		case "-ch", "--channel":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.Channels = splitCSV(v)
+		case "-^ch", "--ignore-channels":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.IgnoreChannels = splitCSV(v)
+		case "-cat", "--category":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.Categories = splitCSV(v)
+		case "-start", "--start":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			start, err := strconv.Atoi(v)
+			if err != nil {
+				return opts, rule, err
+			}
+			if rule.Hour == nil {
+				rule.Hour = &chinachu.RangeRule{End: 24}
+			}
+			rule.Hour.Start = start
+		case "-end", "--end":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			end, err := strconv.Atoi(v)
+			if err != nil {
+				return opts, rule, err
+			}
+			if rule.Hour == nil {
+				rule.Hour = &chinachu.RangeRule{}
+			}
+			rule.Hour.End = end
+		case "-mini", "--minimum":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			minimum, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return opts, rule, err
+			}
+			if rule.Duration == nil {
+				rule.Duration = &chinachu.DurationRule{Max: 99999999}
+			}
+			rule.Duration.Min = minimum
+		case "-maxi", "--maximum":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			maximum, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return opts, rule, err
+			}
+			if rule.Duration == nil {
+				rule.Duration = &chinachu.DurationRule{}
+			}
+			rule.Duration.Max = maximum
+		case "-title", "--titles":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.ReserveTitles = splitCSV(v)
+		case "-^title", "--ignore-titles":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.IgnoreTitles = splitCSV(v)
+		case "-desc", "--descriptions":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.ReserveDescriptions = splitCSV(v)
+		case "-^desc", "--ignore-descriptions":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.IgnoreDescriptions = splitCSV(v)
+		case "-flag", "--flags":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.ReserveFlags = splitCSV(v)
+		case "-^flag", "--ignore-flags":
+			v, err := value()
+			if err != nil {
+				return opts, rule, err
+			}
+			rule.IgnoreFlags = splitCSV(v)
+		}
+	}
+	return opts, rule, nil
+}
+
+func update(ctx context.Context, p paths, args []string, stdout io.Writer) error {
+	simulation := hasFlag(args, "-s", "--simulation")
+	result, err := scheduler.Run(ctx, scheduler.Paths{
+		Config:   p.config,
+		Rules:    p.rules,
+		Schedule: p.schedule,
+		Reserves: p.reserves,
+	}, simulation)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "RUNNING SCHEDULER.")
+	fmt.Fprintf(stdout, "MATCHES: %d\n", result.Matches)
+	fmt.Fprintf(stdout, "DUPLICATES: %d\n", result.Duplicates)
+	fmt.Fprintf(stdout, "CONFLICTS: %d\n", result.Conflicts)
+	fmt.Fprintf(stdout, "SKIPS: %d\n", result.Skips)
+	fmt.Fprintf(stdout, "RESERVES: %d\n", result.Reserves)
+	return nil
 }
 
 func reserve(p paths, args []string, stdout io.Writer) error {
@@ -278,6 +528,113 @@ func validateDir(path string) error {
 		return fmt.Errorf("not a directory")
 	}
 	return nil
+}
+
+func hasFlag(args []string, names ...string) bool {
+	for _, arg := range args {
+		for _, name := range names {
+			if arg == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func firstArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
+}
+
+func ruleAliasArgs(args []string, action string) []string {
+	if len(args) == 0 {
+		return []string{"-n", "", action}
+	}
+	out := []string{"-n", args[0], action}
+	if len(args) > 1 {
+		out = append(out, args[1:]...)
+	}
+	return out
+}
+
+func splitCSV(value string) []string {
+	if value == "null" || value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := parts[:0]
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" && part != "null" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func mergeRule(dst *chinachu.Rule, src chinachu.Rule) {
+	if src.SID != 0 {
+		dst.SID = src.SID
+	}
+	if src.Types != nil {
+		dst.Types = src.Types
+	}
+	if src.Channels != nil {
+		dst.Channels = src.Channels
+	}
+	if src.IgnoreChannels != nil {
+		dst.IgnoreChannels = src.IgnoreChannels
+	}
+	if src.Category != "" {
+		dst.Category = src.Category
+	}
+	if src.Categories != nil {
+		dst.Categories = src.Categories
+	}
+	if src.Hour != nil {
+		dst.Hour = src.Hour
+	}
+	if src.Duration != nil {
+		dst.Duration = src.Duration
+	}
+	if src.ReserveTitles != nil {
+		dst.ReserveTitles = src.ReserveTitles
+	}
+	if src.IgnoreTitles != nil {
+		dst.IgnoreTitles = src.IgnoreTitles
+	}
+	if src.ReserveDescriptions != nil {
+		dst.ReserveDescriptions = src.ReserveDescriptions
+	}
+	if src.IgnoreDescriptions != nil {
+		dst.IgnoreDescriptions = src.IgnoreDescriptions
+	}
+	if src.ReserveFlags != nil {
+		dst.ReserveFlags = src.ReserveFlags
+	}
+	if src.IgnoreFlags != nil {
+		dst.IgnoreFlags = src.IgnoreFlags
+	}
+}
+
+func isZeroRule(rule chinachu.Rule) bool {
+	return rule.SID == 0 &&
+		len(rule.Types) == 0 &&
+		len(rule.Channels) == 0 &&
+		len(rule.IgnoreChannels) == 0 &&
+		rule.Category == "" &&
+		len(rule.Categories) == 0 &&
+		rule.Hour == nil &&
+		rule.Duration == nil &&
+		len(rule.ReserveTitles) == 0 &&
+		len(rule.IgnoreTitles) == 0 &&
+		len(rule.ReserveDescriptions) == 0 &&
+		len(rule.IgnoreDescriptions) == 0 &&
+		len(rule.ReserveFlags) == 0 &&
+		len(rule.IgnoreFlags) == 0 &&
+		rule.RecordedFormat == ""
 }
 
 func writePretty(w io.Writer, v any) {

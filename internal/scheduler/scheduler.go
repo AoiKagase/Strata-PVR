@@ -1,0 +1,238 @@
+package scheduler
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"time"
+
+	"chinachu-go/internal/chinachu"
+	"chinachu-go/internal/config"
+	"chinachu-go/internal/mirakurun"
+	"chinachu-go/internal/storage"
+)
+
+type Source interface {
+	Services(context.Context) ([]mirakurun.Service, error)
+	Programs(context.Context) ([]mirakurun.Program, error)
+	Tuners(context.Context) ([]mirakurun.Tuner, error)
+}
+
+type Paths struct {
+	Config   string
+	Rules    string
+	Schedule string
+	Reserves string
+}
+
+type Result struct {
+	Matches    int
+	Duplicates int
+	Conflicts  int
+	Skips      int
+	Reserves   int
+}
+
+func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
+	cfg, err := config.Load(paths.Config)
+	if err != nil {
+		return Result{}, err
+	}
+	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
+	if err != nil {
+		return Result{}, err
+	}
+	return RunWithSource(ctx, paths, cfg, client, simulation, time.Now())
+}
+
+func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
+	services, err := source.Services(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("get Mirakurun services: %w", err)
+	}
+	programs, err := source.Programs(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("get Mirakurun programs: %w", err)
+	}
+	tuners, err := source.Tuners(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("get Mirakurun tuners: %w", err)
+	}
+
+	schedule := BuildSchedule(cfg, services, programs)
+
+	var rules []chinachu.Rule
+	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
+		return Result{}, err
+	}
+	var oldReserves []chinachu.Program
+	if err := storage.ReadJSON(paths.Reserves, &oldReserves, "[]"); err != nil {
+		return Result{}, err
+	}
+
+	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
+	if !simulation {
+		if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+			return Result{}, err
+		}
+		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
+			return Result{}, err
+		}
+	}
+	return result, nil
+}
+
+func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time) ([]chinachu.Program, Result) {
+	matches := []chinachu.Program{}
+	for _, channel := range schedule {
+		for _, program := range channel.Programs {
+			if chinachu.MatchesAnyRule(rules, program) {
+				matches = append(matches, program)
+			}
+		}
+	}
+
+	for _, reserve := range oldReserves {
+		if reserve.IsManualReserved {
+			if reserve.Start+86400000 <= now.UnixMilli() {
+				continue
+			}
+			if containsProgramID(matches, reserve.ID) {
+				continue
+			}
+			if updated := chinachu.GetProgramByID(reserve.ID, schedule, nil); updated != nil {
+				oneSeg := reserve.OneSeg
+				reserve = *updated
+				reserve.IsManualReserved = true
+				reserve.OneSeg = oneSeg
+			}
+			matches = append(matches, reserve)
+			continue
+		}
+		if reserve.IsSkip {
+			for i := range matches {
+				if matches[i].ID == reserve.ID {
+					matches[i].IsSkip = true
+					break
+				}
+			}
+		}
+	}
+
+	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Start < matches[j].Start })
+
+	duplicates := markDuplicates(matches)
+	conflicts := markConflicts(matches, tuners)
+	applyRecordedFormats(matches, rules)
+
+	reserves := []chinachu.Program{}
+	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts}
+	for _, program := range matches {
+		if program.IsDuplicate {
+			continue
+		}
+		reserves = append(reserves, program)
+		if program.IsSkip {
+			result.Skips++
+		} else if !program.IsConflict {
+			result.Reserves++
+		}
+	}
+	return removeEnded(reserves, now), result
+}
+
+func markDuplicates(programs []chinachu.Program) int {
+	count := 0
+	for i := range programs {
+		a := &programs[i]
+		for j := range programs {
+			b := &programs[j]
+			if b.IsDuplicate || b.IsSkip {
+				continue
+			}
+			if a.ID == b.ID || a.Channel.Type != b.Channel.Type || a.Channel.Channel != b.Channel.Channel || a.Start != b.Start || a.End != b.End || a.Title != b.Title {
+				continue
+			}
+			if a.Channel.SID < b.Channel.SID {
+				continue
+			}
+			a.IsDuplicate = true
+			count++
+			break
+		}
+	}
+	return count
+}
+
+func markConflicts(programs []chinachu.Program, tuners []mirakurun.Tuner) int {
+	threads := make([][]chinachu.Program, len(tuners))
+	count := 0
+	for i := range programs {
+		p := &programs[i]
+		if p.IsDuplicate || p.IsSkip {
+			continue
+		}
+		p.IsConflict = true
+		for tunerIndex, tuner := range tuners {
+			if !stringContains(tuner.Types, p.Channel.Type) {
+				continue
+			}
+			conflicts := false
+			for _, reserved := range threads[tunerIndex] {
+				if !(reserved.End <= p.Start || reserved.Start >= p.End) {
+					conflicts = true
+					break
+				}
+			}
+			if conflicts {
+				continue
+			}
+			threads[tunerIndex] = append(threads[tunerIndex], *p)
+			p.IsConflict = false
+			break
+		}
+		if p.IsConflict {
+			count++
+		}
+	}
+	return count
+}
+
+func applyRecordedFormats(programs []chinachu.Program, rules []chinachu.Rule) {
+	for i := range programs {
+		for _, rule := range rules {
+			if rule.RecordedFormat != "" && chinachu.ProgramMatchesRule(rule, programs[i]) {
+				programs[i].RecordedFormat = rule.RecordedFormat
+			}
+		}
+	}
+}
+
+func removeEnded(programs []chinachu.Program, now time.Time) []chinachu.Program {
+	out := programs[:0]
+	nowMS := now.UnixMilli()
+	for _, program := range programs {
+		if program.End >= nowMS {
+			out = append(out, program)
+		}
+	}
+	return out
+}
+
+func containsProgramID(programs []chinachu.Program, id string) bool {
+	for _, program := range programs {
+		if program.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func stringContains(values []string, value string) bool {
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
