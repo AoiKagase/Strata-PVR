@@ -138,7 +138,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `rules.json` | Array of rule objects. Pretty printed by rule/API writes. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
 | `data/reserves.json` | Array of program objects. | scheduler/CLI/API/operator | partially compatible |
-| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. | operator/CLI/API | partially compatible |
+| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. | operator/CLI/API | partially compatible |
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text. | scheduler | not started |
 | `log/scheduler` | Scheduler log stream. | wrapper/operator | not started |
@@ -237,7 +237,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Recorded filename format | partially compatible |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible |
+| Operator/recorder | partially compatible; active `abort:true` polling implemented, but recorded hooks, low-storage actions, exact logs, and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | not started |

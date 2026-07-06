@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,39 @@ func (f *fakeStreamer) ProgramStream(_ context.Context, id int64, decode bool) (
 	f.id = id
 	f.decode = decode
 	return io.NopCloser(strings.NewReader(f.body)), nil
+}
+
+type abortableStreamer struct {
+	stream *abortableReadCloser
+}
+
+func (f *abortableStreamer) ProgramStream(context.Context, int64, bool) (io.ReadCloser, error) {
+	f.stream = newAbortableReadCloser()
+	return f.stream, nil
+}
+
+type abortableReadCloser struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newAbortableReadCloser() *abortableReadCloser {
+	return &abortableReadCloser{closed: make(chan struct{})}
+}
+
+func (r *abortableReadCloser) Read(p []byte) (int, error) {
+	select {
+	case <-r.closed:
+		return 0, io.EOF
+	case <-time.After(10 * time.Millisecond):
+		p[0] = 'x'
+		return 1, nil
+	}
+}
+
+func (r *abortableReadCloser) Close() error {
+	r.once.Do(func() { close(r.closed) })
+	return nil
 }
 
 func TestRunOnceRecordsDueProgram(t *testing.T) {
@@ -113,5 +147,74 @@ func TestRunOnceSkipsConflictAndFuturePrograms(t *testing.T) {
 	}
 	if result.Started != 0 || result.Completed != 0 || result.Failed != 0 {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := Paths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+	}
+	program := chinachu.Program{
+		ID:      "21i3v9",
+		Title:   "Abortable",
+		Start:   now.UnixMilli(),
+		End:     now.Add(time.Hour).UnixMilli(),
+		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	streamer := &abortableStreamer{}
+	done := make(chan error, 1)
+	go func() {
+		result, err := RunOnce(context.Background(), paths, cfg, streamer, now)
+		if err != nil {
+			done <- err
+			return
+		}
+		if result.Started != 1 || result.Completed != 1 || result.Failed != 0 {
+			done <- os.ErrInvalid
+			return
+		}
+		done <- nil
+	}()
+
+	var recording []chinachu.Program
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+			t.Fatal(err)
+		}
+		if len(recording) == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(recording) != 1 {
+		t.Fatalf("recording entry was not created: %#v", recording)
+	}
+	recording[0].Abort = true
+	if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("recording did not stop after abort flag")
+	}
+	var recorded []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].Recorded == "" {
+		t.Fatalf("recorded entry missing after abort: %#v", recorded)
 	}
 }

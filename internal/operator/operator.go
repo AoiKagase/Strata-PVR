@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"chinachu-go/internal/chinachu"
@@ -87,7 +88,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		result.Started++
 
-		completed, err := recordProgram(ctx, cfg, source, reserve)
+		completed, err := recordProgram(ctx, paths.Recording, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
 		if writeErr := storage.WriteJSONAtomic(paths.Recording, recording, false); writeErr != nil && err == nil {
 			err = writeErr
@@ -121,16 +122,20 @@ func shouldStart(program chinachu.Program, recording []chinachu.Program, now tim
 	return !now.Before(startAt)
 }
 
-func recordProgram(ctx context.Context, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
+func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
 	streamID, err := strconv.ParseInt(program.ID, 36, 64)
 	if err != nil {
 		return program, fmt.Errorf("parse program id %q: %w", program.ID, err)
 	}
-	stream, err := source.ProgramStream(ctx, streamID, true)
+	recordCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := source.ProgramStream(recordCtx, streamID, true)
 	if err != nil {
 		return program, err
 	}
 	defer stream.Close()
+	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, recordingPath, program.ID, cancel, stream)
+	defer stopAbortMonitor()
 
 	format := cfg.RecordedFormat
 	if program.RecordedFormat != "" {
@@ -147,7 +152,7 @@ func recordProgram(ctx context.Context, cfg *config.Config, source StreamSource,
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-	if _, err := io.Copy(tmp, stream); err != nil {
+	if _, err := io.Copy(tmp, stream); err != nil && !aborted.Load() {
 		tmp.Close()
 		return program, err
 	}
@@ -163,6 +168,42 @@ func recordProgram(ctx context.Context, cfg *config.Config, source StreamSource,
 	}
 	program.Recorded = filepath.ToSlash(finalPath)
 	return program, nil
+}
+
+func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
+	var aborted atomic.Bool
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				var recording []chinachu.Program
+				if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
+					continue
+				}
+				for _, program := range recording {
+					if program.ID == programID && program.Abort {
+						aborted.Store(true)
+						cancel()
+						_ = stream.Close()
+						return
+					}
+				}
+			}
+		}
+	}()
+	return &aborted, func() {
+		close(done)
+		<-stopped
+	}
 }
 
 func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {
