@@ -627,6 +627,11 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	if stat["size"].(float64) != 6 {
 		t.Fatalf("size = %#v", stat["size"])
 	}
+	for _, key := range []string{"dev", "ino", "mode", "ulink", "uid", "gid", "rdev", "blksize", "blocks", "atime", "mtime", "ctime"} {
+		if _, ok := stat[key]; !ok {
+			t.Fatalf("stat key %q missing: %#v", key, stat)
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.m2ts", nil)
 	res = httptest.NewRecorder()

@@ -1819,7 +1819,7 @@ func withRemovedFlag(program chinachu.Program) map[string]any {
 
 func fileStatJSON(info os.FileInfo) map[string]any {
 	modTimeMS := info.ModTime().UnixMilli()
-	return map[string]any{
+	value := map[string]any{
 		"dev":     0,
 		"ino":     0,
 		"mode":    uint32(info.Mode()),
@@ -1834,6 +1834,8 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 		"mtime":   modTimeMS,
 		"ctime":   modTimeMS,
 	}
+	enrichFileStatJSON(value, info)
+	return value
 }
 
 func programHasPID(program chinachu.Program) bool {
