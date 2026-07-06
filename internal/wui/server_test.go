@@ -465,6 +465,47 @@ func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedDeleteBacksUpBeforeRemoval(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recorded := []chinachu.Program{
+		{ID: "abc", Recorded: filepath.ToSlash(filepath.Join(dir, "abc.m2ts"))},
+		{ID: "def", Recorded: filepath.ToSlash(filepath.Join(dir, "def.m2ts"))},
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/recorded/abc.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
+	}
+	var backup []chinachu.Program
+	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(backup) != 2 {
+		t.Fatalf("backup should contain original list: %#v", backup)
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "def" {
+		t.Fatalf("delete should remove target only: %#v", got)
+	}
+}
+
 func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

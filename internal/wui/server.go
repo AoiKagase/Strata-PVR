@@ -1143,6 +1143,10 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 		if recorded[index].Recorded != "" {
 			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
 		}
+		if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		recorded = removeProgram(recorded, id)
 		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
