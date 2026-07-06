@@ -830,6 +830,9 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("json status = %d body=%s", res.Code, res.Body.String())
 	}
+	if !strings.Contains(res.Body.String(), "\n  ") {
+		t.Fatalf("file.json should use legacy pretty JSON, got %q", res.Body.String())
+	}
 	var stat map[string]any
 	if err := json.Unmarshal(res.Body.Bytes(), &stat); err != nil {
 		t.Fatal(err)

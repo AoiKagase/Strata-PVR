@@ -1415,7 +1415,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.m2ts"`, id))
 			http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
 		case "json", "":
-			writeJSON(w, http.StatusOK, fileStatJSON(info))
+			writePrettyJSON(w, http.StatusOK, fileStatJSON(info))
 		default:
 			http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
 		}
