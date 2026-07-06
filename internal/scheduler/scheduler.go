@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"chinachu-go/internal/chinachu"
@@ -102,6 +103,9 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 
 	schedule := BuildSchedule(cfg, services, programs)
+	if err := logDuplicateIDs(paths.Log, schedule); err != nil {
+		return Result{}, err
+	}
 
 	if !simulation {
 		if err := runHook(ctx, paths.Log, cfg.SchedulerStartCommand, schedulerHookArgs(paths)); err != nil {
@@ -115,6 +119,9 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 	var oldReserves []chinachu.Program
 	if err := storage.ReadJSON(paths.Reserves, &oldReserves, "[]"); err != nil {
+		return Result{}, err
+	}
+	if err := logging.AppendLine(paths.Log, "TUNERS: %s", tunerTypesJSON(tuners)); err != nil {
 		return Result{}, err
 	}
 
@@ -202,6 +209,49 @@ func appendResultLogs(logPath string, result Result) error {
 
 func legacyISODateTime(timestampMS int64) string {
 	return time.UnixMilli(timestampMS).In(time.Local).Format("2006-01-02T15:04:05-0700")
+}
+
+func logDuplicateIDs(logPath string, schedule []chinachu.ChannelSchedule) error {
+	seen := map[string]bool{}
+	for _, channel := range schedule {
+		for _, program := range channel.Programs {
+			if seen[program.ID] {
+				if err := logging.AppendLine(logPath, "**WARNING**: %s is duplicated!", program.ID); err != nil {
+					return err
+				}
+				continue
+			}
+			seen[program.ID] = true
+		}
+	}
+	return nil
+}
+
+func tunerTypesJSON(tuners []mirakurun.Tuner) string {
+	counts := map[string]int{}
+	order := []string{}
+	for _, tuner := range tuners {
+		for _, typ := range tuner.Types {
+			if _, ok := counts[typ]; !ok {
+				order = append(order, typ)
+			}
+			counts[typ]++
+		}
+	}
+
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, typ := range order {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		key, _ := json.Marshal(typ)
+		b.Write(key)
+		b.WriteByte(':')
+		b.WriteString(strconv.Itoa(counts[typ]))
+	}
+	b.WriteByte('}')
+	return b.String()
 }
 
 func schedulerHookArgs(paths Paths) []string {

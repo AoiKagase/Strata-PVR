@@ -114,6 +114,59 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	if !strings.Contains(string(logData), "WRITE: "+paths.Schedule) || !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
 		t.Fatalf("scheduler log missing write lines: %s", string(logData))
 	}
+	if !strings.Contains(string(logData), `TUNERS: {"GR":1}`) {
+		t.Fatalf("scheduler log missing legacy tuner type counts: %s", string(logData))
+	}
+}
+
+func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Title"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(time.Hour).UnixMilli()
+	src := fakeSource{
+		services: []mirakurun.Service{
+			{ID: 1, ServiceID: 101, NetworkID: 1, Name: "svc1"},
+			{ID: 2, ServiceID: 102, NetworkID: 1, Name: "svc2"},
+		},
+		programs: []mirakurun.Program{
+			{ID: 10, NetworkID: 1, ServiceID: 101, Name: "Title A", StartAt: start, Duration: 3600000},
+			{ID: 10, NetworkID: 1, ServiceID: 102, Name: "Title B", StartAt: start + 3600000, Duration: 3600000},
+		},
+		tuners: []mirakurun.Tuner{{Types: []string{"GR", "BS"}}, {Types: []string{"GR"}}},
+	}
+	src.services[0].Channel.Type = "GR"
+	src.services[0].Channel.Channel = "27"
+	src.services[1].Channel.Type = "GR"
+	src.services[1].Channel.Channel = "28"
+
+	_, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "**WARNING**: a is duplicated!") {
+		t.Fatalf("scheduler log missing duplicate id warning: %s", string(logData))
+	}
+	if !strings.Contains(string(logData), `TUNERS: {"GR":2,"BS":1}`) {
+		t.Fatalf("scheduler log missing ordered tuner type counts: %s", string(logData))
+	}
 }
 
 func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
