@@ -146,7 +146,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			return result, err
 		}
 
-		recorded = append(recorded, completed)
+		recorded = mergeRecordedProgram(recorded, completed)
 		reserves = removeProgram(reserves, reserve.ID)
 		if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
 			return result, err
@@ -457,6 +457,25 @@ func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {
 			out = append(out, program)
 		}
 	}
+	return out
+}
+
+func mergeRecordedProgram(recorded []chinachu.Program, completed chinachu.Program) []chinachu.Program {
+	out := make([]chinachu.Program, 0, len(recorded)+1)
+	replaced := false
+	for i, program := range recorded {
+		if !replaced && program.ID == completed.ID {
+			replaced = true
+			if program.Recorded != completed.Recorded {
+				program.ID += "-" + strconv.FormatInt(program.Start, 36)
+				out = append(out, program)
+			}
+			out = append(out, recorded[i+1:]...)
+			break
+		}
+		out = append(out, program)
+	}
+	out = append(out, completed)
 	return out
 }
 

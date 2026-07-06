@@ -214,6 +214,25 @@ func TestRunOnceSkipsConflictAndFuturePrograms(t *testing.T) {
 	}
 }
 
+func TestMergeRecordedProgramMatchesLegacyDuplicateHandling(t *testing.T) {
+	completed := chinachu.Program{ID: "same", Start: 2000, Recorded: "/recorded/new.m2ts"}
+	recorded := mergeRecordedProgram([]chinachu.Program{
+		{ID: "same", Start: 1000, Recorded: "/recorded/new.m2ts"},
+		{ID: "other", Recorded: "/recorded/other.m2ts"},
+	}, completed)
+	if len(recorded) != 2 || recorded[0].ID != "other" || recorded[1].ID != "same" {
+		t.Fatalf("same path merge mismatch: %#v", recorded)
+	}
+
+	recorded = mergeRecordedProgram([]chinachu.Program{
+		{ID: "same", Start: 1000, Recorded: "/recorded/old.m2ts"},
+		{ID: "other", Recorded: "/recorded/other.m2ts"},
+	}, completed)
+	if len(recorded) != 3 || recorded[0].ID != "same-rs" || recorded[1].ID != "other" || recorded[2].ID != "same" {
+		t.Fatalf("different path merge mismatch: %#v", recorded)
+	}
+}
+
 func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
