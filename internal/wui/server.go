@@ -2,6 +2,8 @@ package wui
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -43,7 +45,10 @@ func Run(ctx context.Context, paths Paths) error {
 	if err != nil {
 		return err
 	}
-	servers := buildHTTPServers(paths, cfg)
+	servers, err := buildHTTPServers(paths, cfg)
+	if err != nil {
+		return err
+	}
 	if len(servers) == 0 {
 		return fmt.Errorf("no WUI listener configured")
 	}
@@ -113,7 +118,7 @@ type serverError struct {
 	err    error
 }
 
-func buildHTTPServers(paths Paths, cfg *config.Config) []runningServer {
+func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) {
 	servers := []runningServer{}
 	if cfg.WUIPort != nil {
 		tls := cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != ""
@@ -121,10 +126,15 @@ func buildHTTPServers(paths Paths, cfg *config.Config) []runningServer {
 		if tls {
 			label = "HTTPS Server"
 		}
+		tlsConfig, err := buildTLSConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
 		servers = append(servers, runningServer{
 			server: &http.Server{
 				Addr:              listenAddress(cfg.WUIHost, *cfg.WUIPort),
 				Handler:           newHandler(paths, cfg, true),
+				TLSConfig:         tlsConfig,
 				ReadHeaderTimeout: 10 * time.Second,
 			},
 			label: label,
@@ -145,7 +155,32 @@ func buildHTTPServers(paths Paths, cfg *config.Config) []runningServer {
 			label: "HTTP Open Server",
 		})
 	}
-	return servers
+	return servers, nil
+}
+
+func buildTLSConfig(cfg *config.Config) (*tls.Config, error) {
+	if cfg.WUITlsKeyPath == "" || cfg.WUITlsCertPath == "" {
+		return nil, nil
+	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS10}
+	if cfg.WUITlsRequestCert {
+		tlsConfig.ClientAuth = tls.RequestClientCert
+		if cfg.WUITlsRejectUnauthorized {
+			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		}
+	}
+	if cfg.WUITlsCaPath != "" {
+		caBytes, err := os.ReadFile(cfg.WUITlsCaPath)
+		if err != nil {
+			return nil, err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caBytes) {
+			return nil, fmt.Errorf("failed to parse WUI TLS CA file: %s", cfg.WUITlsCaPath)
+		}
+		tlsConfig.ClientCAs = pool
+	}
+	return tlsConfig, nil
 }
 
 func shutdownServers(paths Paths, servers []runningServer) error {

@@ -2,6 +2,7 @@ package wui
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -827,6 +828,41 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("open status without auth = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestBuildTLSConfigClientAuth(t *testing.T) {
+	cfg := &config.Config{
+		WUITlsKeyPath:            "key.pem",
+		WUITlsCertPath:           "cert.pem",
+		WUITlsRequestCert:        true,
+		WUITlsRejectUnauthorized: true,
+	}
+	tlsConfig, err := buildTLSConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tlsConfig == nil {
+		t.Fatal("tls config was nil")
+	}
+	if tlsConfig.ClientAuth != tls.RequireAndVerifyClientCert {
+		t.Fatalf("client auth = %s", tlsConfig.ClientAuth)
+	}
+}
+
+func TestBuildTLSConfigCAError(t *testing.T) {
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.pem")
+	if err := os.WriteFile(caPath, []byte("not a certificate"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		WUITlsKeyPath:  "key.pem",
+		WUITlsCertPath: "cert.pem",
+		WUITlsCaPath:   caPath,
+	}
+	if _, err := buildTLSConfig(cfg); err == nil {
+		t.Fatal("expected CA parse error")
 	}
 }
 
