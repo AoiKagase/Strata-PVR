@@ -1730,17 +1730,6 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 		http.NotFound(w, r)
 		return
 	}
-	for _, file := range []string{s.paths.Reserves, s.paths.Recording, s.paths.Recorded} {
-		var programs []chinachu.Program
-		if err := storage.ReadJSON(file, &programs, "[]"); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if i := findProgram(programs, id); i != -1 {
-			writePrettyJSON(w, http.StatusOK, programs[i])
-			return
-		}
-	}
 	http.NotFound(w, r)
 }
 

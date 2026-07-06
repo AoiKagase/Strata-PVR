@@ -549,6 +549,28 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 }
 
+func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	program := chinachu.Program{ID: "abc", Title: "予約だけの番組", Start: 1, End: 2}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/program/abc.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("program GET should not search reserve/recording/recorded lists: status=%d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
