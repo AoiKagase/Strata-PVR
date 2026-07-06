@@ -561,9 +561,21 @@ func TestAPILogAndStream(t *testing.T) {
 		t.Fatalf("log status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil).WithContext(ctx)
 	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(res, req)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not stop after request cancellation")
+	}
 	if res.Code != http.StatusOK {
 		t.Fatalf("stream status=%d body=%q", res.Code, res.Body.String())
 	}
@@ -576,6 +588,38 @@ func TestAPILogAndStream(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent {
 		t.Fatalf("missing log status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPILogStreamFollowsAppends(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(paths.LogDir, "wui")
+	if err := os.WriteFile(logPath, []byte("initial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil).WithContext(ctx)
+	res := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(res, req)
+		close(done)
+	}()
+	if err := os.WriteFile(logPath, []byte("initial\nfollowed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+	<-done
+	if !strings.Contains(res.Body.String(), "followed\n") {
+		t.Fatalf("stream did not follow appended log: %q", res.Body.String())
 	}
 }
 

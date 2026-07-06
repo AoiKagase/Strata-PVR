@@ -684,9 +684,69 @@ func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, 
 		return
 	}
 	if stream {
-		_, _ = w.Write([]byte(strings.Repeat(" ", 1023)))
+		s.streamLog(w, r, path, data)
+		return
 	}
 	_, _ = w.Write(data)
+}
+
+func (s *server) streamLog(w http.ResponseWriter, r *http.Request, path string, initial []byte) {
+	_, _ = w.Write([]byte(strings.Repeat(" ", 1023)))
+	_, _ = w.Write(tailLines(initial, 100))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	offset := int64(len(initial))
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			info, err := os.Stat(path)
+			if err != nil {
+				return
+			}
+			if info.Size() < offset {
+				offset = 0
+			}
+			if info.Size() == offset {
+				continue
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				return
+			}
+			if _, err := f.Seek(offset, io.SeekStart); err != nil {
+				_ = f.Close()
+				return
+			}
+			written, _ := io.Copy(w, f)
+			_ = f.Close()
+			offset += written
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+	}
+}
+
+func tailLines(data []byte, maxLines int) []byte {
+	if maxLines <= 0 || len(data) == 0 {
+		return nil
+	}
+	lines := 0
+	for i := len(data) - 1; i >= 0; i-- {
+		if data[i] != '\n' {
+			continue
+		}
+		lines++
+		if lines > maxLines {
+			return data[i+1:]
+		}
+	}
+	return data
 }
 
 func (s *server) runScheduler(ctx context.Context, simulation bool) error {
