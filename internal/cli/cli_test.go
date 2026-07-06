@@ -128,6 +128,50 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 	}
 }
 
+func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(dir, "exists.m2ts")
+	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recorded := []chinachu.Program{
+		{ID: "exists", Recorded: filepath.ToSlash(existing)},
+		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recorded.json"), recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"cleanup", "--simulation"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"action\tProgram ID\tRecorded",
+		"exist\texists\t",
+		"[simulation] removed\tmissing\t",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("cleanup output missing %q: %s", want, text)
+		}
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "recorded.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("simulation should keep recorded list: %#v", got)
+	}
+}
+
 func TestReserve(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

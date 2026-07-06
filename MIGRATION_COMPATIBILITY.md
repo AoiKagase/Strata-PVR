@@ -38,7 +38,7 @@ Top-level commands accepted by `./chinachu`:
 | `reserves` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recording` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recorded` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
-| `cleanup` | partially compatible | Removes missing recorded entries; prompt not yet matched. |
+| `cleanup [-s|--simulation]` | partially compatible | Prints a legacy-style action table and removes missing recorded entries unless simulation is set. |
 | `compat check`, `compat doctor` | implemented | New Go-only safety checks; does not alter legacy command behavior. |
 | `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
 | `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |

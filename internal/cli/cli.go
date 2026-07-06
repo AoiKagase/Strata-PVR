@@ -79,7 +79,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "recorded":
 		return programList(p.recorded, args[1:], stdout)
 	case "cleanup":
-		return cleanup(p, stdout)
+		return cleanup(p, args[1:], stdout)
 	case "update":
 		return update(ctx, p, args[1:], stdout)
 	case "search":
@@ -706,21 +706,31 @@ func markReserveSkip(path, id string) error {
 	return storage.WriteJSONAtomic(path, reserves, false)
 }
 
-func cleanup(p paths, stdout io.Writer) error {
+func cleanup(p paths, args []string, stdout io.Writer) error {
+	simulation := hasFlag(args, "-s", "--simulation")
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(p.recorded, &recorded, "[]"); err != nil {
 		return err
 	}
+	fmt.Fprintln(stdout, "action\tProgram ID\tRecorded")
 	kept := recorded[:0]
 	for _, program := range recorded {
 		if program.Recorded != "" {
-			if _, err := os.Stat(program.Recorded); err == nil {
+			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
 				kept = append(kept, program)
 				fmt.Fprintf(stdout, "exist\t%s\t%s\n", program.ID, program.Recorded)
-			} else {
-				fmt.Fprintf(stdout, "removed\t%s\t%s\n", program.ID, program.Recorded)
+				continue
 			}
 		}
+		action := "removed"
+		if simulation {
+			action = "[simulation] removed"
+			kept = append(kept, program)
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%s\n", action, program.ID, program.Recorded)
+	}
+	if simulation {
+		return nil
 	}
 	return storage.WriteJSONAtomic(p.recorded, kept, false)
 }
