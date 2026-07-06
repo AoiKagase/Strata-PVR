@@ -227,7 +227,7 @@ func TestReserve(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"reserve", "p1"}, &out, &bytes.Buffer{}); err != nil {
+	if err := Run(context.Background(), []string{"reserve", "p1", "--1seg"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join("data", "reserves.json"))
@@ -236,6 +236,42 @@ func TestReserve(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"isManualReserved":true`) {
 		t.Fatalf("reserve file not updated: %s", string(b))
+	}
+	if !strings.Contains(string(b), `"1seg":true`) {
+		t.Fatalf("1seg flag not written: %s", string(b))
+	}
+}
+
+func TestReserveSimulationDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
+	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"reserve", "p1", "-s", "--1seg"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "[simulation] reserve:") || !strings.Contains(out.String(), `"1seg": true`) {
+		t.Fatalf("unexpected simulation output: %s", out.String())
+	}
+	b, err := os.ReadFile(filepath.Join("data", "reserves.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(b)) != "[]" {
+		t.Fatalf("simulation wrote reserves: %s", string(b))
 	}
 }
 

@@ -664,6 +664,8 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 		return fmt.Errorf("Usage: reserve <pgid>")
 	}
 	id := args[0]
+	simulation := hasFlag(args[1:], "-s", "--simulation")
+	oneSeg := hasFlag(args[1:], "--1seg", "-1seg")
 	var schedule []chinachu.ChannelSchedule
 	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
 		return err
@@ -680,8 +682,16 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 		return fmt.Errorf("見つかりません")
 	}
 	target.IsManualReserved = true
+	if oneSeg {
+		target.OneSeg = true
+	}
 	reserves = append(reserves, *target)
 	sort.SliceStable(reserves, func(i, j int) bool { return reserves[i].Start < reserves[j].Start })
+	if simulation {
+		fmt.Fprintln(stdout, "[simulation] reserve:")
+		writePretty(stdout, target)
+		return nil
+	}
 	if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
 		return err
 	}

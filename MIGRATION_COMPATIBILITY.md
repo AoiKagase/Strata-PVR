@@ -25,7 +25,7 @@ Top-level commands accepted by `./chinachu`:
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation uses the Go binary and includes start/stop/restart/status handling. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs result counters. Exact logging remains incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
-| `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
+| `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves, supports simulation output and the `1seg` flag; exact JSON field ordering/output spacing still incomplete. |
 | `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `skip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `unskip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
