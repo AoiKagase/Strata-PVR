@@ -90,7 +90,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 	services, err := source.Services(ctx)
 	if err != nil {
-		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
+		logMirakurunError(paths.Log, err)
 		return Result{}, fmt.Errorf("get Mirakurun services: %w", err)
 	}
 	if err := logging.AppendLine(paths.Log, "Mirakurun is OK."); err != nil {
@@ -108,7 +108,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 	programs, err := source.Programs(ctx)
 	if err != nil {
-		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
+		logMirakurunError(paths.Log, err)
 		return Result{}, fmt.Errorf("get Mirakurun programs: %w", err)
 	}
 	if err := logging.AppendLine(paths.Log, "Mirakurun -> programs: %d", len(programs)); err != nil {
@@ -116,7 +116,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 	tuners, err := source.Tuners(ctx)
 	if err != nil {
-		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
+		logMirakurunError(paths.Log, err)
 		return Result{}, fmt.Errorf("get Mirakurun tuners: %w", err)
 	}
 	if err := logging.AppendLine(paths.Log, "Mirakurun -> tuners: %d", len(tuners)); err != nil {
@@ -236,6 +236,11 @@ func appendResultLogs(logPath string, result Result) error {
 		}
 	}
 	return nil
+}
+
+func logMirakurunError(logPath string, err error) {
+	_ = logging.AppendLine(logPath, "Mirakurun -> Error:")
+	_ = logging.AppendLine(logPath, "%v", err)
 }
 
 func legacyISODateTime(timestampMS int64) string {

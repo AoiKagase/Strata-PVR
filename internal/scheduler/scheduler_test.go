@@ -31,14 +31,23 @@ func TestMain(m *testing.M) {
 }
 
 type fakeSource struct {
-	services []mirakurun.Service
-	programs []mirakurun.Program
-	tuners   []mirakurun.Tuner
+	services    []mirakurun.Service
+	programs    []mirakurun.Program
+	tuners      []mirakurun.Tuner
+	servicesErr error
+	programsErr error
+	tunersErr   error
 }
 
-func (f fakeSource) Services(context.Context) ([]mirakurun.Service, error) { return f.services, nil }
-func (f fakeSource) Programs(context.Context) ([]mirakurun.Program, error) { return f.programs, nil }
-func (f fakeSource) Tuners(context.Context) ([]mirakurun.Tuner, error)     { return f.tuners, nil }
+func (f fakeSource) Services(context.Context) ([]mirakurun.Service, error) {
+	return f.services, f.servicesErr
+}
+func (f fakeSource) Programs(context.Context) ([]mirakurun.Program, error) {
+	return f.programs, f.programsErr
+}
+func (f fakeSource) Tuners(context.Context) ([]mirakurun.Tuner, error) {
+	return f.tuners, f.tunersErr
+}
 
 func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
 	now := time.Date(2024, 7, 1, 20, 0, 0, 0, time.Local)
@@ -129,6 +138,38 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), `TUNERS: {"GR":1}`) {
 		t.Fatalf("scheduler log missing legacy tuner type counts: %s", string(logData))
+	}
+}
+
+func TestRunWithSourceLogsMirakurunErrorDetails(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := RunWithSource(context.Background(), paths, &config.Config{}, fakeSource{programsErr: fmt.Errorf("program endpoint down")}, true, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "get Mirakurun programs") {
+		t.Fatalf("expected program fetch error, got %v", err)
+	}
+	logData, readErr := os.ReadFile(paths.Log)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "Mirakurun -> Error:") || !strings.Contains(logText, "program endpoint down") {
+		t.Fatalf("scheduler log missing Mirakurun error details: %s", logText)
 	}
 }
 
