@@ -344,6 +344,33 @@ func TestAPIRulesMutation(t *testing.T) {
 	}
 }
 
+func TestAPIRulesGetUsesLegacyPrettyJSON(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := storage.WriteJSONAtomic(paths.Rules, []map[string]any{{"categories": []string{"anime"}}}, true); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/rules.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("rules get status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Body.String(); got != "[\n  {\n    \"categories\": [\n      \"anime\"\n    ]\n  }\n]" {
+		t.Fatalf("rules get body = %q", got)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/rules/0.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("rule get status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Body.String(); got != "{\n  \"categories\": [\n    \"anime\"\n  ]\n}" {
+		t.Fatalf("rule get body = %q", got)
+	}
+}
+
 func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

@@ -1109,7 +1109,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writeJSON(w, http.StatusOK, rules)
+		writePrettyJSON(w, http.StatusOK, rules)
 	case http.MethodPost:
 		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
@@ -1146,7 +1146,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writeJSON(w, http.StatusOK, rules[index])
+		writePrettyJSON(w, http.StatusOK, rules[index])
 	case http.MethodPut:
 		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
@@ -2104,6 +2104,16 @@ func (s *server) pidPath(name string) string {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writePrettyJSON(w http.ResponseWriter, status int, value any) {
+	body, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func writeCompactJSON(w http.ResponseWriter, status int, value any) {
