@@ -1,6 +1,8 @@
 package chinachu
 
 import (
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -30,6 +32,8 @@ func FormatRecordedName(program Program, format string) string {
 			return strconv.FormatInt(program.Channel.SID, 10)
 		case key == "channel-name":
 			return StripFilename(program.Channel.Name)
+		case key == "tuner":
+			return rawTunerName(program)
 		case key == "title":
 			return StripFilename(program.Title)
 		case key == "fulltitle":
@@ -40,10 +44,22 @@ func FormatRecordedName(program Program, format string) string {
 			return program.Category
 		default:
 			if strings.HasPrefix(key, "episode:") {
-				return "n"
+				width, err := strconv.Atoi(strings.TrimPrefix(key, "episode:"))
+				if err != nil {
+					width = 1
+				}
+				episode, ok := rawEpisode(program)
+				if !ok {
+					return "n"
+				}
+				return fmt.Sprintf("%0*d", width, episode)
 			}
 			if key == "episode" {
-				return "n"
+				episode, ok := rawEpisode(program)
+				if !ok || episode == 0 {
+					return "n"
+				}
+				return strconv.FormatInt(episode, 10)
 			}
 			return token
 		}
@@ -57,6 +73,43 @@ func FormatRecordedName(program Program, format string) string {
 		base = base[:len(base)-size]
 	}
 	return filepath.ToSlash(filepath.Join(dir, base+ext))
+}
+
+func rawTunerName(program Program) string {
+	raw, ok := program.Raw["tuner"]
+	if !ok {
+		return ""
+	}
+	var tuner struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &tuner); err != nil {
+		return ""
+	}
+	return tuner.Name
+}
+
+func rawEpisode(program Program) (int64, bool) {
+	raw, ok := program.Raw["episode"]
+	if !ok || string(raw) == "null" {
+		return 0, false
+	}
+	var n int64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n, true
+	}
+	var f float64
+	if err := json.Unmarshal(raw, &f); err == nil {
+		return int64(f), true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 func StripFilename(s string) string {

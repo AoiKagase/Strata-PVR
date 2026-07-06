@@ -106,7 +106,7 @@ Fields from `config.sample.json` and JS references:
 | `wuiXFF` | Trust first `X-Forwarded-For` IP. | partially compatible; access logging uses the first forwarded address and normalizes IPv4-mapped IPv6. GeoIP country filtering is still not implemented. |
 | `wuiMdnsAdvertisement` | mDNS advertisement. | not started |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |
-| `recordedFormat` | Filename template. | partially compatible |
+| `recordedFormat` | Filename template. | partially compatible; supports legacy date/id/type/channel/channel-id/channel-sid/channel-name/tuner/title/fulltitle/subtitle/episode/episode:N/category tokens and filename character stripping. Dateformat edge cases still need JS oracle tests. |
 | `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | partially compatible; Go sets `X-Mirakurun-Priority` before program stream requests. Conflict recordings remain limited because Go currently skips conflict reserves. |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | partially compatible; `remove`, `stop`, hook command, sendmail notification, and three-hour notification throttling are implemented. |
 | `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
@@ -243,7 +243,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Atomic JSON state | implemented |
 | CLI command acceptance | partially compatible |
 | Rule engine | partially compatible |
-| Recorded filename format | partially compatible |
+| Recorded filename format | partially compatible; legacy tuner and episode tokens are implemented, but dateformat edge cases still need JS oracle tests. |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
 | Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and signal side effects remain incomplete. |
