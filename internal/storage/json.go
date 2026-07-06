@@ -3,8 +3,10 @@ package storage
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func ReadJSON(path string, dst any, emptyJSON string) error {
@@ -59,4 +61,29 @@ func WriteFileAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func BackupFile(path string) (string, error) {
+	src, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+	backupPath := path + ".bak-" + time.Now().Format("20060102150405")
+	dst, err := os.OpenFile(backupPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return "", err
+	}
+	if err := dst.Sync(); err != nil {
+		dst.Close()
+		return "", err
+	}
+	if err := dst.Close(); err != nil {
+		return "", err
+	}
+	return backupPath, nil
 }

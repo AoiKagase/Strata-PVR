@@ -38,7 +38,7 @@ Top-level commands accepted by `./chinachu`:
 | `reserves` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recording` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recorded` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
-| `cleanup [-s|--simulation]` | partially compatible | Prints a legacy-style action table and removes missing recorded entries unless simulation is set. |
+| `cleanup [-s|--simulation]` | partially compatible | Prints a legacy-style action table and removes missing recorded entries unless simulation is set. Before destructive writes, Go creates `data/recorded.json.bak-YYYYMMDDHHMMSS`. |
 | `compat check`, `compat doctor` | implemented | New Go-only safety checks; does not alter legacy command behavior. |
 | `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
 | `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |
@@ -217,7 +217,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, records the Mirakurun decoded program stream, appends `data/recorded.json`, and removes the completed reserve.
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
 - Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; exact operator logs and every signal side effect remain incomplete.
-- Cleanup removes missing file entries from `data/recorded.json`.
+- Cleanup removes missing file entries from `data/recorded.json` and creates a timestamped backup before destructive writes.
 - WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
 - Go WUI `log/:name/stream.txt` writes the legacy padding, the last 100 log lines, and follows appended log data until the request is closed.

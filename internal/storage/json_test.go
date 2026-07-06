@@ -23,3 +23,24 @@ func TestWriteAndReadJSONAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBackupFileCopiesCurrentContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(path, []byte(`{"ok":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := BackupFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(backup) != filepath.Dir(path) {
+		t.Fatalf("backup directory = %q", backup)
+	}
+	got, err := os.ReadFile(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"ok":true}` {
+		t.Fatalf("backup content = %q", got)
+	}
+}

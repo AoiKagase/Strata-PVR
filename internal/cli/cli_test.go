@@ -170,6 +170,60 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("simulation should keep recorded list: %#v", got)
 	}
+	backups, err := filepath.Glob(filepath.Join("data", "recorded.json.bak-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("simulation should not create backups: %#v", backups)
+	}
+}
+
+func TestCleanupBacksUpRecordedListBeforeRemoval(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(dir, "exists.m2ts")
+	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recorded := []chinachu.Program{
+		{ID: "exists", Recorded: filepath.ToSlash(existing)},
+		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recorded.json"), recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"cleanup"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	backups, err := filepath.Glob(filepath.Join("data", "recorded.json.bak-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d, backups=%#v", len(backups), backups)
+	}
+	var backup []chinachu.Program
+	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(backup) != 2 {
+		t.Fatalf("backup should contain original list: %#v", backup)
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "recorded.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "exists" {
+		t.Fatalf("cleanup should remove only missing entry: %#v", got)
+	}
 }
 
 func TestRulesPrintsLegacyTable(t *testing.T) {

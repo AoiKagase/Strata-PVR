@@ -848,6 +848,7 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 	}
 	fmt.Fprintln(stdout, "action\tProgram ID\tRecorded")
 	kept := recorded[:0]
+	removed := false
 	for _, program := range recorded {
 		if program.Recorded != "" {
 			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
@@ -860,11 +861,18 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 		if simulation {
 			action = "[simulation] removed"
 			kept = append(kept, program)
+		} else {
+			removed = true
 		}
 		fmt.Fprintf(stdout, "%s\t%s\t%s\n", action, program.ID, program.Recorded)
 	}
 	if simulation {
 		return nil
+	}
+	if removed {
+		if _, err := storage.BackupFile(p.recorded); err != nil {
+			return err
+		}
 	}
 	return storage.WriteJSONAtomic(p.recorded, kept, false)
 }
