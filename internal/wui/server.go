@@ -940,7 +940,7 @@ func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		_ = s.runScheduler(ctx, false)
 	}()
-	writeJSON(w, http.StatusAccepted, map[string]any{})
+	writeCompactJSON(w, http.StatusAccepted, map[string]any{})
 }
 
 func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, stream bool) {
@@ -1278,7 +1278,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	case http.MethodPut:
 		if action == "skip" {
 			reserves[index].IsSkip = true
@@ -1292,7 +1292,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE, PUT")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1334,7 +1334,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1369,7 +1369,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1424,7 +1424,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1757,7 +1757,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{})
+	writeCompactJSON(w, http.StatusOK, map[string]any{})
 }
 
 func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, apiType string) {

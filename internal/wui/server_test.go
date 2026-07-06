@@ -202,6 +202,9 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("skip status = %d body=%s", res.Code, res.Body.String())
 	}
+	if got := res.Body.String(); got != `{}` {
+		t.Fatalf("skip body = %q", got)
+	}
 	var reserves []chinachu.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
@@ -215,6 +218,9 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Body.String(); got != `{}` {
+		t.Fatalf("delete body = %q", got)
 	}
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
@@ -1406,6 +1412,9 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
 		t.Fatalf("scheduler force status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Body.String(); got != `{}` {
+		t.Fatalf("scheduler force body=%q", got)
 	}
 	select {
 	case <-done:
