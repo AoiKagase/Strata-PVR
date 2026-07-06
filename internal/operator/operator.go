@@ -24,6 +24,7 @@ import (
 const recordStartMargin = 15 * time.Second
 
 var getDiskUsage = system.GetDiskUsage
+var sendmailPath = "/usr/sbin/sendmail"
 
 type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
@@ -345,7 +346,44 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			return recorded, err
 		}
 	}
+	if cfg.StorageLowSpaceNotifyTo != "" {
+		if err := sendLowStorageNotification(ctx, cfg.StorageLowSpaceNotifyTo, freeMB, cfg.StorageLowSpaceThresholdMB); err != nil {
+			if logErr := logging.AppendLine(paths.Log, "ERROR: %v", err); logErr != nil {
+				return recorded, logErr
+			}
+		}
+	}
 	return recorded, nil
+}
+
+func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, thresholdMB int) error {
+	if to == "" {
+		return nil
+	}
+	message := fmt.Sprintf(
+		"From: Chinachu <chinachu@localhost>\nTo: %s\nSubject: [Chinachu] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
+		to,
+		freeMB,
+		thresholdMB,
+	)
+	cmd := exec.CommandContext(ctx, sendmailPath, "-t")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(stdin, message); err != nil {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		return err
+	}
+	if err := stdin.Close(); err != nil {
+		_ = cmd.Wait()
+		return err
+	}
+	return cmd.Wait()
 }
 
 func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {

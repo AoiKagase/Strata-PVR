@@ -23,6 +23,11 @@ func TestMain(m *testing.M) {
 		_ = os.WriteFile(output, []byte(os.Args[1]+"\n"+os.Args[2]), 0o644)
 		os.Exit(0)
 	}
+	if output := os.Getenv("CHINACHU_GO_SENDMAIL_OUTPUT"); output != "" && len(os.Args) == 2 && os.Args[1] == "-t" {
+		data, _ := io.ReadAll(os.Stdin)
+		_ = os.WriteFile(output, data, 0o644)
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
 }
 
@@ -408,5 +413,50 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	}
 	if len(remaining) != 1 || remaining[0].ID != "new" {
 		t.Fatalf("unexpected recorded list: %#v", remaining)
+	}
+}
+
+func TestLowStorageSendsNotification(t *testing.T) {
+	dir := t.TempDir()
+	oldGetDiskUsage := getDiskUsage
+	getDiskUsage = func(string) (system.DiskUsage, error) {
+		return system.DiskUsage{Avail: 42 * 1024 * 1024}, nil
+	}
+	defer func() { getDiskUsage = oldGetDiskUsage }()
+	oldSendmailPath := sendmailPath
+	sendmailPath = os.Args[0]
+	defer func() { sendmailPath = oldSendmailPath }()
+	output := filepath.Join(dir, "sendmail.txt")
+	t.Setenv("CHINACHU_GO_SENDMAIL_OUTPUT", output)
+	recordedDir := filepath.Join(dir, "recorded")
+	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := Paths{Log: filepath.Join(dir, "log", "operator")}
+	cfg := &config.Config{
+		RecordedDir:                recordedDir,
+		StorageLowSpaceThresholdMB: 100,
+		StorageLowSpaceNotifyTo:    "admin@example.test",
+	}
+
+	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := string(data)
+	for _, want := range []string{
+		"From: Chinachu <chinachu@localhost>",
+		"To: admin@example.test",
+		"Subject: [Chinachu] ALERT: Storage Low Space!",
+		"Current Free Space is 42 MB.",
+		"Threshold is 100 MB.",
+	} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("notification missing %q: %q", want, message)
+		}
 	}
 }
