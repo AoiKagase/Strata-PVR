@@ -140,6 +140,16 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusNotModified || res.Body.Len() != 0 {
 		t.Fatalf("conditional static status=%d body=%q", res.Code, res.Body.String())
 	}
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Body.String() != "<!do" {
+		t.Fatalf("range static status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Range"); got != "bytes 0-3/15" {
+		t.Fatalf("Content-Range = %q", got)
+	}
 }
 
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
