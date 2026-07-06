@@ -2004,8 +2004,8 @@ func (s *server) status() map[string]any {
 			"pid":   schedulerPID,
 		},
 		"wui": map[string]any{
-			"alive": true,
-			"pid":   os.Getpid(),
+			"alive": false,
+			"pid":   nil,
 		},
 	}
 }

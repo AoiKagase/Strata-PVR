@@ -1358,6 +1358,7 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	var status struct {
 		Operator  map[string]any `json:"operator"`
 		Scheduler map[string]any `json:"scheduler"`
+		WUI       map[string]any `json:"wui"`
 		Feature   map[string]any `json:"feature"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
@@ -1368,6 +1369,9 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	}
 	if status.Scheduler["pid"] != nil || status.Scheduler["alive"] != false {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+	if status.WUI["pid"] != nil || status.WUI["alive"] != false {
+		t.Fatalf("unexpected legacy wui status: %#v", status.WUI)
 	}
 	if status.Feature["streamer"] != true || status.Feature["previewer"] != true || status.Feature["filer"] != true || status.Feature["configurator"] != true {
 		t.Fatalf("unexpected feature flags: %#v", status.Feature)
