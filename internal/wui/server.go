@@ -1185,6 +1185,12 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			writeXSPF(w, target, program.Title)
 		}
 	case "m2ts":
+		if requirePID && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "video/MP2T")
+			w.WriteHeader(http.StatusOK)
+			streamGrowingFile(w, r, filePath, 61440)
+			return
+		}
 		file, err := os.Open(filePath)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1198,6 +1204,70 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	default:
 		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
 	}
+}
+
+func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, initialBytes int64) {
+	offset := int64(0)
+	if info, err := os.Stat(filePath); err == nil {
+		offset = info.Size() - initialBytes
+		if offset < 0 {
+			offset = 0
+		}
+	}
+	if err := copyFileFromOffset(w, filePath, offset); err != nil {
+		return
+	}
+	if info, err := os.Stat(filePath); err == nil {
+		offset = info.Size()
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			info, err := os.Stat(filePath)
+			if err != nil {
+				return
+			}
+			if info.Size() < offset {
+				offset = 0
+			}
+			if info.Size() == offset {
+				continue
+			}
+			before := offset
+			if err := copyFileFromOffset(w, filePath, offset); err != nil {
+				return
+			}
+			if info, err := os.Stat(filePath); err == nil {
+				offset = info.Size()
+			}
+			if offset == before {
+				continue
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+	}
+}
+
+func copyFileFromOffset(w io.Writer, filePath string, offset int64) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = io.Copy(w, file)
+	return err
 }
 
 func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, path, id string) {

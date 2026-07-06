@@ -434,10 +434,21 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.m2ts", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	req = httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.m2ts", nil).WithContext(ctx)
 	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != "live" {
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(res, req)
+		close(done)
+	}()
+	if err := os.WriteFile(recordedPath, []byte("livefollow"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+	<-done
+	if res.Code != http.StatusOK || res.Body.String() != "livefollow" {
 		t.Fatalf("recording watch status=%d body=%q", res.Code, res.Body.String())
 	}
 }

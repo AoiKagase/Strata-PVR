@@ -223,7 +223,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Go WUI `log/:name/stream.txt` writes the legacy padding, the last 100 log lines, and follows appended log data until the request is closed.
 - Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
 - Go WUI status includes operator/scheduler PID values when PID files are present and checks whether the referenced process is alive before setting `alive:true`.
-- Go WUI recorded/recording watch supports XSPF and direct m2ts file serving. Recording watch currently serves the current file contents and does not keep a live `tail -f` stream open.
+- Go WUI recorded/recording watch supports XSPF and m2ts serving. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.
 
 ## Compatibility Status Matrix
