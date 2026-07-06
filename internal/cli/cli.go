@@ -281,6 +281,7 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 		target = rules[opts.num]
 	}
 	mergeRule(&target, rule)
+	cleanRuleDeletionMarkers(&target)
 	if opts.enable {
 		target.IsDisabled = false
 	}
@@ -766,14 +767,14 @@ func ruleAliasArgs(args []string, action string) []string {
 }
 
 func splitCSV(value string) []string {
-	if value == "null" || value == "" {
+	if value == "" {
 		return nil
 	}
 	parts := strings.Split(value, ",")
 	out := parts[:0]
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if part != "" && part != "null" {
+		if part != "" {
 			out = append(out, part)
 		}
 	}
@@ -823,6 +824,55 @@ func mergeRule(dst *chinachu.Rule, src chinachu.Rule) {
 	if src.IgnoreFlags != nil {
 		dst.IgnoreFlags = src.IgnoreFlags
 	}
+	if src.RecordedFormat != "" {
+		dst.RecordedFormat = src.RecordedFormat
+	}
+}
+
+func cleanRuleDeletionMarkers(rule *chinachu.Rule) {
+	if singleNull(rule.Types) {
+		rule.Types = nil
+	}
+	if singleNull(rule.Channels) {
+		rule.Channels = nil
+	}
+	if singleNull(rule.IgnoreChannels) {
+		rule.IgnoreChannels = nil
+	}
+	if singleNull(rule.Categories) {
+		rule.Categories = nil
+	}
+	if singleNull(rule.ReserveTitles) {
+		rule.ReserveTitles = nil
+	}
+	if singleNull(rule.IgnoreTitles) {
+		rule.IgnoreTitles = nil
+	}
+	if singleNull(rule.ReserveDescriptions) {
+		rule.ReserveDescriptions = nil
+	}
+	if singleNull(rule.IgnoreDescriptions) {
+		rule.IgnoreDescriptions = nil
+	}
+	if singleNull(rule.ReserveFlags) {
+		rule.ReserveFlags = nil
+	}
+	if singleNull(rule.IgnoreFlags) {
+		rule.IgnoreFlags = nil
+	}
+	if rule.Hour != nil && (rule.Hour.Start == -1 || rule.Hour.End == -1) {
+		rule.Hour = nil
+	}
+	if rule.Duration != nil && (rule.Duration.Min == -1 || rule.Duration.Max == -1) {
+		rule.Duration = nil
+	}
+	if rule.RecordedFormat == "null" {
+		rule.RecordedFormat = ""
+	}
+}
+
+func singleNull(values []string) bool {
+	return len(values) == 1 && values[0] == "null"
 }
 
 func isZeroRule(rule chinachu.Rule) bool {

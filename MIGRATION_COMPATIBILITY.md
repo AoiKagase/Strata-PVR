@@ -30,7 +30,7 @@ Top-level commands accepted by `./chinachu`:
 | `skip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `unskip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
 | `stop <pgid>` | partially compatible | Marks recording entry with `abort:true`. |
-| `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Table output and `null` field deletion compatibility need more work. |
+| `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; table output still needs more work. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
 | `rmrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --remove`. |
@@ -128,7 +128,7 @@ Known rule fields:
 - `ignore_flags`
 - `recorded_format`
 
-Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases. CLI rule add/update/enable/disable/remove is partially implemented.
+Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases. CLI rule add/update/enable/disable/remove is implemented for core fields, including Node-style `null`/`-1` deletion markers.
 
 ## Data Files And Schemas
 

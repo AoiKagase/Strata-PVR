@@ -119,6 +119,33 @@ func TestRuleLifecycle(t *testing.T) {
 	}
 }
 
+func TestRuleCommandDeletesNullMarkers(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	initial := `[{"types":["GR"],"reserve_titles":["Title"],"hour":{"start":1,"end":3},"duration":{"min":60,"max":3600}}]`
+	if err := os.WriteFile("rules.json", []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"rule", "-n", "0", "-title", "null", "-start", "-1", "-mini", "-1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("rules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if strings.Contains(text, "reserve_titles") || strings.Contains(text, "hour") || strings.Contains(text, "duration") {
+		t.Fatalf("rule deletion markers were not applied: %s", text)
+	}
+	if !strings.Contains(text, `"types": [`) || !strings.Contains(text, `"GR"`) {
+		t.Fatalf("remaining rule condition was lost: %s", text)
+	}
+}
+
 func TestSearchFiltersSchedule(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
