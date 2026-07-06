@@ -420,6 +420,51 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	existingPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(existingPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recorded := []chinachu.Program{
+		{ID: "exists", Recorded: filepath.ToSlash(existingPath)},
+		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/recorded.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("cleanup status = %d body=%s", res.Code, res.Body.String())
+	}
+	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
+	}
+	var backup []chinachu.Program
+	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(backup) != 2 {
+		t.Fatalf("backup should contain original list: %#v", backup)
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "exists" {
+		t.Fatalf("cleanup should keep only existing recording: %#v", got)
+	}
+}
+
 func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

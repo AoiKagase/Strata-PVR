@@ -1005,15 +1005,25 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPut {
 		kept := recorded[:0]
+		removed := false
 		for _, program := range recorded {
 			if program.Recorded == "" {
+				removed = true
 				continue
 			}
 			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
 				kept = append(kept, program)
+			} else {
+				removed = true
 			}
 		}
 		recorded = kept
+		if removed {
+			if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
