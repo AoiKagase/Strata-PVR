@@ -158,7 +158,13 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 			return Result{}, err
 		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Schedule); err != nil {
+			return Result{}, err
+		}
 		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
+			return Result{}, err
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
 			return Result{}, err
 		}
 		args := append(schedulerHookArgs(paths),

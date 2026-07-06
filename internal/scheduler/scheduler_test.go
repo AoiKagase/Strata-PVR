@@ -111,6 +111,9 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	if !strings.Contains(string(logData), "RUNNING SCHEDULER.") || !strings.Contains(string(logData), "RESERVE:") || !strings.Contains(string(logData), "MATCHES: 1") || !strings.Contains(string(logData), "RESERVES: 1") {
 		t.Fatalf("scheduler log missing expected lines: %s", string(logData))
 	}
+	if !strings.Contains(string(logData), "WRITE: "+paths.Schedule) || !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
+		t.Fatalf("scheduler log missing write lines: %s", string(logData))
+	}
 }
 
 func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
