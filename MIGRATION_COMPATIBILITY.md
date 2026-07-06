@@ -150,7 +150,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, `!CONFLICT:`, `SKIP:`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
-| `log/operator` | Operator log stream with `START:` and `FIN:` lines. | operator/WUI | partially compatible |
+| `log/operator` | Operator log stream with legacy-style `PREPARE:`, `RECORD:`, `STREAM:`, `WRITE:`, and `FIN:` lines plus Go `START:` compatibility lines. | operator/WUI | partially compatible |
 | `log/wui` | WUI log stream with HTTP/HTTPS server start/close/error lines. | WUI/API | partially compatible |
 
 Writes in Go use temp-file-and-rename atomic JSON helpers.
@@ -223,7 +223,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Operator writes recorded files directly to final path with append mode.
 - Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, updates the active recording entry with legacy runtime fields (`recorded`, `pid:-1`, `priority`, `tuner`, and `command`) after the Mirakurun stream is opened, records the Mirakurun decoded program stream, merges the completed item into `data/recorded.json` with the legacy same-ID replacement/old-ID suffix behavior, and removes the completed reserve.
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
-- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; `remove` creates a timestamped `recorded.json` backup before rewriting the list. Exact operator logs and every signal side effect remain incomplete.
+- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; `remove` creates a timestamped `recorded.json` backup before rewriting the list. Operator logs now include the main legacy `PREPARE`/`RECORD`/`STREAM`/`WRITE`/`FIN` recording lines, but every signal side effect remains incomplete.
 - CLI and WUI/API cleanup remove missing file entries from `data/recorded.json` and create a timestamped backup before destructive writes.
 - WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`; Unix builds fill device/inode/uid/gid/block fields from `stat(2)` where available, while fallback platforms may return zero for unavailable fields.

@@ -155,6 +155,17 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	if !strings.Contains(string(logData), "START: 21i3v9") || !strings.Contains(string(logData), "FIN: 21i3v9") {
 		t.Fatalf("operator log missing expected lines: %s", string(logData))
 	}
+	for _, want := range []string{
+		"PREPARE: #21i3v9 ",
+		"RECORD: #21i3v9 ",
+		"STREAM: ",
+		"WRITE: " + paths.Recording,
+		"FIN: #21i3v9 ",
+	} {
+		if !strings.Contains(string(logData), want) {
+			t.Fatalf("operator log missing %q: %s", want, string(logData))
+		}
+	}
 }
 
 func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
@@ -185,6 +196,17 @@ func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
 	}
 	if conflicted.priority != 1 {
 		t.Fatalf("conflicted priority = %d", conflicted.priority)
+	}
+}
+
+func TestOperatorLegacyISODateTimeUsesDateformatOffset(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	ts := time.Date(2024, 7, 1, 20, 30, 45, 0, time.Local).UnixMilli()
+	if got := operatorLegacyISODateTime(ts); got != "2024-07-01T20:30:45+0900" {
+		t.Fatalf("operatorLegacyISODateTime = %q", got)
 	}
 }
 

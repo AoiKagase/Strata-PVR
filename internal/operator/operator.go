@@ -127,8 +127,14 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if !shouldStart(reserve, recording, now) {
 			continue
 		}
+		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
+			return result, err
+		}
 		recording = append(recording, reserve)
 		if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
+			return result, err
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "START: %s [%s] %s", reserve.ID, reserve.Channel.Name, reserve.Title); err != nil {
@@ -136,7 +142,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		result.Started++
 
-		completed, err := recordProgram(ctx, paths.Recording, cfg, source, reserve)
+		completed, err := recordProgramWithLog(ctx, paths.Recording, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
 		if writeErr := storage.WriteJSONAtomic(paths.Recording, recording, false); writeErr != nil && err == nil {
 			err = writeErr
@@ -155,6 +161,9 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title); err != nil {
+			return result, err
+		}
+		if err := logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed)); err != nil {
 			return result, err
 		}
 		if err := runRecordedCommand(ctx, cfg.RecordedCommand, completed); err != nil {
@@ -178,6 +187,10 @@ func shouldStart(program chinachu.Program, recording []chinachu.Program, now tim
 }
 
 func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
+	return recordProgramWithLog(ctx, recordingPath, "", cfg, source, program)
+}
+
+func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
 	streamID, err := strconv.ParseInt(program.ID, 36, 64)
 	if err != nil {
 		return program, fmt.Errorf("parse program id %q: %w", program.ID, err)
@@ -202,8 +215,18 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	}
 	relativeName := chinachu.FormatRecordedName(program, format)
 	finalPath := filepath.Join(cfg.RecordedDir, filepath.FromSlash(relativeName))
+	if logPath != "" {
+		if err := logging.AppendLine(logPath, "RECORD: %s", operatorProgramLogLine(program)); err != nil {
+			return program, err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
 		return program, err
+	}
+	if logPath != "" {
+		if err := logging.AppendLine(logPath, "STREAM: %s", finalPath); err != nil {
+			return program, err
+		}
 	}
 	program.Recorded = filepath.ToSlash(finalPath)
 	program.PID = -1
@@ -216,6 +239,11 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
 	if err := updateRecordingProgram(recordingPath, program); err != nil {
 		return program, err
+	}
+	if logPath != "" {
+		if err := logging.AppendLine(logPath, "WRITE: %s", recordingPath); err != nil {
+			return program, err
+		}
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(finalPath), "."+filepath.Base(finalPath)+".recording-*")
 	if err != nil {
@@ -269,6 +297,14 @@ func setProgramRawJSON(program *chinachu.Program, key string, value any) {
 		return
 	}
 	program.Raw[key] = data
+}
+
+func operatorProgramLogLine(program chinachu.Program) string {
+	return fmt.Sprintf("#%s %s [%s] %s", program.ID, operatorLegacyISODateTime(program.Start), program.Channel.Name, program.Title)
+}
+
+func operatorLegacyISODateTime(timestampMS int64) string {
+	return time.UnixMilli(timestampMS).In(time.Local).Format("2006-01-02T15:04:05-0700")
 }
 
 func programPriority(cfg *config.Config, program chinachu.Program) int {
