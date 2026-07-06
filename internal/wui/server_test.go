@@ -129,6 +129,17 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	if got := res.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("index Cache-Control = %q", got)
 	}
+	lastModified := res.Header().Get("Last-Modified")
+	if lastModified == "" {
+		t.Fatal("index Last-Modified missing")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("If-Modified-Since", lastModified)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotModified || res.Body.Len() != 0 {
+		t.Fatalf("conditional static status=%d body=%q", res.Code, res.Body.String())
+	}
 }
 
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
