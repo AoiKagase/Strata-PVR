@@ -261,6 +261,27 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	if len(recording) != 1 {
 		t.Fatalf("recording entry was not created: %#v", recording)
 	}
+	if recording[0].Recorded == "" || recording[0].PID != -1 {
+		t.Fatalf("recording entry missing legacy runtime fields: %#v", recording[0])
+	}
+	var tuner struct {
+		Name         string `json:"name"`
+		Command      string `json:"command"`
+		IsScrambling bool   `json:"isScrambling"`
+	}
+	if err := json.Unmarshal(recording[0].Raw["tuner"], &tuner); err != nil {
+		t.Fatal(err)
+	}
+	if tuner.Name != "Mirakurun" || tuner.Command != "*" || tuner.IsScrambling {
+		t.Fatalf("unexpected tuner metadata: %#v", tuner)
+	}
+	var command string
+	if err := json.Unmarshal(recording[0].Raw["command"], &command); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(command, "mirakurun type=GR") || !strings.Contains(command, "priority=2") {
+		t.Fatalf("unexpected command metadata: %q", command)
+	}
 	recording[0].Abort = true
 	if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
 		t.Fatal(err)

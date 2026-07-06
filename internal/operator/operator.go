@@ -187,6 +187,7 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	if setter, ok := source.(prioritySetter); ok {
 		setter.SetPriority(programPriority(cfg, program))
 	}
+	priority := programPriority(cfg, program)
 	stream, err := source.ProgramStream(recordCtx, streamID, true)
 	if err != nil {
 		return program, err
@@ -202,6 +203,18 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	relativeName := chinachu.FormatRecordedName(program, format)
 	finalPath := filepath.Join(cfg.RecordedDir, filepath.FromSlash(relativeName))
 	if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
+		return program, err
+	}
+	program.Recorded = filepath.ToSlash(finalPath)
+	program.PID = -1
+	setProgramRawJSON(&program, "priority", priority)
+	setProgramRawJSON(&program, "tuner", map[string]any{
+		"name":         "Mirakurun",
+		"command":      "*",
+		"isScrambling": false,
+	})
+	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
+	if err := updateRecordingProgram(recordingPath, program); err != nil {
 		return program, err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(finalPath), "."+filepath.Base(finalPath)+".recording-*")
@@ -224,8 +237,38 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	if err := os.Rename(tmpName, finalPath); err != nil {
 		return program, err
 	}
-	program.Recorded = filepath.ToSlash(finalPath)
+	program.PID = 0
 	return program, nil
+}
+
+func updateRecordingProgram(recordingPath string, program chinachu.Program) error {
+	var recording []chinachu.Program
+	if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
+		return err
+	}
+	changed := false
+	for i := range recording {
+		if recording[i].ID == program.ID {
+			recording[i] = program
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return storage.WriteJSONAtomic(recordingPath, recording, false)
+}
+
+func setProgramRawJSON(program *chinachu.Program, key string, value any) {
+	if program.Raw == nil {
+		program.Raw = map[string]json.RawMessage{}
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	program.Raw[key] = data
 }
 
 func programPriority(cfg *config.Config, program chinachu.Program) int {
