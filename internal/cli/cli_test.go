@@ -43,12 +43,19 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	}
 	text := out.String()
 	for _, want := range []string{
+		"### BEGIN INIT INFO",
+		"# Provides:          chinachu-operator",
 		"DAEMON=./chinachu-go",
 		`DAEMON_OPTS="service operator execute"`,
+		"USER=$USER",
+		"test -x $DAEMON || exit 0",
+		`PID=$(su $USER -c "exec $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 & echo \$!")`,
+		"PGID=$(ps -p $PID -o pgrp | grep -v PGRP)",
+		"kill -QUIT -$(echo $PGID)",
 		"restart )",
 		"sleep 3",
-		"ps -p $PID",
 		"Usage: $NAME {start|stop|restart|status}",
+		"exit 0",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("initscript missing %q: %s", want, text)

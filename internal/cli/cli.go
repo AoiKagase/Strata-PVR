@@ -941,23 +941,39 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 
 func serviceInitScript(name string) string {
 	return fmt.Sprintf(`#!/bin/bash
+# /etc/
+
+### BEGIN INIT INFO
+# Provides:          chinachu-%[1]s
+# Required-Start:    $local_fs $remote_fs $network $syslog
+# Required-Stop:     $local_fs $remote_fs $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts the chinachu-%[1]s
+# Description:       starts the chinachu-%[1]s (USER=$USER)
+### END INIT INFO
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=./chinachu-go
 DAEMON_OPTS="service %[1]s execute"
 NAME=chinachu-%[1]s
+USER=$USER
 PIDFILE=/var/run/${NAME}.pid
+
+test -x $DAEMON || exit 0
 
 start () {
   echo -n "Starting ${NAME}: "
   if [ -f $PIDFILE ]; then
     PID=$(cat $PIDFILE)
-    if ps -p $PID > /dev/null 2>&1; then
+    if [ -z "$(ps axf | grep ${PID} | grep -v grep)" ]; then
+      rm -f $PIDFILE
+    else
       echo "${NAME} is already running? (pid=${PID})"
       exit
     fi
-    rm -f $PIDFILE
   fi
-  $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 &
-  PID=$!
+  PID=$(su $USER -c "exec $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 & echo \$!")
   if [ -z $PID ]; then
     echo "Failed!"
     exit
@@ -970,7 +986,8 @@ stop () {
   echo -n "Stopping ${NAME}: "
   if [ -f $PIDFILE ]; then
     PID=$(cat $PIDFILE)
-    kill -QUIT $PID
+    PGID=$(ps -p $PID -o pgrp | grep -v PGRP)
+    kill -QUIT -$(echo $PGID)
     echo "OK."
     rm -f $PIDFILE
   else
@@ -981,10 +998,10 @@ stop () {
 status () {
   if [ -f $PIDFILE ]; then
     PID=$(cat $PIDFILE)
-    if ps -p $PID > /dev/null 2>&1; then
-      echo "${NAME} is running."
-    else
+    if [ -z "$(ps axf | grep ${PID} | grep -v grep)" ]; then
       echo "${NAME} is dead but ${PIDFILE} exists."
+    else
+      echo "${NAME} is running."
     fi
   else
     echo "${NAME} is NOT running."
@@ -1011,6 +1028,8 @@ case "$1" in
     exit 1
     ;;
 esac
+
+exit 0
 `, name)
 }
 
