@@ -1869,6 +1869,9 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 		args = append(args, "-re")
 	}
 	args = append(args, "-i", "pipe:0", "-threads", "0")
+	if duration := q.Get("t"); duration != "" {
+		args = append(args, "-t", duration)
+	}
 	if cfg.VAAPIEnabled {
 		filter := "format=nv12|vaapi,hwupload,deinterlace_vaapi"
 		if size := q.Get("s"); size != "" {

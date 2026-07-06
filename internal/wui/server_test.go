@@ -720,7 +720,7 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
 	defer restore()
 	handler := NewHandler(paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m&t=30", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
@@ -730,7 +730,7 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m"} {
+	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
