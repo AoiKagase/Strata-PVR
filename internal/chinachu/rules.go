@@ -44,14 +44,10 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 			return false
 		}
 	}
-	fullTitle := program.FullTitle
-	if fullTitle == "" {
-		fullTitle = program.Title
-	}
-	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, fullTitle) {
+	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, program.Title) {
 		return false
 	}
-	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, fullTitle) {
+	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, program.Title) {
 		return false
 	}
 	if len(rule.ReserveDescriptions) > 0 {

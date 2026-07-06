@@ -31,6 +31,26 @@ func TestProgramMatchesRuleOvernightHour(t *testing.T) {
 	}
 }
 
+func TestProgramMatchesRuleUsesTitleNotFullTitleLikeLegacy(t *testing.T) {
+	program := Program{
+		Title:     "短い題名",
+		FullTitle: "長い題名 特別版",
+		Channel:   Channel{Type: "GR"},
+	}
+	if ProgramMatchesRule(Rule{ReserveTitles: []string{"特別版"}}, program) {
+		t.Fatal("reserve_titles should not match fullTitle")
+	}
+	if !ProgramMatchesRule(Rule{ReserveTitles: []string{"短い"}}, program) {
+		t.Fatal("reserve_titles should match title")
+	}
+	if !ProgramMatchesRule(Rule{IgnoreTitles: []string{"特別版"}}, program) {
+		t.Fatal("ignore_titles should not reject fullTitle")
+	}
+	if ProgramMatchesRule(Rule{IgnoreTitles: []string{"短い"}}, program) {
+		t.Fatal("ignore_titles should reject title")
+	}
+}
+
 func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 	var rule Rule
 	if err := json.Unmarshal([]byte(`{"duration":{"min":99999}}`), &rule); err != nil {
@@ -57,7 +77,7 @@ func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 }
 
 func TestProgramMatchesRuleChannelForms(t *testing.T) {
-	program := Program{Channel: Channel{Type: "CS", Channel: "CS16", ID: "x1", SID: 333}, FullTitle: "笑点", Flags: []string{}}
+	program := Program{Channel: Channel{Type: "CS", Channel: "CS16", ID: "x1", SID: 333}, Title: "笑点", FullTitle: "笑点", Flags: []string{}}
 	for _, channel := range []string{"x1", "CS16", "CS_333"} {
 		if !ProgramMatchesRule(Rule{Channels: []string{channel}, ReserveTitles: []string{"笑点"}}, program) {
 			t.Fatalf("expected channel %s to match", channel)
