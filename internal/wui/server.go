@@ -1309,11 +1309,11 @@ func (s *server) status() map[string]any {
 		},
 		"system": map[string]any{"core": runtime.NumCPU()},
 		"operator": map[string]any{
-			"alive": operatorPID != nil,
+			"alive": pidAlive(operatorPID),
 			"pid":   operatorPID,
 		},
 		"scheduler": map[string]any{
-			"alive": schedulerPID != nil,
+			"alive": pidAlive(schedulerPID),
 			"pid":   schedulerPID,
 		},
 		"wui": map[string]any{
@@ -1321,6 +1321,13 @@ func (s *server) status() map[string]any {
 			"pid":   os.Getpid(),
 		},
 	}
+}
+
+func pidAlive(pid *int) bool {
+	if pid == nil {
+		return false
+	}
+	return system.ProcessAlive(*pid)
 }
 
 func (s *server) pidPath(name string) string {

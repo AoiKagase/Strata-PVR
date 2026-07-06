@@ -714,10 +714,11 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	paths := testPaths(dir)
 	paths.OperatorPID = filepath.Join(dir, "operator.pid")
 	paths.SchedulerPID = filepath.Join(dir, "scheduler.pid")
-	if err := os.WriteFile(paths.OperatorPID, []byte("123\n"), 0o644); err != nil {
+	currentPID := os.Getpid()
+	if err := os.WriteFile(paths.OperatorPID, []byte(strconv.Itoa(currentPID)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.SchedulerPID, []byte("456\n"), 0o644); err != nil {
+	if err := os.WriteFile(paths.SchedulerPID, []byte("-1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -735,7 +736,10 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
-	if status.Operator["pid"].(float64) != 123 || status.Scheduler["pid"].(float64) != 456 {
+	if status.Operator["pid"].(float64) != float64(currentPID) || status.Operator["alive"] != true {
+		t.Fatalf("unexpected operator status: %#v", status.Operator)
+	}
+	if status.Scheduler["pid"] != nil || status.Scheduler["alive"] != false {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 	if status.Feature["streamer"] != true || status.Feature["previewer"] != false || status.Feature["filer"] != true || status.Feature["configurator"] != true {

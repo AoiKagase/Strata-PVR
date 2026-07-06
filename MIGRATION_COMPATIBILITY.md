@@ -222,7 +222,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
 - Go WUI `log/:name/stream.txt` currently returns the padding plus current log contents and does not keep a live `tail -f` subprocess open.
 - Go WUI scheduler JSON parses `RESERVE:` and `CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
-- Go WUI status includes operator/scheduler PID values when PID files are present. Go operator now maintains `data/operator.pid`; process liveness checks beyond PID file presence remain incomplete.
+- Go WUI status includes operator/scheduler PID values when PID files are present and checks whether the referenced process is alive before setting `alive:true`.
 - Go WUI recorded/recording watch supports XSPF and direct m2ts file serving. Recording watch currently serves the current file contents and does not keep a live `tail -f` stream open.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.
 
