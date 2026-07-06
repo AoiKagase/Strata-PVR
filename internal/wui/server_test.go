@@ -265,6 +265,62 @@ func TestAPIRulesMutation(t *testing.T) {
 	}
 }
 
+func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodPost, `/api/rules.json?types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("query post status = %d body=%s", res.Code, res.Body.String())
+	}
+	var rules []map[string]json.RawMessage
+	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("rules length = %d", len(rules))
+	}
+	var types []string
+	if err := json.Unmarshal(rules[0]["types"], &types); err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	if err := json.Unmarshal(rules[0]["reserve_titles"], &titles); err != nil {
+		t.Fatal(err)
+	}
+	if len(types) != 1 || types[0] != "GR" || len(titles) != 1 || titles[0] != "Title" {
+		t.Fatalf("query arrays were not preserved: %#v", rules[0])
+	}
+	if string(rules[0]["isDisabled"]) != "true" {
+		t.Fatalf("isDisabled = %s", rules[0]["isDisabled"])
+	}
+
+	req = httptest.NewRequest(http.MethodPut, `/api/rules/0.json?categories=["anime"]&sid=101`, nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("query put status = %d body=%s", res.Code, res.Body.String())
+	}
+	rules = nil
+	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	var categories []string
+	if err := json.Unmarshal(rules[0]["categories"], &categories); err != nil {
+		t.Fatal(err)
+	}
+	var sid int
+	if err := json.Unmarshal(rules[0]["sid"], &sid); err != nil {
+		t.Fatal(err)
+	}
+	if len(categories) != 1 || categories[0] != "anime" || sid != 101 {
+		t.Fatalf("query put values were not preserved: %#v", rules[0])
+	}
+}
+
 func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

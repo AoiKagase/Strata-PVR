@@ -894,7 +894,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead:
 		writeJSON(w, http.StatusOK, rules)
 	case http.MethodPost:
-		rule, err := decodeJSONObject(r.Body)
+		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
@@ -931,7 +931,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 	case http.MethodGet, http.MethodHead:
 		writeJSON(w, http.StatusOK, rules[index])
 	case http.MethodPut:
-		rule, err := decodeJSONObject(r.Body)
+		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
@@ -1647,6 +1647,41 @@ func decodeJSONObject(body io.Reader) (map[string]json.RawMessage, error) {
 	var value map[string]json.RawMessage
 	err := json.NewDecoder(body).Decode(&value)
 	return value, err
+}
+
+func decodeRuleRequest(r *http.Request) (map[string]json.RawMessage, error) {
+	if r.Body != nil && r.ContentLength != 0 {
+		return decodeJSONObject(r.Body)
+	}
+	values := r.URL.Query()
+	if len(values) == 0 {
+		return nil, io.EOF
+	}
+	rule := make(map[string]json.RawMessage, len(values))
+	for key, value := range values {
+		if len(value) == 0 {
+			continue
+		}
+		raw := queryRuleValue(value)
+		rule[key] = raw
+	}
+	return rule, nil
+}
+
+func queryRuleValue(values []string) json.RawMessage {
+	if len(values) > 1 {
+		b, _ := json.Marshal(values)
+		return b
+	}
+	value := values[0]
+	if value == "" {
+		return json.RawMessage(`""`)
+	}
+	if json.Valid([]byte(value)) {
+		return json.RawMessage(value)
+	}
+	b, _ := json.Marshal(value)
+	return b
 }
 
 func normalizeRuleEnabled(rule map[string]json.RawMessage) {
