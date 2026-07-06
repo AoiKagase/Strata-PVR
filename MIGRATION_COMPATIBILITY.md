@@ -23,7 +23,7 @@ Top-level commands accepted by `./chinachu`:
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | intentionally changed | Accepted, but automatic git/service/installer operations are not performed. This avoids Node/npm runtime assumptions and destructive service changes; users should update repository/binary explicitly. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
-| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, and maintains `data/scheduler.pid` while running. Logging/hooks remain incomplete. |
+| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, and runs scheduler/EPG/conflict hooks. Exact logging remains incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
 | `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
@@ -102,7 +102,7 @@ Fields from `config.sample.json` and JS references:
 | `recordedFormat` | Filename template. | partially compatible |
 | `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | not started |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | not started |
-| `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. | not started |
+| `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
 | `operTweeter`, `operTweeterAuth`, `operTweeterFormat` | Experimental Twitter notifications. | not started |
 
 Unknown fields are preserved by the config loader.
@@ -208,7 +208,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
 - Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
-- Scheduler runs hook commands with paths and counters.
+- Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. Go waits for these hooks to finish.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.
 - Operator writes `data/recording.json`, `data/recorded.json`, and may remove manual reserves.

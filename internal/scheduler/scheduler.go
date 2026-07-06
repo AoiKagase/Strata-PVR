@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -76,6 +78,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	if err := logging.AppendLine(paths.Log, "RUNNING SCHEDULER."); err != nil {
 		return Result{}, err
 	}
+	if !simulation {
+		if err := runHook(ctx, paths.Log, cfg.EPGStartCommand, schedulerHookArgs(paths)); err != nil {
+			return Result{}, err
+		}
+	}
 	services, err := source.Services(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("get Mirakurun services: %w", err)
@@ -88,8 +95,19 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	if err != nil {
 		return Result{}, fmt.Errorf("get Mirakurun tuners: %w", err)
 	}
+	if !simulation {
+		if err := runHook(ctx, paths.Log, cfg.EPGEndCommand, schedulerHookArgs(paths)); err != nil {
+			return Result{}, err
+		}
+	}
 
 	schedule := BuildSchedule(cfg, services, programs)
+
+	if !simulation {
+		if err := runHook(ctx, paths.Log, cfg.SchedulerStartCommand, schedulerHookArgs(paths)); err != nil {
+			return Result{}, err
+		}
+	}
 
 	var rules []chinachu.Rule
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
@@ -107,6 +125,21 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			if err := logging.AppendLine(paths.Log, "CONFLICT: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
+			payload, err := json.Marshal(reserve)
+			if err != nil {
+				return Result{}, err
+			}
+			args := []string{
+				strconv.Itoa(os.Getpid()),
+				reserve.ID,
+				time.UnixMilli(reserve.Start).Format(time.RFC3339),
+				reserve.Channel.Name,
+				reserve.Title,
+				string(payload),
+			}
+			if err := runHook(ctx, paths.Log, cfg.ConflictCommand, args); err != nil {
+				return Result{}, err
+			}
 		case !reserve.IsSkip:
 			if err := logging.AppendLine(paths.Log, "RESERVE: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
@@ -120,8 +153,46 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
 			return Result{}, err
 		}
+		args := append(schedulerHookArgs(paths),
+			strconv.Itoa(result.Matches),
+			strconv.Itoa(result.Duplicates),
+			strconv.Itoa(result.Conflicts),
+			strconv.Itoa(result.Skips),
+			strconv.Itoa(result.Reserves),
+		)
+		if err := runHook(ctx, paths.Log, cfg.SchedulerEndCommand, args); err != nil {
+			return Result{}, err
+		}
 	}
 	return result, nil
+}
+
+func schedulerHookArgs(paths Paths) []string {
+	return []string{
+		strconv.Itoa(os.Getpid()),
+		paths.Rules,
+		paths.Reserves,
+		paths.Schedule,
+	}
+}
+
+func runHook(ctx context.Context, logPath, command string, args []string) error {
+	if command == "" {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, command, args...)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start hook %s: %w", command, err)
+	}
+	if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return err
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("wait hook %s: %w", command, err)
+	}
+	return nil
 }
 
 func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time) ([]chinachu.Program, Result) {
