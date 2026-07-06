@@ -705,6 +705,38 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: "Title", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	if gotInput != "tsdata" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+}
+
 func TestAPIProgramPreview(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -813,6 +845,21 @@ func installFakeFFmpeg(t *testing.T, output string, exitCode ...int) func() {
 		return []byte(output), nil
 	}
 	return func() { runFFmpegPreview = old }
+}
+
+func installFakeFFmpegStream(t *testing.T, output string, gotInput *string, gotArgs *[]string) func() {
+	t.Helper()
+	old := runFFmpegStream
+	runFFmpegStream = func(_ context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
+		data, err := io.ReadAll(input)
+		if err != nil {
+			return nil, nil, err
+		}
+		*gotInput = string(data)
+		*gotArgs = append((*gotArgs)[:0], args...)
+		return io.NopCloser(strings.NewReader(output)), func() error { return nil }, nil
+	}
+	return func() { runFFmpegStream = old }
 }
 
 func TestAPIRecordingWatchRequiresPID(t *testing.T) {
@@ -945,6 +992,46 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 		if requests[i] != want[i] {
 			t.Fatalf("request[%d] = %q, want %q", i, requests[i], want[i])
 		}
+	}
+}
+
+func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	schedule := []chinachu.ChannelSchedule{{Channel: chinachu.Channel{ID: chid, Name: "Service"}}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	requests := []string{}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.RequestURI())
+		if r.URL.Path == "/api/services/123/stream" {
+			_, _ = w.Write([]byte("livets"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mirakurunServer.Close()
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "livemp4", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "livemp4" {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	if len(requests) != 1 || requests[0] != "/api/services/123/stream?decode=1" {
+		t.Fatalf("mirakurun requests = %#v", requests)
+	}
+	if gotInput != "livets" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+	if !strings.Contains(strings.Join(gotArgs, " "), "-re -i pipe:0") {
+		t.Fatalf("live ffmpeg args missing -re: %v", gotArgs)
 	}
 }
 

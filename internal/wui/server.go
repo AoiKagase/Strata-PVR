@@ -46,6 +46,26 @@ var runFFmpegPreview = func(ctx context.Context, args ...string) ([]byte, error)
 	return exec.CommandContext(ctx, "ffmpeg", args...).Output()
 }
 
+var runFFmpegStream = func(ctx context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd.Stdin = input
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+	go func() {
+		_, _ = io.Copy(io.Discard, stderr)
+	}()
+	return stdout, cmd.Wait, nil
+}
+
 func Run(ctx context.Context, paths Paths) error {
 	cfg, err := config.Load(paths.Config)
 	if err != nil {
@@ -1416,7 +1436,18 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		w.Header().Set("Content-Type", "video/MP2T")
 		http.ServeContent(w, r, filepath.Base(filePath), info.ModTime(), file)
 	case "mp4":
-		http.Error(w, "501 Not Implemented", http.StatusNotImplemented)
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		file, err := os.Open(filePath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+		s.streamFFmpeg(w, r, file, "mp4", false)
 	default:
 		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
 	}
@@ -1751,10 +1782,142 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			_, _ = io.Copy(w, body)
 		}
 	case "mp4":
-		http.Error(w, "501 Not Implemented", http.StatusNotImplemented)
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		body, err := client.ServiceStream(r.Context(), serviceID, true)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		defer body.Close()
+		s.streamFFmpeg(w, r, body, "mp4", true)
 	default:
 		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
 	}
+}
+
+func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool) {
+	args := watchFFmpegArgs(r, s.cfg, format, live)
+	output, wait, err := runFFmpegStream(r.Context(), input, args...)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	defer output.Close()
+	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
+	switch format {
+	case "mp4":
+		w.Header().Set("Content-Type", "video/mp4")
+	default:
+		w.Header().Set("Content-Type", "video/MP2T")
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, output)
+	if err := wait(); err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
+	}
+}
+
+func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bool) []string {
+	q := r.URL.Query()
+	videoCodec := q.Get("c:v")
+	audioCodec := q.Get("c:a")
+	container := q.Get("f")
+	if format == "mp4" {
+		container = "mp4"
+		if videoCodec == "" {
+			videoCodec = "h264"
+		}
+		if audioCodec == "" {
+			audioCodec = "aac"
+		}
+	} else {
+		container = "mpegts"
+		if videoCodec == "" {
+			videoCodec = "copy"
+		}
+		if audioCodec == "" {
+			audioCodec = "copy"
+		}
+	}
+	args := []string{}
+	if !q.Has("debug") {
+		args = append(args, "-v", "0")
+	}
+	if cfg.VAAPIEnabled {
+		device := cfg.VAAPIDevice
+		if device == "" {
+			device = "/dev/dri/renderD128"
+		}
+		args = append(args, "-vaapi_device", device, "-hwaccel", "vaapi", "-hwaccel_output_format", "yuv420p")
+	}
+	if live {
+		args = append(args, "-re")
+	}
+	args = append(args, "-i", "pipe:0", "-threads", "0")
+	if cfg.VAAPIEnabled {
+		filter := "format=nv12|vaapi,hwupload,deinterlace_vaapi"
+		if size := q.Get("s"); size != "" {
+			if parts := strings.Split(size, "x"); len(parts) == 2 {
+				filter += ",scale_vaapi=w=" + parts[0] + ":h=" + parts[1]
+			}
+		}
+		args = append(args, "-vf", filter, "-aspect", "16:9")
+	} else {
+		args = append(args, "-filter:v", "yadif")
+	}
+	if cfg.VAAPIEnabled {
+		if videoCodec == "mpeg2video" {
+			videoCodec = "mpeg2_vaapi"
+		}
+		if videoCodec == "h264" {
+			videoCodec = "h264_vaapi"
+		}
+	}
+	if videoCodec != "" {
+		args = append(args, "-c:v", videoCodec)
+	}
+	if audioCodec != "" {
+		args = append(args, "-c:a", audioCodec)
+	}
+	if size := q.Get("s"); size != "" && !cfg.VAAPIEnabled {
+		args = append(args, "-s", size)
+	}
+	for _, key := range []string{"r", "ar", "b:v", "b:a"} {
+		if value := q.Get(key); value != "" {
+			args = append(args, "-"+key, value)
+			if key == "b:v" {
+				args = append(args, "-minrate:v", value, "-maxrate:v", value)
+			}
+			if key == "b:a" {
+				args = append(args, "-minrate:a", value, "-maxrate:a", value)
+			}
+		}
+	}
+	if videoCodec == "h264" {
+		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
+	}
+	if videoCodec == "h264_vaapi" {
+		args = append(args, "-profile", "77", "-level", "41")
+	}
+	if container == "mp4" {
+		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
+	}
+	return append(args, "-y", "-f", container, "pipe:1")
 }
 
 func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
