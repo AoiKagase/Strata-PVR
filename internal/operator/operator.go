@@ -2,10 +2,12 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -106,6 +108,10 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
 			return result, err
 		}
+		if err := runRecordedCommand(ctx, cfg.RecordedCommand, completed); err != nil {
+			result.Failed++
+			return result, err
+		}
 		result.Completed++
 	}
 	return result, nil
@@ -204,6 +210,22 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 		close(done)
 		<-stopped
 	}
+}
+
+func runRecordedCommand(ctx context.Context, command string, program chinachu.Program) error {
+	if command == "" {
+		return nil
+	}
+	payload, err := json.Marshal(program)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, command, filepath.FromSlash(program.Recorded), string(payload))
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {

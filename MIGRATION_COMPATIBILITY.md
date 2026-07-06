@@ -214,7 +214,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Operator writes recorded files directly to final path with append mode.
 - Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, records the Mirakurun decoded program stream, appends `data/recorded.json`, and removes the completed reserve.
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
-- Go operator does not yet poll `abort:true` during an active stream, run `recordedCommand`, apply low-storage actions, or mirror every signal/log side effect.
+- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage actions, exact operator logs, and every signal side effect remain incomplete.
 - Cleanup removes missing file entries from `data/recorded.json`.
 - WUI/API may rewrite config, rules, reserves, recording, recorded.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
@@ -237,7 +237,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Recorded filename format | partially compatible |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible; active `abort:true` polling implemented, but recorded hooks, low-storage actions, exact logs, and signal side effects remain incomplete. |
+| Operator/recorder | partially compatible; active `abort:true` polling and `recordedCommand` execution implemented, but low-storage actions, exact logs, and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | not started |

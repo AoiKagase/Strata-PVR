@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,14 @@ import (
 	"chinachu-go/internal/config"
 	"chinachu-go/internal/storage"
 )
+
+func TestMain(m *testing.M) {
+	if output := os.Getenv("CHINACHU_GO_RECORDED_COMMAND_OUTPUT"); output != "" && len(os.Args) == 3 {
+		_ = os.WriteFile(output, []byte(os.Args[1]+"\n"+os.Args[2]), 0o644)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 type fakeStreamer struct {
 	id     int64
@@ -216,5 +225,64 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
 		t.Fatalf("recorded entry missing after abort: %#v", recorded)
+	}
+}
+
+func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := Paths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+	}
+	program := chinachu.Program{
+		ID:      "21i3v9",
+		Title:   "Hooked",
+		Start:   now.UnixMilli(),
+		End:     now.Add(time.Hour).UnixMilli(),
+		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(dir, "recorded-command.txt")
+	t.Setenv("CHINACHU_GO_RECORDED_COMMAND_OUTPUT", output)
+	cfg := &config.Config{
+		RecordedDir:     filepath.Join(dir, "recorded"),
+		RecordedFormat:  "<id>.m2ts",
+		RecordedCommand: os.Args[0],
+	}
+	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "tsdata"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Completed != 1 {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	var content []byte
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		content, err = os.ReadFile(output)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitN(string(content), "\n", 2)
+	if len(lines) != 2 {
+		t.Fatalf("unexpected command output: %q", content)
+	}
+	if !strings.HasSuffix(filepath.ToSlash(lines[0]), "/recorded/21i3v9.m2ts") {
+		t.Fatalf("unexpected recorded command path: %s", lines[0])
+	}
+	var passed chinachu.Program
+	if err := json.Unmarshal([]byte(lines[1]), &passed); err != nil {
+		t.Fatal(err)
+	}
+	if passed.ID != program.ID || passed.Recorded == "" {
+		t.Fatalf("unexpected recorded command payload: %#v", passed)
 	}
 }
