@@ -275,6 +275,50 @@ func TestReserveSimulationDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initial := []chinachu.Program{
+		{ID: "manual", IsManualReserved: true},
+		{ID: "auto"},
+		{ID: "skipped", IsSkip: true},
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), initial, false); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"unreserve", "manual", "-s"}, "[simulation] unreserve:"},
+		{[]string{"skip", "auto", "--simulation"}, "[simulation] skip:"},
+		{[]string{"unskip", "skipped", "-s"}, "[simulation] skip:"},
+	}
+	for _, tt := range tests {
+		var out bytes.Buffer
+		if err := Run(context.Background(), tt.args, &out, &bytes.Buffer{}); err != nil {
+			t.Fatalf("%v: %v", tt.args, err)
+		}
+		if !strings.Contains(out.String(), tt.want) {
+			t.Fatalf("%v output missing %q: %s", tt.args, tt.want, out.String())
+		}
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(initial) || !got[2].IsSkip {
+		t.Fatalf("simulation mutated reserves: %#v", got)
+	}
+}
+
 func TestRuleLifecycle(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

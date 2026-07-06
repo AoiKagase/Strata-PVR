@@ -26,9 +26,9 @@ Top-level commands accepted by `./chinachu`:
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs result counters. Exact logging remains incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves, supports simulation output and the `1seg` flag; exact JSON field ordering/output spacing still incomplete. |
-| `unreserve <pgid>` | partially compatible | Data side effect implemented in CLI package. |
-| `skip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
-| `unskip <pgid>` | partially compatible | Data side effect implemented in CLI package. |
+| `unreserve <pgid> [-s|--simulation]` | partially compatible | Data side effect and simulation output implemented; exact JSON field ordering/output spacing still incomplete. |
+| `skip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and target JSON output implemented; exact JSON field ordering/output spacing still incomplete. |
+| `unskip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and legacy `skip:` output label implemented; exact JSON field ordering/output spacing still incomplete. |
 | `stop <pgid>` | partially compatible | Marks recording entry with `abort:true` and sets the matching auto reserve to `isSkip:true` like the Node CLI. |
 | `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; table output still needs more work. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |

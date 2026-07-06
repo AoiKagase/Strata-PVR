@@ -706,6 +706,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 		return fmt.Errorf("Usage: %s <pgid>", mode)
 	}
 	id := args[0]
+	simulation := hasFlag(args[1:], "-s", "--simulation")
 	var reserves []chinachu.Program
 	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
 		return err
@@ -721,6 +722,11 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 			}
 			target := reserves[i]
 			reserves = append(reserves[:i], reserves[i+1:]...)
+			if simulation {
+				fmt.Fprintln(stdout, "[simulation] unreserve:")
+				writePretty(stdout, target)
+				return nil
+			}
 			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
 				return err
 			}
@@ -736,9 +742,17 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				return fmt.Errorf("既にスキップが有効になっています")
 			}
 			reserves[i].IsSkip = true
+			target := reserves[i]
+			if simulation {
+				fmt.Fprintln(stdout, "[simulation] skip:")
+				writePretty(stdout, target)
+				return nil
+			}
 			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
 				return err
 			}
+			fmt.Fprintln(stdout, "skip:")
+			writePretty(stdout, target)
 			fmt.Fprintln(stdout, "スキップを有効にしました")
 			return nil
 		case "unskip":
@@ -746,9 +760,17 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				return fmt.Errorf("既にスキップは解除されています")
 			}
 			reserves[i].IsSkip = false
+			target := reserves[i]
+			if simulation {
+				fmt.Fprintln(stdout, "[simulation] skip:")
+				writePretty(stdout, target)
+				return nil
+			}
 			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
 				return err
 			}
+			fmt.Fprintln(stdout, "skip:")
+			writePretty(stdout, target)
 			fmt.Fprintln(stdout, "スキップを解除しました")
 			return nil
 		}
