@@ -31,40 +31,49 @@ func TestProgramMatchesRuleOvernightHour(t *testing.T) {
 	}
 }
 
-func TestProgramMatchesRuleUsesTitleNotFullTitleLikeLegacy(t *testing.T) {
+func TestProgramMatchesRuleUsesFullTitleLikeChinachuCommon(t *testing.T) {
 	program := Program{
 		Title:     "短い題名",
 		FullTitle: "長い題名 特別版",
 		Channel:   Channel{Type: "GR"},
 	}
-	if ProgramMatchesRule(Rule{ReserveTitles: []string{"特別版"}}, program) {
-		t.Fatal("reserve_titles should not match fullTitle")
+	if !ProgramMatchesRule(Rule{ReserveTitles: []string{"特別版"}}, program) {
+		t.Fatal("reserve_titles should match fullTitle")
 	}
-	if !ProgramMatchesRule(Rule{ReserveTitles: []string{"短い"}}, program) {
-		t.Fatal("reserve_titles should match title")
+	if ProgramMatchesRule(Rule{ReserveTitles: []string{"短い"}}, program) {
+		t.Fatal("reserve_titles should not match title when fullTitle is present")
 	}
-	if !ProgramMatchesRule(Rule{IgnoreTitles: []string{"特別版"}}, program) {
-		t.Fatal("ignore_titles should not reject fullTitle")
+	if ProgramMatchesRule(Rule{IgnoreTitles: []string{"特別版"}}, program) {
+		t.Fatal("ignore_titles should reject fullTitle")
 	}
-	if ProgramMatchesRule(Rule{IgnoreTitles: []string{"短い"}}, program) {
-		t.Fatal("ignore_titles should reject title")
+	if !ProgramMatchesRuleForCLI(Rule{ReserveTitles: []string{"短い"}}, program) {
+		t.Fatal("CLI reserve_titles should match title")
+	}
+	if ProgramMatchesRuleForCLI(Rule{ReserveTitles: []string{"特別版"}}, program) {
+		t.Fatal("CLI reserve_titles should not match fullTitle")
 	}
 }
 
-func TestProgramMatchesRuleRequiresDetailForLegacyDescriptionAndReserveFlags(t *testing.T) {
+func TestProgramMatchesRuleCLIRequiresDetailForLegacyDescriptionAndReserveFlags(t *testing.T) {
 	program := Program{Title: "番組", Flags: []string{"新"}, Channel: Channel{Type: "GR"}}
-	if ProgramMatchesRule(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
-		t.Fatal("ignore_descriptions should not match a program without detail")
-	}
-	if ProgramMatchesRule(Rule{ReserveFlags: []string{"新"}}, program) {
-		t.Fatal("reserve_flags should not match a program without detail like legacy Chinachu")
-	}
-	program.Detail = "通常放送"
 	if !ProgramMatchesRule(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
-		t.Fatal("ignore_descriptions without a matching pattern should allow a detailed program")
+		t.Fatal("chinachu-common ignore_descriptions should allow a program without detail")
 	}
 	if !ProgramMatchesRule(Rule{ReserveFlags: []string{"新"}}, program) {
-		t.Fatal("reserve_flags should match when detail exists and flags overlap")
+		t.Fatal("chinachu-common reserve_flags should match flags without requiring detail")
+	}
+	if ProgramMatchesRuleForCLI(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
+		t.Fatal("CLI ignore_descriptions should not match a program without detail")
+	}
+	if ProgramMatchesRuleForCLI(Rule{ReserveFlags: []string{"新"}}, program) {
+		t.Fatal("CLI reserve_flags should not match a program without detail like legacy app-cli")
+	}
+	program.Detail = "通常放送"
+	if !ProgramMatchesRuleForCLI(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
+		t.Fatal("CLI ignore_descriptions without a matching pattern should allow a detailed program")
+	}
+	if !ProgramMatchesRuleForCLI(Rule{ReserveFlags: []string{"新"}}, program) {
+		t.Fatal("CLI reserve_flags should match when detail exists and flags overlap")
 	}
 }
 

@@ -7,6 +7,18 @@ import (
 )
 
 func ProgramMatchesRule(rule Rule, program Program) bool {
+	title := program.FullTitle
+	if title == "" {
+		title = program.Title
+	}
+	return programMatchesRule(rule, program, title, false)
+}
+
+func ProgramMatchesRuleForCLI(rule Rule, program Program) bool {
+	return programMatchesRule(rule, program, program.Title, true)
+}
+
+func programMatchesRule(rule Rule, program Program, title string, cli bool) bool {
 	if rule.IsDisabled {
 		return false
 	}
@@ -44,10 +56,10 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 			return false
 		}
 	}
-	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, program.Title) {
+	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, title) {
 		return false
 	}
-	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, program.Title) {
+	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, title) {
 		return false
 	}
 	if len(rule.ReserveDescriptions) > 0 {
@@ -56,10 +68,10 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 		}
 	}
 	if len(rule.IgnoreDescriptions) > 0 {
-		if program.Detail == "" {
+		if cli && program.Detail == "" {
 			return false
 		}
-		if anyRegexpMatch(rule.IgnoreDescriptions, program.Detail) {
+		if program.Detail != "" && anyRegexpMatch(rule.IgnoreDescriptions, program.Detail) {
 			return false
 		}
 	}
@@ -67,7 +79,10 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 		return false
 	}
 	if len(rule.ReserveFlags) > 0 {
-		if program.Detail == "" || !anyOverlap(rule.ReserveFlags, program.Flags) {
+		if cli && program.Detail == "" {
+			return false
+		}
+		if !anyOverlap(rule.ReserveFlags, program.Flags) {
 			return false
 		}
 	}

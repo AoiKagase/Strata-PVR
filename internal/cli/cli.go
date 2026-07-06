@@ -223,7 +223,7 @@ func searchMatches(opts searchOptions, program chinachu.Program, now time.Time) 
 	if opts.id != "" {
 		return opts.id == program.ID
 	}
-	if !chinachu.ProgramMatchesRule(opts.rule, program) {
+	if !chinachu.ProgramMatchesRuleForCLI(opts.rule, program) {
 		return false
 	}
 	start := time.UnixMilli(program.Start).Local()
