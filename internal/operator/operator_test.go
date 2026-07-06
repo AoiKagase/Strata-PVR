@@ -418,6 +418,7 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 
 func TestLowStorageSendsNotification(t *testing.T) {
 	dir := t.TempDir()
+	lowStorageLastNotified = time.Time{}
 	oldGetDiskUsage := getDiskUsage
 	getDiskUsage = func(string) (system.DiskUsage, error) {
 		return system.DiskUsage{Avail: 42 * 1024 * 1024}, nil
@@ -458,5 +459,58 @@ func TestLowStorageSendsNotification(t *testing.T) {
 		if !strings.Contains(message, want) {
 			t.Fatalf("notification missing %q: %q", want, message)
 		}
+	}
+}
+
+func TestLowStorageNotificationIsThrottled(t *testing.T) {
+	dir := t.TempDir()
+	oldGetDiskUsage := getDiskUsage
+	getDiskUsage = func(string) (system.DiskUsage, error) {
+		return system.DiskUsage{Avail: 42 * 1024 * 1024}, nil
+	}
+	defer func() { getDiskUsage = oldGetDiskUsage }()
+	oldSendmailPath := sendmailPath
+	sendmailPath = os.Args[0]
+	defer func() { sendmailPath = oldSendmailPath }()
+	baseTime := time.Unix(1000, 0)
+	oldLowStorageNow := lowStorageNow
+	lowStorageNow = func() time.Time { return baseTime }
+	defer func() { lowStorageNow = oldLowStorageNow }()
+	lowStorageLastNotified = time.Time{}
+	defer func() { lowStorageLastNotified = time.Time{} }()
+	output := filepath.Join(dir, "sendmail.txt")
+	t.Setenv("CHINACHU_GO_SENDMAIL_OUTPUT", output)
+	recordedDir := filepath.Join(dir, "recorded")
+	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := Paths{Log: filepath.Join(dir, "log", "operator")}
+	cfg := &config.Config{
+		RecordedDir:                recordedDir,
+		StorageLowSpaceThresholdMB: 100,
+		StorageLowSpaceNotifyTo:    "admin@example.test",
+	}
+
+	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(output); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(output); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("notification was not throttled: %v", err)
+	}
+	baseTime = baseTime.Add(lowStorageNotifyInterval + time.Second)
+	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(output); err != nil {
+		t.Fatalf("notification was not sent after interval: %v", err)
 	}
 }

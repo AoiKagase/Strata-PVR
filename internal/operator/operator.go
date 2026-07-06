@@ -25,6 +25,10 @@ const recordStartMargin = 15 * time.Second
 
 var getDiskUsage = system.GetDiskUsage
 var sendmailPath = "/usr/sbin/sendmail"
+var lowStorageNow = time.Now
+var lowStorageLastNotified time.Time
+
+const lowStorageNotifyInterval = 3 * time.Hour
 
 type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
@@ -329,24 +333,23 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			}
 		}
 	case "remove":
-		if len(recorded) == 0 {
-			return recorded, nil
-		}
-		removed := recorded[0]
-		recorded = append([]chinachu.Program(nil), recorded[1:]...)
-		if removed.Recorded != "" {
-			if err := os.Remove(filepath.FromSlash(removed.Recorded)); err != nil && !os.IsNotExist(err) {
+		if len(recorded) > 0 {
+			removed := recorded[0]
+			recorded = append([]chinachu.Program(nil), recorded[1:]...)
+			if removed.Recorded != "" {
+				if err := os.Remove(filepath.FromSlash(removed.Recorded)); err != nil && !os.IsNotExist(err) {
+					return recorded, err
+				}
+			}
+			if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+				return recorded, err
+			}
+			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
 				return recorded, err
 			}
 		}
-		if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
-			return recorded, err
-		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
-			return recorded, err
-		}
 	}
-	if cfg.StorageLowSpaceNotifyTo != "" {
+	if shouldSendLowStorageNotification(cfg.StorageLowSpaceNotifyTo) {
 		if err := sendLowStorageNotification(ctx, cfg.StorageLowSpaceNotifyTo, freeMB, cfg.StorageLowSpaceThresholdMB); err != nil {
 			if logErr := logging.AppendLine(paths.Log, "ERROR: %v", err); logErr != nil {
 				return recorded, logErr
@@ -354,6 +357,18 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 		}
 	}
 	return recorded, nil
+}
+
+func shouldSendLowStorageNotification(to string) bool {
+	if to == "" {
+		return false
+	}
+	now := lowStorageNow()
+	if lowStorageLastNotified.IsZero() || now.Sub(lowStorageLastNotified) > lowStorageNotifyInterval {
+		lowStorageLastNotified = now
+		return true
+	}
+	return false
 }
 
 func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, thresholdMB int) error {
