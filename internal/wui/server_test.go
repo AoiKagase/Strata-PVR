@@ -45,6 +45,40 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	}
 }
 
+func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(paths.LogDir, "wui"), []byte("log"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status.txt", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status.txt status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("log json status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("log txt status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")

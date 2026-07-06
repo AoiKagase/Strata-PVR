@@ -422,50 +422,113 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case len(parts) == 1 && parts[0] == "status":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		writeJSON(w, http.StatusOK, s.status())
 	case len(parts) == 1 && parts[0] == "scheduler":
+		if !requireAPIType(w, apiType, "json", "txt") {
+			return
+		}
 		s.handleScheduler(w, r, apiType)
 	case len(parts) == 2 && parts[0] == "scheduler" && parts[1] == "force":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleSchedulerForce(w, r)
 	case len(parts) == 1 && parts[0] == "storage":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleStorage(w, r)
 	case len(parts) == 2 && parts[0] == "log":
+		if !requireAPIType(w, apiType, "txt") {
+			return
+		}
 		s.handleLog(w, r, parts[1], false)
 	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
+		if !requireAPIType(w, apiType, "txt") {
+			return
+		}
 		s.handleLog(w, r, parts[1], true)
 	case len(parts) == 1 && parts[0] == "config":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleConfig(w, r)
 	case len(parts) == 1 && parts[0] == "rules":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRules(w, r)
 	case len(parts) == 2 && parts[0] == "rules":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRule(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "rules":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRuleAction(w, r, parts[1], parts[2])
 	case len(parts) == 1 && parts[0] == "schedule":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleJSONFile(w, r, s.paths.Schedule, "[]")
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "programs":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleSchedulePrograms(w, r)
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "broadcasting":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleScheduleBroadcasting(w, r)
 	case len(parts) == 2 && parts[0] == "schedule":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleScheduleChannel(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "programs":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleScheduleChannelPrograms(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "broadcasting":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleScheduleChannelBroadcasting(w, r, parts[1])
 	case len(parts) == 1 && parts[0] == "reserves":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleJSONFile(w, r, s.paths.Reserves, "[]")
 	case len(parts) >= 2 && parts[0] == "reserves":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleReserveProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recording":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleJSONFile(w, r, s.paths.Recording, "[]")
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "preview":
 		s.handleProgramPreview(w, r, s.paths.Recording, parts[1])
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRecordingProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recorded":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRecorded(w, r)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
 		s.handleRecordedFile(w, r, parts[1], apiType)
@@ -474,8 +537,14 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleRecordedProgram(w, r, parts[1:])
 	case len(parts) == 2 && parts[0] == "program":
+		if !requireAPIType(w, apiType, "json") {
+			return
+		}
 		s.handleProgram(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "logo":
 		s.handleChannelLogo(w, r, parts[1], apiType)
@@ -1645,6 +1714,19 @@ func (s *server) pidPath(name string) string {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func requireAPIType(w http.ResponseWriter, apiType string, allowed ...string) bool {
+	if apiType == "" {
+		return true
+	}
+	for _, value := range allowed {
+		if apiType == value {
+			return true
+		}
+	}
+	http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+	return false
 }
 
 func decodeJSONObject(body io.Reader) (map[string]json.RawMessage, error) {
