@@ -40,3 +40,32 @@ go build -o chinachu-go ./cmd/chinachu-go
 
 The final runtime must not require Node.js. Optional JS-vs-Go compatibility
 oracle tests may be added later, but ordinary Go tests must pass without Node.
+
+## Usage
+
+Run from the Chinachu working directory that contains `config.json`, `rules.json`,
+and `data/`. The Go runtime uses the existing Mirakurun backend configured by
+`mirakurunPath`; it does not replace tuner, recpt1, B-CAS, PT3, or Mirakurun
+configuration.
+
+```sh
+./chinachu-go update
+./chinachu-go reserves
+./chinachu-go service operator execute
+./chinachu-go service wui execute
+```
+
+For init script generation, keep the original JavaScript wrapper in place and
+write the Go output to a separate file for review:
+
+```sh
+./chinachu-go service operator initscript > chinachu-operator-go
+./chinachu-go service wui initscript > chinachu-wui-go
+```
+
+Compatibility and environment checks are available with:
+
+```sh
+./chinachu-go compat check
+./chinachu-go compat doctor
+```
