@@ -270,7 +270,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	paths := testPaths(dir)
 	handler := NewHandler(paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodPost, `/api/rules.json?types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
+	req := httptest.NewRequest(http.MethodGet, `/api/rules.json?method=post&types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -297,8 +297,11 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	if string(rules[0]["isDisabled"]) != "true" {
 		t.Fatalf("isDisabled = %s", rules[0]["isDisabled"])
 	}
+	if _, ok := rules[0]["method"]; ok {
+		t.Fatalf("method override query leaked into rule: %#v", rules[0])
+	}
 
-	req = httptest.NewRequest(http.MethodPut, `/api/rules/0.json?categories=["anime"]&sid=101`, nil)
+	req = httptest.NewRequest(http.MethodGet, `/api/rules/0.json?_method=put&categories=["anime"]&sid=101`, nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -318,6 +321,9 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	}
 	if len(categories) != 1 || categories[0] != "anime" || sid != 101 {
 		t.Fatalf("query put values were not preserved: %#v", rules[0])
+	}
+	if _, ok := rules[0]["_method"]; ok {
+		t.Fatalf("_method override query leaked into rule: %#v", rules[0])
 	}
 }
 

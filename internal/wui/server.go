@@ -283,13 +283,17 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 
 func (s *server) withMethodOverride(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if method := r.URL.Query().Get("method"); method != "" {
-			r = r.Clone(r.Context())
-			r.Method = strings.ToUpper(method)
+		query := r.URL.Query()
+		method := query.Get("method")
+		if override := query.Get("_method"); override != "" {
+			method = override
 		}
-		if method := r.URL.Query().Get("_method"); method != "" {
+		if method != "" {
 			r = r.Clone(r.Context())
 			r.Method = strings.ToUpper(method)
+			query.Del("method")
+			query.Del("_method")
+			r.URL.RawQuery = query.Encode()
 		}
 		next.ServeHTTP(w, r)
 	})
