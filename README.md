@@ -23,7 +23,8 @@ Phase 1/2 scaffolding is present:
   due reservations, records Mirakurun program streams, and updates legacy JSON
   state.
 - `chinachu-go service wui execute` starts a Go WUI/API server with Basic auth,
-  static asset serving, and the first compatible JSON API endpoints.
+  static asset serving, rule/reservation mutations, and the first compatible
+  JSON API endpoints.
 - CLI command names are accepted, with reservation state and rule operations
   partially implemented.
 

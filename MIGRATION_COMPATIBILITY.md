@@ -183,7 +183,7 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, reserve skip/unskip/delete, recording abort marking, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, full rule mutation, recorded file streaming, compression, and exact status fields remain incomplete.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, recorded file streaming, compression, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
