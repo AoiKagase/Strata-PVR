@@ -85,7 +85,7 @@ Fields from `config.sample.json` and JS references:
 | Field | Semantics | Status |
 | --- | --- | --- |
 | `uid`, `gid` | Drop privileges when started as root. | partially compatible; operator and WUI call `setgid` then `setuid` on Unix, defaulting missing `gid` to `video` and requiring `uid` when running as root. |
-| `mirakurunPath` | Mirakurun base URL; supports HTTP and `http+unix`. | partially compatible |
+| `mirakurunPath` | Mirakurun base URL; supports HTTP, `http+unix`, and legacy `http://unix:` socket URLs. | partially compatible |
 | `schedulerMirakurunPath` | Legacy fallback for Mirakurun URL. | partially compatible |
 | `recordedDir` | Directory prefix for recorded files. | partially compatible |
 | `vaapiEnabled`, `vaapiDevice` | WUI transcode/preview support. | not started |
@@ -201,7 +201,7 @@ The JS Mirakurun client calls:
 - service/channel stream: used by WUI watch routes.
 - service logo: used by channel logo route.
 
-Current Go client status: partially compatible for HTTP and `http+unix` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, and `X-Mirakurun-Priority`.
+Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, and `X-Mirakurun-Priority`.
 
 ## Side Effects
 

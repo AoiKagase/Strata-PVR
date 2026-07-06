@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -57,5 +58,51 @@ func TestStreamEndpoints(t *testing.T) {
 		if paths[i] != want[i] {
 			t.Fatalf("path[%d] = %q, want %q", i, paths[i], want[i])
 		}
+	}
+}
+
+func TestUnixSocketURLParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		basePath string
+	}{
+		{
+			name:     "standard",
+			raw:      "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/base",
+			basePath: "/base",
+		},
+		{
+			name:     "legacy",
+			raw:      "http://unix:/var/run/mirakurun.sock:/base",
+			basePath: "/base",
+		},
+		{
+			name:     "legacy encoded socket",
+			raw:      "http://unix:%2Fvar%2Frun%2Fmirakurun.sock:/base",
+			basePath: "/base",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := New(tt.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if client.baseURL.Scheme != "http" || client.baseURL.Host != "unix" || client.baseURL.Path != tt.basePath {
+				t.Fatalf("baseURL = %s", client.baseURL.String())
+			}
+			req, err := client.newRequest(context.Background(), http.MethodGet, "/api/services", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			u, err := url.Parse(req.URL.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if u.Path != "/base/api/services" {
+				t.Fatalf("request path = %s", u.Path)
+			}
+		})
 	}
 }

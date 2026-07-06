@@ -29,15 +29,17 @@ func New(raw string) (*Client, error) {
 	}
 	c := &Client{UserAgent: "Chinachu-Go"}
 	if strings.HasPrefix(raw, "http+unix://") {
-		u, err := url.Parse(raw)
+		rest := strings.TrimPrefix(raw, "http+unix://")
+		host := rest
+		basePath := "/"
+		if slash := strings.Index(rest, "/"); slash >= 0 {
+			host = rest[:slash]
+			basePath = rest[slash:]
+		}
+		socketPath, err := url.PathUnescape(host)
 		if err != nil {
 			return nil, err
 		}
-		socketPath, err := url.PathUnescape(u.Host)
-		if err != nil {
-			return nil, err
-		}
-		basePath := u.EscapedPath()
 		c.baseURL = &url.URL{Scheme: "http", Host: "unix", Path: basePath}
 		c.httpClient = unixHTTPClient(socketPath)
 		return c, nil
@@ -46,6 +48,9 @@ func New(raw string) (*Client, error) {
 		rest := strings.TrimPrefix(raw, "http://unix:")
 		parts := strings.SplitN(rest, ":", 2)
 		socketPath := parts[0]
+		if decoded, err := url.PathUnescape(socketPath); err == nil {
+			socketPath = decoded
+		}
 		basePath := "/"
 		if len(parts) == 2 {
 			basePath = parts[1]
