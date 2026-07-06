@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/operator"
@@ -71,6 +72,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return cleanup(p, stdout)
 	case "update":
 		return update(ctx, p, args[1:], stdout)
+	case "search":
+		return search(p, args[1:], stdout)
 	case "rule":
 		return ruleCommand(p, args[1:], stdout)
 	case "enrule":
@@ -79,12 +82,169 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--disable"), stdout)
 	case "rmrule":
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--remove"), stdout)
-	case "search", "updater", "ircbot", "test":
+	case "updater", "ircbot", "test":
 		return fmt.Errorf("%s: compatibility implementation not completed", args[0])
 	default:
 		printHelp(stdout)
 		return nil
 	}
+}
+
+type searchOptions struct {
+	rule     chinachu.Rule
+	id       string
+	simple   bool
+	detail   bool
+	now      bool
+	today    bool
+	tomorrow bool
+	num      int
+	hasNum   bool
+}
+
+func search(p paths, args []string, stdout io.Writer) error {
+	opts, err := parseSearchArgs(args)
+	if err != nil {
+		return err
+	}
+	var schedule []chinachu.ChannelSchedule
+	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
+		return err
+	}
+	now := time.Now()
+	matches := make([]chinachu.Program, 0)
+	for _, channel := range schedule {
+		for _, program := range channel.Programs {
+			if searchMatches(opts, program, now) {
+				matches = append(matches, program)
+			}
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Start < matches[j].Start })
+	if len(matches) == 0 {
+		fmt.Fprintln(stdout, "見つかりません")
+		return nil
+	}
+	writeProgramSearchTable(stdout, matches, opts)
+	return nil
+}
+
+func parseSearchArgs(args []string) (searchOptions, error) {
+	ruleOpts, rule, err := parseRuleArgs(args)
+	if err != nil {
+		return searchOptions{}, err
+	}
+	opts := searchOptions{
+		rule:   rule,
+		num:    ruleOpts.num,
+		hasNum: ruleOpts.hasNum,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		value := func() (string, error) {
+			if i+1 >= len(args) {
+				return "", fmt.Errorf("missing value for %s", arg)
+			}
+			i++
+			return args[i], nil
+		}
+		switch arg {
+		case "-id", "--id":
+			v, err := value()
+			if err != nil {
+				return opts, err
+			}
+			opts.id = v
+		case "-simple", "--simple":
+			opts.simple = true
+		case "-detail", "--detail":
+			opts.detail = true
+		case "-now", "--now":
+			opts.now = true
+		case "-today", "--today":
+			opts.today = true
+		case "-tomorrow", "--tomorrow":
+			opts.tomorrow = true
+		}
+	}
+	return opts, nil
+}
+
+func searchMatches(opts searchOptions, program chinachu.Program, now time.Time) bool {
+	if opts.id != "" {
+		return opts.id == program.ID
+	}
+	if !chinachu.ProgramMatchesRule(opts.rule, program) {
+		return false
+	}
+	start := time.UnixMilli(program.Start).Local()
+	end := time.UnixMilli(program.End).Local()
+	if opts.now && (now.Before(start) || now.After(end)) {
+		return false
+	}
+	if opts.today && now.Day() != start.Day() {
+		return false
+	}
+	if opts.tomorrow && now.Day()+1 != start.Day() {
+		return false
+	}
+	return true
+}
+
+func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {
+	headers := []string{"#", "Type:CH", "Cat", "Datetime", "Dur", "Title"}
+	if !opts.simple || opts.detail {
+		headers = insertString(headers, 1, "Program ID")
+	}
+	if opts.detail {
+		headers = insertString(headers, indexOfString(headers, "Cat"), "SID")
+		headers = append(headers, "Description")
+	}
+	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	for i, program := range programs {
+		if opts.hasNum && i != opts.num {
+			continue
+		}
+		datetimeLayout := "06/01/02 15:04"
+		if opts.simple {
+			datetimeLayout = "02 15:04"
+		}
+		row := []string{
+			strconv.Itoa(i),
+			program.Channel.Type + ":" + program.Channel.Channel,
+			program.Category,
+			time.UnixMilli(program.Start).Local().Format(datetimeLayout),
+			fmt.Sprintf("%dm", program.Seconds/60),
+			program.Title,
+		}
+		if !opts.simple || opts.detail {
+			row = insertString(row, 1, program.ID)
+		}
+		if opts.detail {
+			row = insertString(row, indexOfString(headers, "SID"), strconv.FormatInt(program.Channel.SID, 10))
+			row = append(row, program.Detail)
+		}
+		fmt.Fprintln(w, strings.Join(row, "\t"))
+	}
+}
+
+func insertString(values []string, index int, value string) []string {
+	if index < 0 || index > len(values) {
+		index = len(values)
+	}
+	values = append(values, "")
+	copy(values[index+1:], values[index:])
+	values[index] = value
+	return values
+}
+
+func indexOfString(values []string, value string) int {
+	for i, item := range values {
+		if item == value {
+			return i
+		}
+	}
+	return -1
 }
 
 func ruleCommand(p paths, args []string, stdout io.Writer) error {
