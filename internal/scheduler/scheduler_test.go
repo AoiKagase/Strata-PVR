@@ -111,6 +111,19 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	if !strings.Contains(string(logData), "RUNNING SCHEDULER.") || !strings.Contains(string(logData), "RESERVE:") || !strings.Contains(string(logData), "MATCHES: 1") || !strings.Contains(string(logData), "RESERVES: 1") {
 		t.Fatalf("scheduler log missing expected lines: %s", string(logData))
 	}
+	for _, want := range []string{
+		"GETTING EPG from Mirakurun.",
+		"Mirakurun is OK.",
+		"Mirakurun -> services: 1",
+		"Mirakurun -> services: 1 (excluded)",
+		"Mirakurun -> sorted services: 0",
+		"Mirakurun -> programs: 1",
+		"Mirakurun -> tuners: 1",
+	} {
+		if !strings.Contains(string(logData), want) {
+			t.Fatalf("scheduler log missing %q: %s", want, string(logData))
+		}
+	}
 	if !strings.Contains(string(logData), "WRITE: "+paths.Schedule) || !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
 		t.Fatalf("scheduler log missing write lines: %s", string(logData))
 	}

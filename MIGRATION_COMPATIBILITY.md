@@ -30,7 +30,7 @@ before or after the ID.
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | intentionally changed | Accepted, but automatic git/service/installer operations are not performed. This avoids Node/npm runtime assumptions and destructive service changes; users should update repository/binary explicitly. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation uses the Go binary and includes start/stop/restart/status handling. `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
-| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs legacy reserve/conflict/skip/write/tuner/duplicate/result lines. Some fetch/error logging remains incomplete. |
+| `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs legacy Mirakurun fetch/reserve/conflict/skip/write/tuner/duplicate/result lines. Some error detail output remains incomplete. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. Output is tabular but not yet byte-for-byte `easy-table`; `config.normalizationForm` matching remains incomplete. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves, supports simulation output, the `1seg` flag, and legacy `-id/--id` program ID options; exact JSON field ordering/output spacing still incomplete. |
 | `unreserve <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and legacy `-id/--id` program ID options implemented; exact JSON field ordering/output spacing still incomplete. |
@@ -149,7 +149,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/recorded.json` | Array of recorded program objects with `recorded` path. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
-| `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, `!CONFLICT:`, `SKIP:`, `OVERRIDEBYRULE:`, `WRITE:`, `TUNERS:`, duplicate ID `**WARNING**`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
+| `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `GETTING EPG from Mirakurun.`, `Mirakurun -> ...` fetch counts, `RESERVE:`, `!CONFLICT:`, `SKIP:`, `OVERRIDEBYRULE:`, `WRITE:`, `TUNERS:`, duplicate ID `**WARNING**`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
 | `log/operator` | Operator log stream with legacy-style `PREPARE:`, `RECORD:`, `STREAM:`, `WRITE:`, `SPAWN:`, and `FIN:` lines plus Go `START:` compatibility lines. | operator/WUI | partially compatible |
 | `log/wui` | WUI log stream with HTTP/HTTPS server start/close/error lines. | WUI/API | partially compatible |
 
@@ -215,7 +215,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
 - Wrapper ensures `log/` and `data/`.
 - Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
-- Scheduler logs reserve/conflict/skip/rule-override/write/tuner-count/duplicate-ID lines and the Node-style result counters, including legacy `!CONFLICT:` and `OVERRIDEBYRULE:` lines and `dateformat`-style `isoDateTime` timestamps without a timezone colon.
+- Scheduler logs Mirakurun fetch counts, reserve/conflict/skip/rule-override/write/tuner-count/duplicate-ID lines, and the Node-style result counters, including legacy `!CONFLICT:` and `OVERRIDEBYRULE:` lines and `dateformat`-style `isoDateTime` timestamps without a timezone colon.
 - Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. Go waits for these hooks to finish.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.

@@ -85,17 +85,42 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			return Result{}, err
 		}
 	}
+	if err := logging.AppendLine(paths.Log, "GETTING EPG from Mirakurun."); err != nil {
+		return Result{}, err
+	}
 	services, err := source.Services(ctx)
 	if err != nil {
+		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
 		return Result{}, fmt.Errorf("get Mirakurun services: %w", err)
+	}
+	if err := logging.AppendLine(paths.Log, "Mirakurun is OK."); err != nil {
+		return Result{}, err
+	}
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> services: %d", len(services)); err != nil {
+		return Result{}, err
+	}
+	filteredServices, sortedServices := serviceLogStats(cfg, services)
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> services: %d (excluded)", filteredServices); err != nil {
+		return Result{}, err
+	}
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> sorted services: %d", sortedServices); err != nil {
+		return Result{}, err
 	}
 	programs, err := source.Programs(ctx)
 	if err != nil {
+		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
 		return Result{}, fmt.Errorf("get Mirakurun programs: %w", err)
+	}
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> programs: %d", len(programs)); err != nil {
+		return Result{}, err
 	}
 	tuners, err := source.Tuners(ctx)
 	if err != nil {
+		_ = logging.AppendLine(paths.Log, "Mirakurun -> Error:")
 		return Result{}, fmt.Errorf("get Mirakurun tuners: %w", err)
+	}
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> tuners: %d", len(tuners)); err != nil {
+		return Result{}, err
 	}
 	if !simulation {
 		if err := runHook(ctx, paths.Log, cfg.EPGEndCommand, schedulerHookArgs(paths)); err != nil {
@@ -258,6 +283,19 @@ func tunerTypesJSON(tuners []mirakurun.Tuner) string {
 	}
 	b.WriteByte('}')
 	return b.String()
+}
+
+func serviceLogStats(cfg *config.Config, services []mirakurun.Service) (filteredCount int, sortedCount int) {
+	filtered := filterAndOrderServices(cfg, append([]mirakurun.Service(nil), services...))
+	for _, id := range cfg.ServiceOrder {
+		for _, service := range filtered {
+			if service.ID == id {
+				sortedCount++
+				break
+			}
+		}
+	}
+	return len(filtered), sortedCount
 }
 
 func schedulerHookArgs(paths Paths) []string {
