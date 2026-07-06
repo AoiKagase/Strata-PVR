@@ -244,6 +244,14 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleJSONFile(w, r, s.paths.Schedule, "[]")
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "programs":
 		s.handleSchedulePrograms(w, r)
+	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "broadcasting":
+		s.handleScheduleBroadcasting(w, r)
+	case len(parts) == 2 && parts[0] == "schedule":
+		s.handleScheduleChannel(w, r, parts[1])
+	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "programs":
+		s.handleScheduleChannelPrograms(w, r, parts[1])
+	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "broadcasting":
+		s.handleScheduleChannelBroadcasting(w, r, parts[1])
 	case len(parts) == 1 && parts[0] == "reserves":
 		s.handleJSONFile(w, r, s.paths.Reserves, "[]")
 	case len(parts) >= 2 && parts[0] == "reserves":
@@ -349,6 +357,74 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 		programs = append(programs, channel.Programs...)
 	}
 	writeJSON(w, http.StatusOK, programs)
+}
+
+func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	schedules, err := s.readSchedule()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, broadcastingPrograms(schedules, time.Now()))
+}
+
+func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	channel, err := s.findScheduleChannel(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if channel == nil {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, channel)
+}
+
+func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	channel, err := s.findScheduleChannel(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if channel == nil {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, channel.Programs)
+}
+
+func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	channel, err := s.findScheduleChannel(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if channel == nil {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, broadcastingPrograms([]chinachu.ChannelSchedule{*channel}, time.Now()))
 }
 
 func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
@@ -1111,6 +1187,33 @@ func (s *server) readSchedule() ([]chinachu.ChannelSchedule, error) {
 	var schedules []chinachu.ChannelSchedule
 	err := storage.ReadJSON(s.paths.Schedule, &schedules, "[]")
 	return schedules, err
+}
+
+func (s *server) findScheduleChannel(id string) (*chinachu.ChannelSchedule, error) {
+	schedules, err := s.readSchedule()
+	if err != nil {
+		return nil, err
+	}
+	for i := range schedules {
+		if schedules[i].ID == id {
+			return &schedules[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func broadcastingPrograms(schedules []chinachu.ChannelSchedule, now time.Time) []chinachu.Program {
+	nowMS := now.UnixMilli()
+	programs := []chinachu.Program{}
+	for _, channel := range schedules {
+		for _, program := range channel.Programs {
+			if nowMS < program.Start || nowMS > program.End {
+				continue
+			}
+			programs = append(programs, program)
+		}
+	}
+	return programs
 }
 
 func (s *server) status() map[string]any {

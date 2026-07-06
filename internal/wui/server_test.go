@@ -157,6 +157,90 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 }
 
+func TestAPIScheduleChannelRoutes(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	schedule := []chinachu.ChannelSchedule{
+		{
+			Channel: chinachu.Channel{ID: "gr101", Name: "GR 101"},
+			Programs: []chinachu.Program{
+				{ID: "onair", Title: "On Air", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Minute).UnixMilli()},
+				{ID: "future", Title: "Future", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli()},
+			},
+		},
+		{
+			Channel:  chinachu.Channel{ID: "gr102", Name: "GR 102"},
+			Programs: []chinachu.Program{{ID: "other", Title: "Other", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Minute).UnixMilli()}},
+		},
+	}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule/gr101.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("channel status = %d body=%s", res.Code, res.Body.String())
+	}
+	var channel chinachu.ChannelSchedule
+	if err := json.Unmarshal(res.Body.Bytes(), &channel); err != nil {
+		t.Fatal(err)
+	}
+	if channel.ID != "gr101" || len(channel.Programs) != 2 {
+		t.Fatalf("unexpected channel: %#v", channel)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/programs.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("channel programs status = %d body=%s", res.Code, res.Body.String())
+	}
+	var programs []chinachu.Program
+	if err := json.Unmarshal(res.Body.Bytes(), &programs); err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) != 2 || programs[0].ID != "onair" || programs[1].ID != "future" {
+		t.Fatalf("unexpected channel programs: %#v", programs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/broadcasting.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("broadcasting status = %d body=%s", res.Code, res.Body.String())
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &programs); err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) != 2 || programs[0].ID != "onair" || programs[1].ID != "other" {
+		t.Fatalf("unexpected broadcasting programs: %#v", programs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/broadcasting.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("channel broadcasting status = %d body=%s", res.Code, res.Body.String())
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &programs); err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) != 1 || programs[0].ID != "onair" {
+		t.Fatalf("unexpected channel broadcasting programs: %#v", programs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/missing.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("missing channel status = %d", res.Code)
+	}
+}
+
 func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
