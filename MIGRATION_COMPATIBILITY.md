@@ -144,7 +144,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, and `CONFLICT:` lines for WUI status parsing. | scheduler/WUI | partially compatible |
 | `log/operator` | Operator log stream with `START:` and `FIN:` lines. | operator/WUI | partially compatible |
-| `log/wui` | WUI log stream. | wrapper/WUI | not started |
+| `log/wui` | WUI log stream with HTTP/HTTPS server start/close/error lines. | WUI/API | partially compatible |
 
 Writes in Go use temp-file-and-rename atomic JSON helpers.
 

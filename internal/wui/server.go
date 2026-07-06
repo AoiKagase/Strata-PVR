@@ -17,6 +17,7 @@ import (
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
+	"chinachu-go/internal/logging"
 	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
@@ -43,6 +44,13 @@ func Run(ctx context.Context, paths Paths) error {
 		return err
 	}
 	addr := listenAddress(cfg)
+	proto := "HTTP"
+	if cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != "" {
+		proto = "HTTPS"
+	}
+	if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Listening on %s", proto, addr); err != nil {
+		return err
+	}
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           NewHandler(paths, cfg),
@@ -61,13 +69,17 @@ func Run(ctx context.Context, paths Paths) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
 			return err
 		}
+		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Closed", proto)
 		return ctx.Err()
 	case err := <-errCh:
 		if err == http.ErrServerClosed {
+			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Server Closed", proto)
 			return nil
 		}
+		_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
 		return err
 	}
 }
@@ -983,8 +995,12 @@ func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
 }
 
 func (s *server) logDir() string {
-	if s.paths.LogDir != "" {
-		return s.paths.LogDir
+	return logDir(s.paths)
+}
+
+func logDir(paths Paths) string {
+	if paths.LogDir != "" {
+		return paths.LogDir
 	}
 	return "log"
 }

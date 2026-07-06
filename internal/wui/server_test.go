@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -456,6 +457,43 @@ func TestAPILogAndStream(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent {
 		t.Fatalf("missing log status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestRunWritesWUILog(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Config, []byte(`{"wuiHost":"127.0.0.1","wuiPort":`+strconv.Itoa(port)+`}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, paths) }()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		data, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+		if err == nil && strings.Contains(string(data), "HTTP Server Listening on") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	data, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(data)
+	if !strings.Contains(logText, "HTTP Server Listening on") || !strings.Contains(logText, "HTTP Server Closed") {
+		t.Fatalf("wui log missing expected lines: %s", logText)
 	}
 }
 
