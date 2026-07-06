@@ -110,7 +110,7 @@ Fields from `config.sample.json` and JS references:
 | `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | partially compatible; Go sets `X-Mirakurun-Priority` before program stream requests. Conflict recordings remain limited because Go currently skips conflict reserves. |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | partially compatible; `remove`, `stop`, hook command, sendmail notification, and three-hour notification throttling are implemented. |
 | `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
-| `operTweeter`, `operTweeterAuth`, `operTweeterFormat` | Experimental Twitter notifications. | not started |
+| `operTweeter`, `operTweeterAuth`, `operTweeterFormat` | Experimental Twitter notifications. | partially compatible; existing config fields are parsed explicitly, but Twitter posting is intentionally not implemented yet because the Node-era `mtwitter` integration has no Go runtime equivalent in this port. |
 
 Unknown fields are preserved by the config loader.
 

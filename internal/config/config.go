@@ -44,7 +44,22 @@ type Config struct {
 	EPGEndCommand              string                     `json:"epgEndCommand"`
 	ConflictCommand            string                     `json:"conflictCommand"`
 	RecordedCommand            string                     `json:"recordedCommand"`
+	OperTweeter                bool                       `json:"operTweeter"`
+	OperTweeterAuth            *OperTweeterAuth           `json:"operTweeterAuth"`
+	OperTweeterFormat          *OperTweeterFormat         `json:"operTweeterFormat"`
 	Raw                        map[string]json.RawMessage `json:"-"`
+}
+
+type OperTweeterAuth struct {
+	ConsumerKey       string `json:"consumerKey"`
+	ConsumerSecret    string `json:"consumerSecret"`
+	AccessToken       string `json:"accessToken"`
+	AccessTokenSecret string `json:"accessTokenSecret"`
+}
+
+type OperTweeterFormat struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 func Load(path string) (*Config, error) {

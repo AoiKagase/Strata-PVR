@@ -9,7 +9,7 @@ import (
 func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(path, []byte(`{"recordedDir":"./rec/","vaapiEnabled":true,"vaapiDevice":"/dev/dri/renderD128","custom":true}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"recordedDir":"./rec/","vaapiEnabled":true,"vaapiDevice":"/dev/dri/renderD128","operTweeter":true,"operTweeterAuth":{"consumerKey":"ck","consumerSecret":"cs","accessToken":"at","accessTokenSecret":"ats"},"operTweeterFormat":{"start":"start <title>","end":"end <title>"},"custom":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(path)
@@ -24,6 +24,9 @@ func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
 	}
 	if !cfg.VAAPIEnabled || cfg.VAAPIDevice != "/dev/dri/renderD128" {
 		t.Fatalf("VAAPI fields were not loaded: enabled=%v device=%q", cfg.VAAPIEnabled, cfg.VAAPIDevice)
+	}
+	if !cfg.OperTweeter || cfg.OperTweeterAuth == nil || cfg.OperTweeterAuth.ConsumerKey != "ck" || cfg.OperTweeterFormat == nil || cfg.OperTweeterFormat.End != "end <title>" {
+		t.Fatalf("operTweeter fields were not loaded: %#v", cfg)
 	}
 	if _, ok := cfg.Raw["custom"]; !ok {
 		t.Fatal("unknown field was not preserved in Raw")
