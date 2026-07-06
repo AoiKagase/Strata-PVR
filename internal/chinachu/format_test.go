@@ -1,12 +1,15 @@
 package chinachu
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestFormatRecordedName(t *testing.T) {
 	program := Program{
 		ID:       "abc",
 		Title:    `A/B:C*D?E"F<G>H|I`,
-		Start:    1719846000000,
+		Start:    time.Date(2024, 7, 1, 23, 30, 0, 0, time.Local).UnixMilli(),
 		Category: "anime",
 		Channel:  Channel{Type: "GR", Channel: "27", Name: "Test/Channel", SID: 101},
 	}

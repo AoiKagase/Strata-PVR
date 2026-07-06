@@ -6,9 +6,9 @@ import (
 )
 
 type Service struct {
-	ID          int64 `json:"id"`
-	ServiceID   int64 `json:"serviceId"`
-	NetworkID   int64 `json:"networkId"`
+	ID          int64  `json:"id"`
+	ServiceID   int64  `json:"serviceId"`
+	NetworkID   int64  `json:"networkId"`
 	Name        string `json:"name"`
 	HasLogoData bool   `json:"hasLogoData"`
 	Channel     struct {
