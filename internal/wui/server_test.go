@@ -925,11 +925,14 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 		t.Fatalf("unexpected xspf: %q", res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?mode=download&ext=m2ts", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "watchdata" {
 		t.Fatalf("m2ts status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename*=UTF-8''recorded.m2ts" {
+		t.Fatalf("download content-disposition = %q", got)
 	}
 }
 
@@ -948,11 +951,14 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
 	defer restore()
 	handler := NewHandler(paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m&t=30", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m&t=30&mode=download&ext=mp4", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename*=UTF-8''recorded.mp4" {
+		t.Fatalf("download content-disposition = %q", got)
 	}
 	if gotInput != "tsdata" {
 		t.Fatalf("ffmpeg input = %q", gotInput)

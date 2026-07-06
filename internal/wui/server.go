@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1492,6 +1493,9 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			writeXSPF(w, target, program.Title)
 		}
 	case "m2ts":
+		if !requirePID {
+			setWatchDownloadHeader(w, r, filePath, apiType)
+		}
 		if requirePID && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "video/MP2T")
 			w.WriteHeader(http.StatusOK)
@@ -1507,6 +1511,9 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		w.Header().Set("Content-Type", "video/MP2T")
 		http.ServeContent(w, r, filepath.Base(filePath), info.ModTime(), file)
 	case "mp4":
+		if !requirePID {
+			setWatchDownloadHeader(w, r, filePath, apiType)
+		}
 		if r.Method == http.MethodHead {
 			w.Header().Set("Content-Type", "video/mp4")
 			w.WriteHeader(http.StatusOK)
@@ -1586,6 +1593,21 @@ func copyFileFromOffset(w io.Writer, filePath string, offset int64) error {
 	}
 	_, err = io.Copy(w, file)
 	return err
+}
+
+func setWatchDownloadHeader(w http.ResponseWriter, r *http.Request, filePath, apiType string) {
+	if r.URL.Query().Get("mode") != "download" {
+		return
+	}
+	ext := r.URL.Query().Get("ext")
+	if ext == "" {
+		ext = apiType
+	}
+	base := filepath.Base(filePath)
+	if suffix := filepath.Ext(base); suffix != "" {
+		base = strings.TrimSuffix(base, suffix)
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(base+"."+ext))
 }
 
 func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, path, id string) {
