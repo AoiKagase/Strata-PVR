@@ -286,6 +286,9 @@ func TestAPIRulesMutation(t *testing.T) {
 	if res.Code != http.StatusCreated {
 		t.Fatalf("post status = %d body=%s", res.Code, res.Body.String())
 	}
+	if got := res.Body.String(); got != `{"categories":["anime"],"isDisabled":true}` {
+		t.Fatalf("post body = %q", got)
+	}
 	var rules []map[string]json.RawMessage
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
 		t.Fatal(err)
@@ -306,6 +309,9 @@ func TestAPIRulesMutation(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("enable status = %d body=%s", res.Code, res.Body.String())
 	}
+	if got := res.Body.String(); got != `{}` {
+		t.Fatalf("enable body = %q", got)
+	}
 	rules = nil
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
 		t.Fatal(err)
@@ -319,6 +325,9 @@ func TestAPIRulesMutation(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Body.String(); got != `{}` {
+		t.Fatalf("delete body = %q", got)
 	}
 	rules = nil
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {

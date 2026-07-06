@@ -1122,7 +1122,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusCreated, rule)
+		writeCompactJSON(w, http.StatusCreated, rule)
 	default:
 		w.Header().Set("Allow", "HEAD, GET, POST")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1159,14 +1159,14 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, rule)
+		writeCompactJSON(w, http.StatusOK, rule)
 	case http.MethodDelete:
 		rules = append(rules[:index], rules[index+1:]...)
 		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{})
+		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "HEAD, GET, PUT, DELETE")
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1206,7 +1206,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{})
+	writeCompactJSON(w, http.StatusOK, map[string]any{})
 }
 
 func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
@@ -2104,6 +2104,16 @@ func (s *server) pidPath(name string) string {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeCompactJSON(w http.ResponseWriter, status int, value any) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func requireAPIType(w http.ResponseWriter, apiType string, allowed ...string) bool {
