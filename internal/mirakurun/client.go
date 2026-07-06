@@ -110,6 +110,22 @@ func (c *Client) ProgramStream(ctx context.Context, id int64, decode bool) (io.R
 	if decode {
 		endpoint += "?decode=1"
 	}
+	return c.stream(ctx, endpoint)
+}
+
+func (c *Client) ServiceStream(ctx context.Context, id int64, decode bool) (io.ReadCloser, error) {
+	endpoint := fmt.Sprintf("/api/services/%d/stream", id)
+	if decode {
+		endpoint += "?decode=1"
+	}
+	return c.stream(ctx, endpoint)
+}
+
+func (c *Client) LogoImage(ctx context.Context, id int64) (io.ReadCloser, error) {
+	return c.stream(ctx, fmt.Sprintf("/api/services/%d/logo", id))
+}
+
+func (c *Client) stream(ctx context.Context, endpoint string) (io.ReadCloser, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -120,7 +136,7 @@ func (c *Client) ProgramStream(ctx context.Context, id int64, decode bool) (io.R
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		res.Body.Close()
-		return nil, fmt.Errorf("mirakurun program stream: %s", res.Status)
+		return nil, fmt.Errorf("mirakurun stream %s: %s", endpoint, res.Status)
 	}
 	return res.Body, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -258,6 +259,78 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusGone {
 		t.Fatalf("gone status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	schedule := []chinachu.ChannelSchedule{{
+		Channel: chinachu.Channel{ID: chid, Name: "Service & One"},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	requests := []string{}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.RequestURI())
+		switch r.URL.Path {
+		case "/api/services/123/logo":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write([]byte("pngdata"))
+		case "/api/services/123/stream":
+			_, _ = w.Write([]byte("tsdata"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mirakurunServer.Close()
+	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo.png", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
+		t.Fatalf("logo status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "tsdata" {
+		t.Fatalf("watch status=%d body=%q", res.Code, res.Body.String())
+	}
+	want := []string{"/api/services/123/logo", "/api/services/123/stream?decode=1"}
+	for i := range want {
+		if requests[i] != want[i] {
+			t.Fatalf("request[%d] = %q, want %q", i, requests[i], want[i])
+		}
+	}
+}
+
+func TestAPIChannelWatchXSPF(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	schedule := []chinachu.ChannelSchedule{{
+		Channel: chinachu.Channel{ID: chid, Name: "Service & One"},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.xspf?prefix=/api/channel/"+chid+"/&ext=m2ts", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "Service &amp; One") {
+		t.Fatalf("xspf title was not escaped: %q", res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/channel/") {
+		t.Fatalf("xspf target missing: %q", res.Body.String())
 	}
 }
 

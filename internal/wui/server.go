@@ -17,6 +17,7 @@ import (
 
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
+	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/storage"
 )
 
@@ -175,6 +176,10 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleRecordedProgram(w, r, parts[1:])
 	case len(parts) == 2 && parts[0] == "program":
 		s.handleProgram(w, r, parts[1])
+	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "logo":
+		s.handleChannelLogo(w, r, parts[1], apiType)
+	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
+		s.handleChannelWatch(w, r, parts[1], apiType)
 	default:
 		http.NotFound(w, r)
 	}
@@ -585,6 +590,119 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	writeJSON(w, http.StatusOK, map[string]any{})
 }
 
+func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, apiType string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if apiType != "png" {
+		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		return
+	}
+	channel, ok := s.findChannel(id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	body, err := client.LogoImage(r.Context(), serviceID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", "image/png")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = io.Copy(w, body)
+	}
+}
+
+func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, apiType string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	channel, ok := s.findChannel(id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	switch apiType {
+	case "xspf":
+		ext := r.URL.Query().Get("ext")
+		if ext == "" {
+			ext = "m2ts"
+		}
+		prefix := r.URL.Query().Get("prefix")
+		target := prefix + "watch." + ext
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		w.Header().Set("Content-Type", "application/xspf+xml")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, channel.ID))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			fmt.Fprintf(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+			fmt.Fprintf(w, "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n")
+			fmt.Fprintf(w, "<trackList>\n")
+			fmt.Fprintf(w, "<track>\n<location>%s</location>\n<title>%s</title>\n</track>\n", xmlEscape(target), xmlEscape(channel.Name))
+			fmt.Fprintf(w, "</trackList>\n")
+			fmt.Fprintf(w, "</playlist>\n")
+		}
+	case "m2ts":
+		serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		body, err := client.ServiceStream(r.Context(), serviceID, true)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		defer body.Close()
+		w.Header().Set("Content-Type", "video/MP2T")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = io.Copy(w, body)
+		}
+	case "mp4":
+		http.Error(w, "501 Not Implemented", http.StatusNotImplemented)
+	default:
+		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+	}
+}
+
+func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
+	schedules, err := s.readSchedule()
+	if err != nil {
+		return chinachu.ChannelSchedule{}, false
+	}
+	for _, channel := range schedules {
+		if channel.ID == id {
+			return channel, true
+		}
+	}
+	return chinachu.ChannelSchedule{}, false
+}
+
 func (s *server) readSchedule() ([]chinachu.ChannelSchedule, error) {
 	var schedules []chinachu.ChannelSchedule
 	err := storage.ReadJSON(s.paths.Schedule, &schedules, "[]")
@@ -675,6 +793,11 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 		"mtime":   modTimeMS,
 		"ctime":   modTimeMS,
 	}
+}
+
+func xmlEscape(value string) string {
+	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
+	return replacer.Replace(value)
 }
 
 func findWebRoot(configured string) string {

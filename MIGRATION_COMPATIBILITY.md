@@ -183,7 +183,7 @@ Routes discovered from `api/resource-*.json`:
 - `/api/status.json` GET
 - `/api/storage.json` GET
 
-API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, recorded cleanup via PUT, and recorded/reserve/recording item reads. Watch, preview, transcode, channel stream/logo, scheduler force, compression, and exact status fields remain incomplete.
+API implementation status: partially compatible. The Go WUI currently implements JSON reads for status/config/rules/schedule/schedule programs/reserves/recording/recorded/program lookup, rules create/update/delete/enable/disable, program PUT manual reservation, reserve skip/unskip/delete with manual-only delete semantics, recording abort marking with auto-reserve skip, recorded item delete, recorded file stat/stream/delete, channel logo, channel watch XSPF, channel watch m2ts proxy, recorded cleanup via PUT, and recorded/reserve/recording item reads. Preview, mp4 transcode, recorded/recording watch routes, scheduler force, compression, and exact status fields remain incomplete.
 
 ## WUI / Static Assets
 
@@ -200,7 +200,7 @@ The JS Mirakurun client calls:
 - service/channel stream: used by WUI watch routes.
 - service logo: used by channel logo route.
 
-Current Go client status: partially compatible for HTTP and `http+unix` URL setup plus services/programs/tuners/program stream requests.
+Current Go client status: partially compatible for HTTP and `http+unix` URL setup plus services/programs/tuners, program stream, service stream, and service logo requests.
 
 ## Side Effects
 
