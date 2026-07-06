@@ -223,6 +223,56 @@ func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
 	}
 }
 
+func TestRunWithSourceLogsLegacyDuplicateReservation(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Same Title"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(time.Hour).UnixMilli()
+	src := fakeSource{
+		services: []mirakurun.Service{
+			{ID: 1, ServiceID: 101, NetworkID: 1, Name: "svc-low"},
+			{ID: 2, ServiceID: 102, NetworkID: 1, Name: "svc-high"},
+		},
+		programs: []mirakurun.Program{
+			{ID: 10, NetworkID: 1, ServiceID: 101, Name: "Same Title", StartAt: start, Duration: 3600000},
+			{ID: 11, NetworkID: 1, ServiceID: 102, Name: "Same Title", StartAt: start, Duration: 3600000},
+		},
+		tuners: []mirakurun.Tuner{{Types: []string{"GR"}}},
+	}
+	src.services[0].Channel.Type = "GR"
+	src.services[0].Channel.Channel = "27"
+	src.services[1].Channel.Type = "GR"
+	src.services[1].Channel.Channel = "27"
+
+	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Duplicates != 1 {
+		t.Fatalf("duplicates = %d", result.Duplicates)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "DUPLICATE: b ") || !strings.Contains(string(logData), "[svc-high] Same Title") {
+		t.Fatalf("scheduler log missing legacy duplicate line: %s", string(logData))
+	}
+}
+
 func TestRunWithSourceLogsManualReserveOverriddenByRule(t *testing.T) {
 	dir := t.TempDir()
 	paths := Paths{

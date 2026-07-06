@@ -41,6 +41,7 @@ type Result struct {
 	Skips           int
 	Reserves        int
 	OverridesByRule []chinachu.Program
+	DuplicateItems  []chinachu.Program
 }
 
 func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
@@ -154,6 +155,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
 	for _, reserve := range result.OverridesByRule {
 		if err := logging.AppendLine(paths.Log, "OVERRIDEBYRULE: %s %s [%s] %s", reserve.ID, legacyISODateTime(reserve.Start), reserve.Channel.Name, reserve.Title); err != nil {
+			return Result{}, err
+		}
+	}
+	for _, duplicate := range result.DuplicateItems {
+		if err := logging.AppendLine(paths.Log, "DUPLICATE: %s %s [%s] %s", duplicate.ID, legacyISODateTime(duplicate.Start), duplicate.Channel.Name, duplicate.Title); err != nil {
 			return Result{}, err
 		}
 	}
@@ -372,12 +378,12 @@ func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, o
 
 	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Start < matches[j].Start })
 
-	duplicates := markDuplicates(matches)
+	duplicates, duplicateItems := markDuplicates(matches)
 	conflicts := markConflicts(matches, tuners)
 	applyRecordedFormats(matches, rules)
 
 	reserves := []chinachu.Program{}
-	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts, OverridesByRule: overridesByRule}
+	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts, OverridesByRule: overridesByRule, DuplicateItems: duplicateItems}
 	for _, program := range matches {
 		if program.IsDuplicate {
 			continue
@@ -392,8 +398,9 @@ func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, o
 	return removeEnded(reserves, now), result
 }
 
-func markDuplicates(programs []chinachu.Program) int {
+func markDuplicates(programs []chinachu.Program) (int, []chinachu.Program) {
 	count := 0
+	duplicates := []chinachu.Program{}
 	for i := range programs {
 		a := &programs[i]
 		for j := range programs {
@@ -409,10 +416,11 @@ func markDuplicates(programs []chinachu.Program) int {
 			}
 			a.IsDuplicate = true
 			count++
+			duplicates = append(duplicates, *a)
 			break
 		}
 	}
-	return count
+	return count, duplicates
 }
 
 func markConflicts(programs []chinachu.Program, tuners []mirakurun.Tuner) int {
