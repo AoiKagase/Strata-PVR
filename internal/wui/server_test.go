@@ -566,7 +566,7 @@ func TestAPILogAndStream(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("stream status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.HasSuffix(res.Body.String(), "line\n") || len(res.Body.String()) <= len("line\n") {
+	if !strings.Contains(res.Body.String(), "line\n") || len(res.Body.String()) <= len("line\n") {
 		t.Fatalf("stream body missing padding or log: %q", res.Body.String())
 	}
 
@@ -843,6 +843,57 @@ func TestStaticServingUsesWebRoot(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || strings.TrimSpace(res.Body.String()) != "ok" {
 		t.Fatalf("static response status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAccessLogTrustsXForwardedForWhenEnabled(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	handler := NewHandler(paths, &config.Config{WUIXFF: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json?foo=bar", nil)
+	req.RemoteAddr = "[::ffff:10.0.0.1]:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7, 198.51.100.2")
+	req.Header.Set("User-Agent", "test-agent")
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logBytes)
+	if !strings.Contains(log, `200 GET:/api/status.json?foo=bar 203.0.113.7 "test-agent"`) {
+		t.Fatalf("access log did not use X-Forwarded-For: %q", log)
+	}
+}
+
+func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req.RemoteAddr = "[::ffff:10.0.0.1]:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logBytes)
+	if !strings.Contains(log, `200 GET:/api/status.json 10.0.0.1`) {
+		t.Fatalf("access log did not use RemoteAddr: %q", log)
 	}
 }
 

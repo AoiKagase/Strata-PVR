@@ -92,6 +92,7 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	if auth {
 		handler = server.withAuth(handler)
 	}
+	handler = server.withAccessLog(handler)
 	return server.withCommonHeaders(handler)
 }
 
@@ -197,6 +198,55 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (s *server) withAccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		if s.paths.LogDir == "" {
+			return
+		}
+		userAgent := r.Header.Get("User-Agent")
+		if userAgent == "" {
+			userAgent = "-"
+		}
+		_ = logging.AppendLine(
+			filepath.Join(s.logDir(), "wui"),
+			"%d %s:%s %s %q",
+			recorder.status,
+			r.Method,
+			r.URL.RequestURI(),
+			s.remoteAddress(r),
+			userAgent,
+		)
+	})
+}
+
+func (s *server) remoteAddress(r *http.Request) string {
+	remote := r.RemoteAddr
+	if s.cfg.WUIXFF {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			remote = strings.TrimSpace(strings.Split(forwarded, ",")[0])
+		}
+	}
+	if host, _, err := net.SplitHostPort(remote); err == nil {
+		remote = host
+	}
+	if strings.HasPrefix(remote, "::ffff:") {
+		remote = strings.TrimPrefix(remote, "::ffff:")
+	}
+	return remote
 }
 
 func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {

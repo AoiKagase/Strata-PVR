@@ -96,7 +96,7 @@ Fields from `config.sample.json` and JS references:
 | `wuiPort`, `wuiHost` | Deprecated authenticated listener. | partially compatible; starts a separate authenticated HTTP/HTTPS server when `wuiPort` is set. |
 | `wuiTlsKeyPath`, `wuiTlsCertPath`, `wuiTlsPassphrase`, `wuiTlsRequestCert`, `wuiTlsRejectUnauthorized`, `wuiTlsCaPath` | TLS listener settings. | not started |
 | `wuiOpenServer`, `wuiOpenHost`, `wuiOpenPort` | Unauthenticated LAN listener. | partially compatible; starts a separate HTTP server without Basic auth. Automatic private IPv4 selection and mDNS remain incomplete. |
-| `wuiXFF` | Trust first `X-Forwarded-For` IP. | not started |
+| `wuiXFF` | Trust first `X-Forwarded-For` IP. | partially compatible; access logging uses the first forwarded address and normalizes IPv4-mapped IPv6. GeoIP country filtering is still not implemented. |
 | `wuiMdnsAdvertisement` | mDNS advertisement. | not started |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |
 | `recordedFormat` | Filename template. | partially compatible |
