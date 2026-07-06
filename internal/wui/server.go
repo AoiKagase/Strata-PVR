@@ -925,7 +925,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 			}
 			return
 		}
-		writeJSON(w, http.StatusOK, result)
+		writePrettyJSON(w, http.StatusOK, result)
 	}
 }
 

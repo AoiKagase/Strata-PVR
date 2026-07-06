@@ -1484,6 +1484,9 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("scheduler json status=%d body=%q", res.Code, res.Body.String())
 	}
+	if !strings.Contains(res.Body.String(), "\n  ") {
+		t.Fatalf("scheduler json should use legacy pretty JSON, got %q", res.Body.String())
+	}
 	var result struct {
 		Time      int64              `json:"time"`
 		Conflicts []chinachu.Program `json:"conflicts"`
