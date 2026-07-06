@@ -52,6 +52,98 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "abc" {
 		t.Fatalf("unexpected reserves: %#v", got)
 	}
+	if strings.Contains(res.Body.String(), "\n") {
+		t.Fatalf("legacy reserves list should be compact JSON, got %q", res.Body.String())
+	}
+}
+
+func TestAPIProgramReadsUseLegacyPrettyJSON(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	program := chinachu.Program{
+		ID:      "abc",
+		Title:   "番組",
+		Start:   now.Add(-time.Minute).UnixMilli(),
+		End:     now.Add(time.Minute).UnixMilli(),
+		Channel: chinachu.Channel{ID: "gr101", Name: "GR 101"},
+	}
+	schedule := []chinachu.ChannelSchedule{{
+		Channel:  chinachu.Channel{ID: "gr101", Name: "GR 101"},
+		Programs: []chinachu.Program{program},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, path := range []string{
+		"/api/program/abc.json",
+		"/api/reserves/abc.json",
+		"/api/recording/abc.json",
+		"/api/recorded/abc.json",
+		"/api/schedule/programs.json",
+		"/api/schedule/broadcasting.json",
+		"/api/schedule/gr101.json",
+		"/api/schedule/gr101/programs.json",
+		"/api/schedule/gr101/broadcasting.json",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d body=%s", path, res.Code, res.Body.String())
+		}
+		body := res.Body.String()
+		if !strings.Contains(body, "\n  ") {
+			t.Fatalf("%s should use legacy pretty JSON, got %q", path, body)
+		}
+		var decoded any
+		if err := json.Unmarshal(res.Body.Bytes(), &decoded); err != nil {
+			t.Fatalf("%s invalid JSON: %v", path, err)
+		}
+	}
+}
+
+func TestAPIListReadsUseLegacyCompactJSON(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	program := chinachu.Program{ID: "abc", Title: "番組", Start: 1, End: 2}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, path := range []string{"/api/reserves.json", "/api/recording.json", "/api/recorded.json"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d body=%s", path, res.Code, res.Body.String())
+		}
+		if strings.Contains(res.Body.String(), "\n") {
+			t.Fatalf("%s should use compact JSON, got %q", path, res.Body.String())
+		}
+		var decoded []chinachu.Program
+		if err := json.Unmarshal(res.Body.Bytes(), &decoded); err != nil {
+			t.Fatalf("%s invalid JSON: %v", path, err)
+		}
+	}
 }
 
 func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {

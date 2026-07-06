@@ -504,7 +504,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, apiType, "json") {
 			return
 		}
-		writeJSON(w, http.StatusOK, s.status())
+		writePrettyJSON(w, http.StatusOK, s.status())
 	case len(parts) == 1 && parts[0] == "scheduler":
 		if !requireAPIType(w, apiType, "json", "txt") {
 			return
@@ -645,7 +645,7 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, v)
+	writeCompactJSON(w, http.StatusOK, v)
 }
 
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
@@ -774,7 +774,7 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 	for _, channel := range schedules {
 		programs = append(programs, channel.Programs...)
 	}
-	writeJSON(w, http.StatusOK, programs)
+	writePrettyJSON(w, http.StatusOK, programs)
 }
 
 func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Request) {
@@ -788,7 +788,7 @@ func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, broadcastingPrograms(schedules, time.Now()))
+	writePrettyJSON(w, http.StatusOK, broadcastingPrograms(schedules, time.Now()))
 }
 
 func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, id string) {
@@ -806,7 +806,7 @@ func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, i
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, http.StatusOK, channel)
+	writePrettyJSON(w, http.StatusOK, channel)
 }
 
 func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Request, id string) {
@@ -824,7 +824,7 @@ func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Re
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, http.StatusOK, channel.Programs)
+	writePrettyJSON(w, http.StatusOK, channel.Programs)
 }
 
 func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *http.Request, id string) {
@@ -842,7 +842,7 @@ func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *htt
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, http.StatusOK, broadcastingPrograms([]chinachu.ChannelSchedule{*channel}, time.Now()))
+	writePrettyJSON(w, http.StatusOK, broadcastingPrograms([]chinachu.ChannelSchedule{*channel}, time.Now()))
 }
 
 func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
@@ -875,7 +875,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writePrettyJSON(w, http.StatusOK, map[string]any{
 		"recorded": recordedSize,
 		"size":     usage.Size,
 		"used":     usage.Used,
@@ -1246,7 +1246,11 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, recorded)
+	if r.Method == http.MethodPut {
+		writePrettyJSON(w, http.StatusOK, recorded)
+		return
+	}
+	writeCompactJSON(w, http.StatusOK, recorded)
 }
 
 func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -1267,7 +1271,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writeJSON(w, http.StatusOK, reserves[index])
+		writePrettyJSON(w, http.StatusOK, reserves[index])
 	case http.MethodDelete:
 		if !reserves[index].IsManualReserved {
 			http.Error(w, "409 Conflict", http.StatusConflict)
@@ -1313,7 +1317,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writeJSON(w, http.StatusOK, recording[index])
+		writePrettyJSON(w, http.StatusOK, recording[index])
 	case http.MethodDelete:
 		if !recording[index].IsManualReserved {
 			var reserves []chinachu.Program
@@ -1355,7 +1359,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writeJSON(w, http.StatusOK, withRemovedFlag(recorded[index]))
+		writePrettyJSON(w, http.StatusOK, withRemovedFlag(recorded[index]))
 	case http.MethodDelete:
 		if recorded[index].Recorded != "" {
 			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
@@ -1719,7 +1723,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 			s.reserveProgram(w, r, *program)
 			return
 		}
-		writeJSON(w, http.StatusOK, program)
+		writePrettyJSON(w, http.StatusOK, program)
 		return
 	}
 	if r.Method == http.MethodPut {
@@ -1733,7 +1737,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 			return
 		}
 		if i := findProgram(programs, id); i != -1 {
-			writeJSON(w, http.StatusOK, programs[i])
+			writePrettyJSON(w, http.StatusOK, programs[i])
 			return
 		}
 	}
