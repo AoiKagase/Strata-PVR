@@ -11,6 +11,8 @@ type Config struct {
 	MirakurunPath              string                     `json:"mirakurunPath"`
 	SchedulerMirakurunPath     string                     `json:"schedulerMirakurunPath"`
 	RecordedDir                string                     `json:"recordedDir"`
+	VAAPIEnabled               bool                       `json:"vaapiEnabled"`
+	VAAPIDevice                string                     `json:"vaapiDevice"`
 	ExcludeServices            []int64                    `json:"excludeServices"`
 	ServiceOrder               []int64                    `json:"serviceOrder"`
 	WUIUsers                   []string                   `json:"wuiUsers"`
