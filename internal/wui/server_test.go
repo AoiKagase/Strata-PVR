@@ -379,6 +379,39 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	}
 }
 
+func TestAPIProgramPreviewDisabled(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "recording"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, target := range []string{
+		"/api/recorded/recorded/preview.png",
+		"/api/recorded/recorded/preview.jpg",
+		"/api/recorded/recorded/preview.txt",
+		"/api/recording/recording/preview.png",
+	} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusForbidden {
+			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview.png", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("missing preview status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

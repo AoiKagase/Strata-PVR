@@ -258,6 +258,8 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleReserveProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recording":
 		s.handleJSONFile(w, r, s.paths.Recording, "[]")
+	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "preview":
+		s.handleProgramPreview(w, r, s.paths.Recording, parts[1])
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
@@ -266,6 +268,8 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleRecorded(w, r)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
 		s.handleRecordedFile(w, r, parts[1], apiType)
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "preview":
+		s.handleProgramPreview(w, r, s.paths.Recorded, parts[1])
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
@@ -1005,6 +1009,29 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	default:
 		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
 	}
+}
+
+func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, path, id string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	apiType := apiExtension(r.URL.Path)
+	if apiType != "png" && apiType != "jpg" && apiType != "txt" {
+		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		return
+	}
+	var programs []chinachu.Program
+	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if findProgram(programs, id) == -1 {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, "403 Forbidden", http.StatusForbidden)
 }
 
 func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string) {
