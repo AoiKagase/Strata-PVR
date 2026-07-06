@@ -182,12 +182,16 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleReserveProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recording":
 		s.handleJSONFile(w, r, s.paths.Recording, "[]")
+	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
+		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
 		s.handleRecordingProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recorded":
 		s.handleRecorded(w, r)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
 		s.handleRecordedFile(w, r, parts[1], apiType)
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
+		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
 		s.handleRecordedProgram(w, r, parts[1:])
 	case len(parts) == 2 && parts[0] == "program":
@@ -743,6 +747,74 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	}
 }
 
+func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path, id, apiType string, requirePID bool) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var programs []chinachu.Program
+	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	index := findProgram(programs, id)
+	if index == -1 {
+		http.NotFound(w, r)
+		return
+	}
+	program := programs[index]
+	if requirePID && !programHasPID(program) {
+		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if program.Recorded == "" {
+		http.Error(w, "410 Gone", http.StatusGone)
+		return
+	}
+	filePath := filepath.FromSlash(program.Recorded)
+	info, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "410 Gone", http.StatusGone)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch apiType {
+	case "xspf":
+		ext := r.URL.Query().Get("ext")
+		if ext == "" {
+			ext = "m2ts"
+		}
+		prefix := r.URL.Query().Get("prefix")
+		target := prefix + "watch." + ext
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		w.Header().Set("Content-Type", "application/xspf+xml")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, id))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			writeXSPF(w, target, program.Title)
+		}
+	case "m2ts":
+		file, err := os.Open(filePath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+		w.Header().Set("Content-Type", "video/MP2T")
+		http.ServeContent(w, r, filepath.Base(filePath), info.ModTime(), file)
+	case "mp4":
+		http.Error(w, "501 Not Implemented", http.StatusNotImplemented)
+	default:
+		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+	}
+}
+
 func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
@@ -864,12 +936,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, channel.ID))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			fmt.Fprintf(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-			fmt.Fprintf(w, "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n")
-			fmt.Fprintf(w, "<trackList>\n")
-			fmt.Fprintf(w, "<track>\n<location>%s</location>\n<title>%s</title>\n</track>\n", xmlEscape(target), xmlEscape(channel.Name))
-			fmt.Fprintf(w, "</trackList>\n")
-			fmt.Fprintf(w, "</playlist>\n")
+			writeXSPF(w, target, channel.Name)
 		}
 	case "m2ts":
 		serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
@@ -1048,6 +1115,19 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 		"mtime":   modTimeMS,
 		"ctime":   modTimeMS,
 	}
+}
+
+func programHasPID(program chinachu.Program) bool {
+	return program.PID > 0
+}
+
+func writeXSPF(w io.Writer, target, title string) {
+	fmt.Fprintf(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	fmt.Fprintf(w, "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n")
+	fmt.Fprintf(w, "<trackList>\n")
+	fmt.Fprintf(w, "<track>\n<location>%s</location>\n<title>%s</title>\n</track>\n", xmlEscape(target), xmlEscape(title))
+	fmt.Fprintf(w, "</trackList>\n")
+	fmt.Fprintf(w, "</playlist>\n")
 }
 
 func parseSchedulerLogProgram(line string) (string, string, bool) {

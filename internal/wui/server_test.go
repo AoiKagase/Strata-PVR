@@ -263,6 +263,65 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("watchdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: "Title & One", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf?prefix=/api/recorded/abc/&ext=m2ts", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "Title &amp; One") || !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/recorded/abc/") {
+		t.Fatalf("unexpected xspf: %q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "watchdata" {
+		t.Fatalf("m2ts status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordingWatchRequiresPID(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recording.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("live"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.m2ts", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing pid status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.m2ts", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "live" {
+		t.Fatalf("recording watch status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

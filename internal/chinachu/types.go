@@ -35,6 +35,7 @@ type Program struct {
 	Recorded         string                     `json:"recorded,omitempty"`
 	Abort            bool                       `json:"abort,omitempty"`
 	OneSeg           bool                       `json:"1seg,omitempty"`
+	PID              int                        `json:"pid,omitempty"`
 	Raw              map[string]json.RawMessage `json:"-"`
 }
 
