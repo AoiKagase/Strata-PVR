@@ -50,6 +50,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "Chinachu-Go updater: automatic git/service/installer operations are intentionally not performed.")
 		fmt.Fprintln(stdout, "Update the repository and rebuild chinachu-go; Node.js/npm modules are not required.")
 		return nil
+	case "test":
+		return testCommand(args[1:], stdout)
 	case "compat":
 		return compat(args[1:], stdout)
 	case "service":
@@ -86,12 +88,21 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--disable"), stdout)
 	case "rmrule":
 		return ruleCommand(p, ruleAliasArgs(args[1:], "--remove"), stdout)
-	case "ircbot", "test":
+	case "ircbot":
 		return fmt.Errorf("%s: compatibility implementation not completed", args[0])
 	default:
 		printHelp(stdout)
 		return nil
 	}
+}
+
+func testCommand(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("Usage: test <app> [options]")
+	}
+	fmt.Fprintf(stdout, "Chinachu-Go test: usr/bin/%s is not executed by the Go runtime.\n", args[0])
+	fmt.Fprintln(stdout, "Install and run external tools explicitly; Node.js/npm modules are not required.")
+	return nil
 }
 
 type searchOptions struct {

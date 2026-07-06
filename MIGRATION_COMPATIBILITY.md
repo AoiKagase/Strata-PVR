@@ -41,7 +41,7 @@ Top-level commands accepted by `./chinachu`:
 | `cleanup` | partially compatible | Removes missing recorded entries; prompt not yet matched. |
 | `compat check`, `compat doctor` | implemented | New Go-only safety checks; does not alter legacy command behavior. |
 | `ircbot` | not started | Experimental IRC bot. |
-| `test <app> [options]` | intentionally changed | Node-era `usr/bin` app runner is not a runtime requirement. |
+| `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |
 | default/help | implemented | Help command shape is present. |
 
 Options accepted by `app-cli.js`:

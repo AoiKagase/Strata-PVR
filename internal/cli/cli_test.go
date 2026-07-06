@@ -30,6 +30,17 @@ func TestUpdaterAcceptedWithoutNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestTestCommandAcceptedWithoutUsrBinExecution(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"test", "ffmpeg", "-version"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "usr/bin/ffmpeg is not executed") || !strings.Contains(text, "Node.js/npm modules are not required") {
+		t.Fatalf("unexpected test command output: %s", text)
+	}
+}
+
 func TestReserve(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
