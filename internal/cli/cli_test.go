@@ -63,6 +63,63 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	}
 }
 
+func TestPrepareServiceRuntimeCopiesSamplesAndCreatesDirs(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("config.sample.json", []byte(`{"sample":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("rules.sample.json", []byte(`[{"sample":true}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareServiceRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"config.json", "rules.json", "log", "data"} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s was not prepared: %v", path, err)
+		}
+	}
+	if data, _ := os.ReadFile("config.json"); string(data) != `{"sample":true}` {
+		t.Fatalf("config.json = %q", data)
+	}
+	if data, _ := os.ReadFile("rules.json"); string(data) != `[{"sample":true}]` {
+		t.Fatalf("rules.json = %q", data)
+	}
+}
+
+func TestPrepareServiceRuntimeDoesNotOverwriteExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"config.sample.json": `{"sample":true}`,
+		"rules.sample.json":  `[{"sample":true}]`,
+		"config.json":        `{"existing":true}`,
+		"rules.json":         `[{"existing":true}]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := prepareServiceRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile("config.json"); string(data) != `{"existing":true}` {
+		t.Fatalf("config.json was overwritten: %q", data)
+	}
+	if data, _ := os.ReadFile("rules.json"); string(data) != `[{"existing":true}]` {
+		t.Fatalf("rules.json was overwritten: %q", data)
+	}
+}
+
 func TestTestCommandAcceptedWithoutUsrBinExecution(t *testing.T) {
 	var out bytes.Buffer
 	if err := Run(context.Background(), []string{"test", "ffmpeg", "-version"}, &out, &bytes.Buffer{}); err != nil {

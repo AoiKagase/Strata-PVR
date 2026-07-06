@@ -908,6 +908,9 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		fmt.Fprint(stdout, serviceInitScript(name))
 		return nil
 	case "execute":
+		if err := prepareServiceRuntime(); err != nil {
+			return err
+		}
 		switch name {
 		case "operator":
 			return operator.Run(ctx, operator.Paths{
@@ -937,6 +940,32 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 	default:
 		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
 	}
+}
+
+func prepareServiceRuntime() error {
+	if err := copyIfMissing("config.sample.json", "config.json"); err != nil {
+		return err
+	}
+	if err := copyIfMissing("rules.sample.json", "rules.json"); err != nil {
+		return err
+	}
+	if err := os.MkdirAll("log", 0o755); err != nil {
+		return err
+	}
+	return os.MkdirAll("data", 0o755)
+}
+
+func copyIfMissing(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func serviceInitScript(name string) string {
