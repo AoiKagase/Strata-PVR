@@ -3,14 +3,71 @@ package chinachu
 import "encoding/json"
 
 type Channel struct {
-	Type        string `json:"type,omitempty"`
-	Channel     string `json:"channel,omitempty"`
-	Name        string `json:"name,omitempty"`
-	ID          string `json:"id,omitempty"`
-	SID         int64  `json:"sid,omitempty"`
-	NID         int64  `json:"nid,omitempty"`
-	N           int    `json:"n,omitempty"`
-	HasLogoData bool   `json:"hasLogoData,omitempty"`
+	Type        string                     `json:"type,omitempty"`
+	Channel     string                     `json:"channel,omitempty"`
+	Name        string                     `json:"name,omitempty"`
+	ID          string                     `json:"id,omitempty"`
+	SID         int64                      `json:"sid,omitempty"`
+	NID         int64                      `json:"nid,omitempty"`
+	N           int                        `json:"n,omitempty"`
+	HasLogoData bool                       `json:"hasLogoData,omitempty"`
+	Raw         map[string]json.RawMessage `json:"-"`
+}
+
+func (c *Channel) UnmarshalJSON(data []byte) error {
+	type channelAlias Channel
+	var alias channelAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for _, key := range channelJSONKeys() {
+		delete(raw, key)
+	}
+	*c = Channel(alias)
+	c.Raw = raw
+	return nil
+}
+
+func (c Channel) MarshalJSON() ([]byte, error) {
+	type channelAlias Channel
+	knownBytes, err := json.Marshal(channelAlias(c))
+	if err != nil {
+		return nil, err
+	}
+	var known map[string]json.RawMessage
+	if err := json.Unmarshal(knownBytes, &known); err != nil {
+		return nil, err
+	}
+	out := make(map[string]json.RawMessage, len(c.Raw)+len(known))
+	for key, value := range c.Raw {
+		if value != nil {
+			out[key] = value
+		}
+	}
+	for _, key := range channelJSONKeys() {
+		delete(out, key)
+	}
+	for key, value := range known {
+		out[key] = value
+	}
+	return json.Marshal(out)
+}
+
+func channelJSONKeys() []string {
+	return []string{
+		"type",
+		"channel",
+		"name",
+		"id",
+		"sid",
+		"nid",
+		"n",
+		"hasLogoData",
+	}
 }
 
 type Program struct {
@@ -112,6 +169,49 @@ func programJSONKeys() []string {
 type ChannelSchedule struct {
 	Channel
 	Programs []Program `json:"programs"`
+}
+
+func (s *ChannelSchedule) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	channelData := make(map[string]json.RawMessage, len(raw))
+	for key, value := range raw {
+		if key != "programs" {
+			channelData[key] = value
+		}
+	}
+	channelBytes, err := json.Marshal(channelData)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(channelBytes, &s.Channel); err != nil {
+		return err
+	}
+	if value, ok := raw["programs"]; ok {
+		if err := json.Unmarshal(value, &s.Programs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s ChannelSchedule) MarshalJSON() ([]byte, error) {
+	channelBytes, err := json.Marshal(s.Channel)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(channelBytes, &out); err != nil {
+		return nil, err
+	}
+	programsBytes, err := json.Marshal(s.Programs)
+	if err != nil {
+		return nil, err
+	}
+	out["programs"] = programsBytes
+	return json.Marshal(out)
 }
 
 type RangeRule struct {

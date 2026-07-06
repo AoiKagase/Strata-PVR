@@ -89,3 +89,60 @@ func TestProgramJSONPreservesUnknownFields(t *testing.T) {
 		t.Fatalf("known zero field leaked from raw: %s", encoded)
 	}
 }
+
+func TestChannelJSONPreservesUnknownFields(t *testing.T) {
+	var program Program
+	if err := json.Unmarshal([]byte(`{"id":"abc","start":1,"end":2,"channel":{"id":"old","hasLogoData":true,"remoteControlKeyId":7}}`), &program); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := program.Channel.Raw["remoteControlKeyId"]; !ok {
+		t.Fatalf("channel unknown field was not preserved: %#v", program.Channel.Raw)
+	}
+	program.Channel.ID = "new"
+	program.Channel.HasLogoData = false
+	encoded, err := json.Marshal(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatal(err)
+	}
+	var channel map[string]json.RawMessage
+	if err := json.Unmarshal(raw["channel"], &channel); err != nil {
+		t.Fatal(err)
+	}
+	if string(channel["remoteControlKeyId"]) != `7` {
+		t.Fatalf("channel unknown field changed: %s", channel["remoteControlKeyId"])
+	}
+	if string(channel["id"]) != `"new"` {
+		t.Fatalf("channel known field was not updated: %s", channel["id"])
+	}
+	if _, ok := channel["hasLogoData"]; ok {
+		t.Fatalf("channel known zero field leaked from raw: %s", encoded)
+	}
+}
+
+func TestChannelScheduleJSONKeepsFlattenedChannelAndPrograms(t *testing.T) {
+	var schedule ChannelSchedule
+	if err := json.Unmarshal([]byte(`{"id":"gr101","name":"GR 101","networkType":"GR","programs":[{"id":"p1","start":1,"end":2,"channel":{"id":"gr101"}}]}`), &schedule); err != nil {
+		t.Fatal(err)
+	}
+	if schedule.ID != "gr101" || len(schedule.Programs) != 1 {
+		t.Fatalf("unexpected schedule: %#v", schedule)
+	}
+	encoded, err := json.Marshal(schedule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw["networkType"]) != `"GR"` {
+		t.Fatalf("channel schedule unknown field changed: %s", raw["networkType"])
+	}
+	if _, ok := raw["programs"]; !ok {
+		t.Fatalf("programs missing from channel schedule: %s", encoded)
+	}
+}
