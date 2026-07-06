@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"chinachu-go/internal/chinachu"
+	"chinachu-go/internal/operator"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
 )
@@ -46,7 +47,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "compat":
 		return compat(args[1:], stdout)
 	case "service":
-		return service(args[1:], stdout)
+		return service(ctx, p, args[1:], stdout)
 	case "reserve":
 		return reserve(p, args[1:], stdout)
 	case "unreserve":
@@ -459,7 +460,7 @@ func dumpJSONFile(path, empty string, stdout io.Writer) error {
 	return enc.Encode(v)
 }
 
-func service(args []string, stdout io.Writer) error {
+func service(ctx context.Context, p paths, args []string, stdout io.Writer) error {
 	if len(args) != 2 {
 		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
 	}
@@ -472,7 +473,19 @@ func service(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "#!/bin/bash\nDAEMON=./chinachu-go\nDAEMON_OPTS=\"service %s execute\"\nNAME=chinachu-%s\nPIDFILE=/var/run/${NAME}.pid\ncase \"$1\" in\n  start ) $DAEMON $DAEMON_OPTS & echo $! > $PIDFILE ;;\n  stop ) kill -QUIT $(cat $PIDFILE); rm -f $PIDFILE ;;\n  status ) test -f $PIDFILE && echo \"${NAME} is running.\" || echo \"${NAME} is NOT running.\" ;;\n  * ) echo \"Usage: $NAME {start|stop|restart|status}\" >&2; exit 1 ;;\nesac\n", name, name)
 		return nil
 	case "execute":
-		return fmt.Errorf("service %s execute: not implemented", name)
+		switch name {
+		case "operator":
+			return operator.Run(ctx, operator.Paths{
+				Config:    p.config,
+				Reserves:  p.reserves,
+				Recording: p.recording,
+				Recorded:  p.recorded,
+			}, 0)
+		case "wui":
+			return fmt.Errorf("service wui execute: not implemented")
+		default:
+			return fmt.Errorf("Usage: ./chinachu service <name> <action>")
+		}
 	default:
 		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
 	}

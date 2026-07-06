@@ -19,6 +19,9 @@ Phase 1/2 scaffolding is present:
 - A Mirakurun client supports HTTP and `http+unix` setup.
 - `chinachu-go update` performs the first scheduler pass against Mirakurun and
   writes legacy JSON state.
+- `chinachu-go service operator execute` runs the first Go operator loop, starts
+  due reservations, records Mirakurun program streams, and updates legacy JSON
+  state.
 - CLI command names are accepted, with reservation state and rule operations
   partially implemented.
 

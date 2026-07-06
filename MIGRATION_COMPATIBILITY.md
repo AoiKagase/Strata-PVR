@@ -22,7 +22,7 @@ Top-level commands accepted by `./chinachu`:
 | --- | --- | --- |
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
 | `updater` | not started | Existing command uses git, prompts, and optional installer. |
-| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape; execute is stubbed. |
+| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation implemented for Go binary shape. `operator execute` runs the Go operator loop; `wui execute` is still stubbed. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic. Logging/hooks/PID are incomplete. |
 | `search` | partially compatible | Basic filtering/listing scaffold only. |
 | `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves; exact table/output still incomplete. |
@@ -212,6 +212,9 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Operator creates `recordedDir` and nested recorded directories.
 - Operator writes `data/recording.json`, `data/recorded.json`, and may remove manual reserves.
 - Operator writes recorded files directly to final path with append mode.
+- Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, records the Mirakurun decoded program stream, appends `data/recorded.json`, and removes the completed reserve.
+- Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
+- Go operator does not yet poll `abort:true` during an active stream, run `recordedCommand`, apply low-storage actions, or mirror every signal/log side effect.
 - Cleanup removes missing file entries from `data/recorded.json`.
 - WUI/API may rewrite config, rules, reserves, recording, recorded.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm.
@@ -229,7 +232,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Recorded filename format | partially compatible |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | not started |
+| Operator/recorder | partially compatible |
 | WUI/API | not started |
 | Installer/updater | partially compatible |
 | Logging | not started |
