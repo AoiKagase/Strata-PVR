@@ -221,6 +221,19 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	if got := res.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("index Cache-Control = %q", got)
 	}
+	if got := res.Header().Get("Server"); got != "Chinachu (Node)" {
+		t.Fatalf("Server = %q", got)
+	}
+	for key, want := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "SAMEORIGIN",
+		"X-UA-Compatible":        "IE=Edge,chrome=1",
+		"X-XSS-Protection":       "1; mode=block",
+	} {
+		if got := res.Header().Get(key); got != want {
+			t.Fatalf("%s = %q", key, got)
+		}
+	}
 	lastModified := res.Header().Get("Last-Modified")
 	if lastModified == "" {
 		t.Fatal("index Last-Modified missing")

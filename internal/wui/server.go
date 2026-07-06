@@ -334,7 +334,7 @@ func listenAddress(host string, port int) string {
 
 func (s *server) withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Server", "Chinachu (Go)")
+		w.Header().Set("Server", "Chinachu (Node)")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
