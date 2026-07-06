@@ -137,9 +137,9 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `config.json` | JSON object, unknown fields allowed. | API config PUT writes the supplied `json` query value after validation. | partially compatible |
 | `rules.json` | Array of rule objects. Pretty printed by rule/API writes. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
-| `data/reserves.json` | Array of program objects. | scheduler/CLI/API/operator | partially compatible |
-| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. | operator/CLI/API | partially compatible |
-| `data/recorded.json` | Array of recorded program objects with `recorded` path. | operator/cleanup/API | partially compatible |
+| `data/reserves.json` | Array of program objects. Program unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`. | scheduler/CLI/API/operator | partially compatible |
+| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. Program unknown fields are preserved across Go read/write cycles where practical. | operator/CLI/API | partially compatible |
+| `data/recorded.json` | Array of recorded program objects with `recorded` path. Program unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `RESERVE:`, `CONFLICT:`, `SKIP:`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |

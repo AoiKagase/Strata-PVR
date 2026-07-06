@@ -39,6 +39,76 @@ type Program struct {
 	Raw              map[string]json.RawMessage `json:"-"`
 }
 
+func (p *Program) UnmarshalJSON(data []byte) error {
+	type programAlias Program
+	var alias programAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for _, key := range programJSONKeys() {
+		delete(raw, key)
+	}
+	*p = Program(alias)
+	p.Raw = raw
+	return nil
+}
+
+func (p Program) MarshalJSON() ([]byte, error) {
+	type programAlias Program
+	knownBytes, err := json.Marshal(programAlias(p))
+	if err != nil {
+		return nil, err
+	}
+	var known map[string]json.RawMessage
+	if err := json.Unmarshal(knownBytes, &known); err != nil {
+		return nil, err
+	}
+	out := make(map[string]json.RawMessage, len(p.Raw)+len(known))
+	for key, value := range p.Raw {
+		if value != nil {
+			out[key] = value
+		}
+	}
+	for _, key := range programJSONKeys() {
+		delete(out, key)
+	}
+	for key, value := range known {
+		out[key] = value
+	}
+	return json.Marshal(out)
+}
+
+func programJSONKeys() []string {
+	return []string{
+		"id",
+		"category",
+		"title",
+		"fullTitle",
+		"subTitle",
+		"detail",
+		"description",
+		"extra",
+		"start",
+		"end",
+		"seconds",
+		"flags",
+		"channel",
+		"isManualReserved",
+		"isSkip",
+		"isConflict",
+		"isDuplicate",
+		"recordedFormat",
+		"recorded",
+		"abort",
+		"1seg",
+		"pid",
+	}
+}
+
 type ChannelSchedule struct {
 	Channel
 	Programs []Program `json:"programs"`

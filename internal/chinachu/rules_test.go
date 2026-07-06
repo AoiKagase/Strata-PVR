@@ -64,3 +64,28 @@ func TestProgramMatchesRuleChannelForms(t *testing.T) {
 		}
 	}
 }
+
+func TestProgramJSONPreservesUnknownFields(t *testing.T) {
+	var program Program
+	if err := json.Unmarshal([]byte(`{"id":"abc","start":1,"end":2,"channel":{},"isSkip":true,"x-unknown":{"nested":true}}`), &program); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := program.Raw["x-unknown"]; !ok {
+		t.Fatalf("unknown field was not preserved: %#v", program.Raw)
+	}
+	program.IsSkip = false
+	encoded, err := json.Marshal(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw["x-unknown"]) != `{"nested":true}` {
+		t.Fatalf("unknown field changed: %s", raw["x-unknown"])
+	}
+	if _, ok := raw["isSkip"]; ok {
+		t.Fatalf("known zero field leaked from raw: %s", encoded)
+	}
+}
