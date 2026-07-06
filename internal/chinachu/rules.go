@@ -39,7 +39,7 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 			return false
 		}
 	}
-	if rule.Duration != nil {
+	if rule.Duration != nil && rule.Duration.HasMin && rule.Duration.HasMax {
 		if rule.Duration.Min > program.Seconds || rule.Duration.Max < program.Seconds {
 			return false
 		}

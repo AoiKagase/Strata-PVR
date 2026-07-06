@@ -586,9 +586,10 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Duration == nil {
-				rule.Duration = &chinachu.DurationRule{Max: 99999999}
+				rule.Duration = &chinachu.DurationRule{Max: 99999999, HasMax: true}
 			}
 			rule.Duration.Min = minimum
+			rule.Duration.HasMin = true
 		case "-maxi", "--maximum":
 			v, err := value()
 			if err != nil {
@@ -599,9 +600,10 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Duration == nil {
-				rule.Duration = &chinachu.DurationRule{}
+				rule.Duration = &chinachu.DurationRule{HasMin: true}
 			}
 			rule.Duration.Max = maximum
+			rule.Duration.HasMax = true
 		case "-title", "--titles":
 			v, err := value()
 			if err != nil {

@@ -50,8 +50,38 @@ type RangeRule struct {
 }
 
 type DurationRule struct {
-	Min int64 `json:"min"`
-	Max int64 `json:"max"`
+	Min    int64 `json:"min"`
+	Max    int64 `json:"max"`
+	HasMin bool  `json:"-"`
+	HasMax bool  `json:"-"`
+}
+
+func (r *DurationRule) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if value, ok := raw["min"]; ok {
+		if err := json.Unmarshal(value, &r.Min); err != nil {
+			return err
+		}
+		r.HasMin = true
+	}
+	if value, ok := raw["max"]; ok {
+		if err := json.Unmarshal(value, &r.Max); err != nil {
+			return err
+		}
+		r.HasMax = true
+	}
+	return nil
+}
+
+func (r DurationRule) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Min int64 `json:"min"`
+		Max int64 `json:"max"`
+	}
+	return json.Marshal(wire{Min: r.Min, Max: r.Max})
 }
 
 type Rule struct {
