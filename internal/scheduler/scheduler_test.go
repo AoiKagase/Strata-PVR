@@ -108,7 +108,7 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(logData), "RUNNING SCHEDULER.") || !strings.Contains(string(logData), "RESERVE:") {
+	if !strings.Contains(string(logData), "RUNNING SCHEDULER.") || !strings.Contains(string(logData), "RESERVE:") || !strings.Contains(string(logData), "MATCHES: 1") || !strings.Contains(string(logData), "RESERVES: 1") {
 		t.Fatalf("scheduler log missing expected lines: %s", string(logData))
 	}
 }

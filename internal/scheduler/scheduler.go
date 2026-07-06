@@ -140,11 +140,18 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			if err := runHook(ctx, paths.Log, cfg.ConflictCommand, args); err != nil {
 				return Result{}, err
 			}
+		case reserve.IsSkip:
+			if err := logging.AppendLine(paths.Log, "SKIP: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
+				return Result{}, err
+			}
 		case !reserve.IsSkip:
 			if err := logging.AppendLine(paths.Log, "RESERVE: %s %s [%s] %s", reserve.ID, time.UnixMilli(reserve.Start).Format(time.RFC3339), reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
 		}
+	}
+	if err := appendResultLogs(paths.Log, result); err != nil {
+		return Result{}, err
 	}
 	if !simulation {
 		if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
@@ -165,6 +172,25 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		}
 	}
 	return result, nil
+}
+
+func appendResultLogs(logPath string, result Result) error {
+	lines := []struct {
+		name  string
+		value int
+	}{
+		{"MATCHES", result.Matches},
+		{"DUPLICATES", result.Duplicates},
+		{"CONFLICTS", result.Conflicts},
+		{"SKIPS", result.Skips},
+		{"RESERVES", result.Reserves},
+	}
+	for _, line := range lines {
+		if err := logging.AppendLine(logPath, "%s: %d", line.name, line.value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func schedulerHookArgs(paths Paths) []string {
