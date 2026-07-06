@@ -88,6 +88,43 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	}
 }
 
+func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	webRoot := filepath.Join(dir, "web")
+	if err := os.MkdirAll(webRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"app.js":        "text/javascript",
+		"style.css":     "text/css",
+		"cursor.cur":    "image/vnd.microsoft.icon",
+		"stream.m2ts":   "video/MP2T",
+		"playlist.xspf": "application/xspf+xml",
+		"data.json":     "application/json; charset=utf-8",
+	}
+	for name := range files {
+		if err := os.WriteFile(filepath.Join(webRoot, name), []byte("body"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	paths := testPaths(dir)
+	paths.WebRoot = webRoot
+	handler := NewHandler(paths, &config.Config{})
+
+	for name, want := range files {
+		req := httptest.NewRequest(http.MethodGet, "/"+name, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d body=%s", name, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Content-Type"); got != want {
+			t.Fatalf("%s Content-Type = %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestAPIReserveSkipAndDelete(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
