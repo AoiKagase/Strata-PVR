@@ -55,14 +55,21 @@ func ProgramMatchesRule(rule Rule, program Program) bool {
 			return false
 		}
 	}
-	if len(rule.IgnoreDescriptions) > 0 && program.Detail != "" && anyRegexpMatch(rule.IgnoreDescriptions, program.Detail) {
-		return false
+	if len(rule.IgnoreDescriptions) > 0 {
+		if program.Detail == "" {
+			return false
+		}
+		if anyRegexpMatch(rule.IgnoreDescriptions, program.Detail) {
+			return false
+		}
 	}
 	if len(rule.IgnoreFlags) > 0 && anyOverlap(rule.IgnoreFlags, program.Flags) {
 		return false
 	}
-	if len(rule.ReserveFlags) > 0 && !anyOverlap(rule.ReserveFlags, program.Flags) {
-		return false
+	if len(rule.ReserveFlags) > 0 {
+		if program.Detail == "" || !anyOverlap(rule.ReserveFlags, program.Flags) {
+			return false
+		}
 	}
 	return true
 }

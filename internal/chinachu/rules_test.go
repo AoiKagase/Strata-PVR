@@ -51,6 +51,23 @@ func TestProgramMatchesRuleUsesTitleNotFullTitleLikeLegacy(t *testing.T) {
 	}
 }
 
+func TestProgramMatchesRuleRequiresDetailForLegacyDescriptionAndReserveFlags(t *testing.T) {
+	program := Program{Title: "番組", Flags: []string{"新"}, Channel: Channel{Type: "GR"}}
+	if ProgramMatchesRule(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
+		t.Fatal("ignore_descriptions should not match a program without detail")
+	}
+	if ProgramMatchesRule(Rule{ReserveFlags: []string{"新"}}, program) {
+		t.Fatal("reserve_flags should not match a program without detail like legacy Chinachu")
+	}
+	program.Detail = "通常放送"
+	if !ProgramMatchesRule(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
+		t.Fatal("ignore_descriptions without a matching pattern should allow a detailed program")
+	}
+	if !ProgramMatchesRule(Rule{ReserveFlags: []string{"新"}}, program) {
+		t.Fatal("reserve_flags should match when detail exists and flags overlap")
+	}
+}
+
 func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 	var rule Rule
 	if err := json.Unmarshal([]byte(`{"duration":{"min":99999}}`), &rule); err != nil {

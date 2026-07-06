@@ -135,7 +135,7 @@ Known rule fields:
 - `ignore_flags`
 - `recorded_format`
 
-Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. Title matching now follows the legacy JS behavior of checking `program.title` rather than `fullTitle`. Duration matching preserves the legacy behavior of applying the rule only when both `min` and `max` are present in JSON. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases. CLI rule add/update/enable/disable/remove is implemented for core fields, including Node-style `null`/`-1` deletion markers.
+Rule matching status: partially compatible. Type/channel/category/hour/duration/title/detail/flag checks are implemented in Go. Title matching now follows the legacy JS behavior of checking `program.title` rather than `fullTitle`; `ignore_descriptions` and `reserve_flags` also preserve the legacy behavior of failing to match programs without `detail`. Duration matching preserves the legacy behavior of applying the rule only when both `min` and `max` are present in JSON. JavaScript RegExp semantics are approximated with Go regexp and need oracle tests for edge cases. CLI rule add/update/enable/disable/remove is implemented for core fields, including Node-style `null`/`-1` deletion markers.
 
 ## Data Files And Schemas
 
