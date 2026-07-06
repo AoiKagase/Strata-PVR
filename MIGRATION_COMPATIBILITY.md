@@ -18,6 +18,10 @@ This document tracks compatibility against the gamma branch implementation in
 
 Top-level commands accepted by `./chinachu`:
 
+The Go CLI also accepts the legacy internal `app-cli.js` shape `-mode <command>`,
+`--mode <command>`, and `--mode=<command>` before dispatching to the same command
+handlers.
+
 | Command | Current Go status | Notes |
 | --- | --- | --- |
 | `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |

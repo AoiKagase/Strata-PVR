@@ -30,6 +30,10 @@ type paths struct {
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	_ = ctx
+	args, err := normalizeModeArgs(args)
+	if err != nil {
+		return err
+	}
 	p := paths{
 		config:    "config.json",
 		rules:     "rules.json",
@@ -1068,6 +1072,33 @@ func hasFlag(args []string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeModeArgs(args []string) ([]string, error) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "--mode=") {
+			mode := strings.TrimPrefix(arg, "--mode=")
+			if mode == "" {
+				return nil, fmt.Errorf("missing value for %s", arg)
+			}
+			out := []string{mode}
+			out = append(out, args[:i]...)
+			out = append(out, args[i+1:]...)
+			return out, nil
+		}
+		if arg == "-mode" || arg == "--mode" {
+			if i+1 >= len(args) {
+				return nil, fmt.Errorf("missing value for %s", arg)
+			}
+			mode := args[i+1]
+			out := []string{mode}
+			out = append(out, args[:i]...)
+			out = append(out, args[i+2:]...)
+			return out, nil
+		}
+	}
+	return args, nil
 }
 
 func programIDArg(args []string, command string) (string, []string, error) {
