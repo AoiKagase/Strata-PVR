@@ -215,7 +215,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 - Operator writes recorded files directly to final path with append mode.
 - Go operator currently starts due non-skip/non-conflict reserves 15 seconds before start, writes `data/recording.json`, records the Mirakurun decoded program stream, appends `data/recorded.json`, and removes the completed reserve.
 - Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
-- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage actions, exact operator logs, and every signal side effect remain incomplete.
+- Go operator polls `abort:true` during an active stream and runs `recordedCommand` with recorded file path plus program JSON after state writes. Low-storage command plus `remove`/`stop` actions are partially implemented; mail notification, exact operator logs, and every signal side effect remain incomplete.
 - Cleanup removes missing file entries from `data/recorded.json`.
 - WUI/API may rewrite config, rules, reserves, recording, recorded.
 - Go WUI recorded file stat preserves the legacy JSON field names, including `ulink`, but platform-specific inode/device/block fields may be zero when unavailable.
@@ -238,7 +238,7 @@ Current Go client status: partially compatible for HTTP and `http+unix` URL setu
 | Recorded filename format | partially compatible |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, and `data/operator.pid` lifecycle implemented, but low-storage actions, exact logs, and signal side effects remain incomplete. |
+| Operator/recorder | partially compatible; active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, and low-storage `remove`/`stop` core actions implemented, but mail notification, exact logs, and signal side effects remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | partially compatible |

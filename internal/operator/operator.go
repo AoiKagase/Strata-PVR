@@ -18,9 +18,12 @@ import (
 	"chinachu-go/internal/logging"
 	"chinachu-go/internal/mirakurun"
 	"chinachu-go/internal/storage"
+	"chinachu-go/internal/system"
 )
 
 const recordStartMargin = 15 * time.Second
+
+var getDiskUsage = system.GetDiskUsage
 
 type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
@@ -100,6 +103,11 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 	}
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+		return Result{}, err
+	}
+	var err error
+	recorded, err = handleLowStorage(ctx, paths, cfg, recording, recorded)
+	if err != nil {
 		return Result{}, err
 	}
 
@@ -256,6 +264,69 @@ func runRecordedCommand(ctx context.Context, command string, program chinachu.Pr
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, recording, recorded []chinachu.Program) ([]chinachu.Program, error) {
+	if cfg.StorageLowSpaceThresholdMB <= 0 {
+		return recorded, nil
+	}
+	usage, err := getDiskUsage(cfg.RecordedDir)
+	if err != nil {
+		return recorded, nil
+	}
+	freeMB := usage.Avail / 1024 / 1024
+	if freeMB >= uint64(cfg.StorageLowSpaceThresholdMB) {
+		return recorded, nil
+	}
+	if err := logging.AppendLine(paths.Log, "ALERT: Storage Low Space! (%d MB < %d MB)", freeMB, cfg.StorageLowSpaceThresholdMB); err != nil {
+		return recorded, err
+	}
+	if cfg.StorageLowSpaceCommand != "" {
+		cmd := exec.CommandContext(ctx, cfg.StorageLowSpaceCommand)
+		if err := cmd.Start(); err != nil {
+			return recorded, err
+		}
+		if err := logging.AppendLine(paths.Log, "SPAWN: %s (pid=%d)", cfg.StorageLowSpaceCommand, cmd.Process.Pid); err != nil {
+			return recorded, err
+		}
+		go func() { _ = cmd.Wait() }()
+	}
+	switch cfg.StorageLowSpaceAction {
+	case "stop":
+		changed := false
+		for i := range recording {
+			if !recording[i].Abort {
+				recording[i].Abort = true
+				changed = true
+			}
+		}
+		if changed {
+			if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
+				return recorded, err
+			}
+			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
+				return recorded, err
+			}
+		}
+	case "remove":
+		if len(recorded) == 0 {
+			return recorded, nil
+		}
+		removed := recorded[0]
+		recorded = append([]chinachu.Program(nil), recorded[1:]...)
+		if removed.Recorded != "" {
+			if err := os.Remove(filepath.FromSlash(removed.Recorded)); err != nil && !os.IsNotExist(err) {
+				return recorded, err
+			}
+		}
+		if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+			return recorded, err
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
+			return recorded, err
+		}
+	}
+	return recorded, nil
 }
 
 func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {

@@ -15,6 +15,7 @@ import (
 	"chinachu-go/internal/chinachu"
 	"chinachu-go/internal/config"
 	"chinachu-go/internal/storage"
+	"chinachu-go/internal/system"
 )
 
 func TestMain(m *testing.M) {
@@ -312,5 +313,60 @@ func TestPIDFileLifecycle(t *testing.T) {
 	removePIDFile(path)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("pid file was not removed: %v", err)
+	}
+}
+
+func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
+	dir := t.TempDir()
+	oldGetDiskUsage := getDiskUsage
+	getDiskUsage = func(string) (system.DiskUsage, error) {
+		return system.DiskUsage{Avail: 10 * 1024 * 1024}, nil
+	}
+	defer func() { getDiskUsage = oldGetDiskUsage }()
+
+	oldFile := filepath.Join(dir, "recorded", "old.m2ts")
+	if err := os.MkdirAll(filepath.Dir(oldFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldFile, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	paths := Paths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{}, false); err != nil {
+		t.Fatal(err)
+	}
+	recorded := []chinachu.Program{{ID: "old", Recorded: filepath.ToSlash(oldFile)}, {ID: "new", Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "new.m2ts"))}}
+	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		RecordedDir:                filepath.Join(dir, "recorded"),
+		StorageLowSpaceThresholdMB: 100,
+		StorageLowSpaceAction:      "remove",
+	}
+	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != (Result{}) {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Fatalf("old recorded file was not removed: %v", err)
+	}
+	var remaining []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &remaining, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 1 || remaining[0].ID != "new" {
+		t.Fatalf("unexpected recorded list: %#v", remaining)
 	}
 }
