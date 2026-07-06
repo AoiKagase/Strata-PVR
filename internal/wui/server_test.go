@@ -160,6 +160,43 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	}
 }
 
+func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/reserves/abc/skip.json?method=put", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("method override status = %d body=%s", res.Code, res.Body.String())
+	}
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || !reserves[0].IsSkip {
+		t.Fatalf("reserve was not skipped: %#v", reserves)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/reserves/abc/unskip.json?_method=put", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("_method override status = %d body=%s", res.Code, res.Body.String())
+	}
+	reserves = nil
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("reserve was not unskipped: %#v", reserves)
+	}
+}
+
 func TestAPIRulesMutation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

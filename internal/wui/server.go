@@ -100,6 +100,7 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	if auth {
 		handler = server.withAuth(handler)
 	}
+	handler = server.withMethodOverride(handler)
 	handler = server.withAccessLog(handler)
 	return server.withCommonHeaders(handler)
 }
@@ -274,6 +275,20 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Chinachu"`)
 			http.Error(w, "401 Authorization Required", http.StatusUnauthorized)
 			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) withMethodOverride(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if method := r.URL.Query().Get("method"); method != "" {
+			r = r.Clone(r.Context())
+			r.Method = strings.ToUpper(method)
+		}
+		if method := r.URL.Query().Get("_method"); method != "" {
+			r = r.Clone(r.Context())
+			r.Method = strings.ToUpper(method)
 		}
 		next.ServeHTTP(w, r)
 	})
