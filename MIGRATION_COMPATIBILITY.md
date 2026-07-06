@@ -46,7 +46,7 @@ before or after the ID.
 | `recording` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `recorded` | partially compatible | Prints a legacy-style program table with filtering/sort support; exact `easy-table` spacing still incomplete. |
 | `cleanup [-s|--simulation]` | partially compatible | Prints a legacy-style action table and removes missing recorded entries unless simulation is set. Before destructive writes, Go creates `data/recorded.json.bak-YYYYMMDDHHMMSS`. |
-| `compat check`, `compat doctor` | implemented | New Go-only safety checks for required JSON state files, `data/`, writable `recordedDir`, Mirakurun services/programs/tuners reachability, and Node.js runtime non-requirement; does not alter legacy command behavior. |
+| `compat check`, `compat doctor` | implemented | New Go-only safety checks for required JSON state files, `data/`, writable `recordedDir`, available disk space lookup, Mirakurun services/programs/tuners reachability, and Node.js runtime non-requirement; does not alter legacy command behavior. |
 | `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
 | `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |
 | default/help | implemented | Help command shape is present. |
@@ -250,5 +250,5 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | partially compatible |
-| Compat doctor/check | implemented; validates required JSON state files, `data/`, writable `recordedDir`, Mirakurun services/programs/tuners reachability, and Node.js runtime non-requirement. |
+| Compat doctor/check | implemented; validates required JSON state files, `data/`, writable `recordedDir`, available disk space lookup, Mirakurun services/programs/tuners reachability, and Node.js runtime non-requirement. |
 | Tests | partially compatible |

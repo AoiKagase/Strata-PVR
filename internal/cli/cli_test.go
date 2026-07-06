@@ -121,6 +121,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"OK data/reserves.json",
 		"OK data/recording.json",
 		"OK data/recorded.json",
+		"OK available disk space",
 		"OK Mirakurun services",
 		"OK Mirakurun programs",
 		"OK Mirakurun tuners",

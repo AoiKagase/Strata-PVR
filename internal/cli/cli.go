@@ -18,6 +18,7 @@ import (
 	"chinachu-go/internal/operator"
 	"chinachu-go/internal/scheduler"
 	"chinachu-go/internal/storage"
+	"chinachu-go/internal/system"
 	"chinachu-go/internal/wui"
 )
 
@@ -1024,6 +1025,10 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 		if cfgErr == nil {
 			recordedDirErr = validateWritableDir(cfg.RecordedDir)
 		}
+		diskErr := cfgErr
+		if cfgErr == nil {
+			diskErr = validateDiskUsage(cfg.RecordedDir)
+		}
 		servicesErr, programsErr, tunersErr := validateMirakurun(ctx, cfg, cfgErr)
 		checks := []struct {
 			name string
@@ -1037,6 +1042,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},
 			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "")},
 			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
+			{"available disk space", diskErr},
 			{"Mirakurun services", servicesErr},
 			{"Mirakurun programs", programsErr},
 			{"Mirakurun tuners", tunersErr},
@@ -1090,6 +1096,11 @@ func validateWritableDir(path string) error {
 		return err
 	}
 	return os.Remove(name)
+}
+
+func validateDiskUsage(path string) error {
+	_, err := system.GetDiskUsage(path)
+	return err
 }
 
 func validateMirakurun(ctx context.Context, cfg *config.Config, cfgErr error) (servicesErr, programsErr, tunersErr error) {
