@@ -73,6 +73,7 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if err != nil {
 		return err
 	}
+	client.UserAgent = mirakurun.LegacyUserAgent("operator")
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}

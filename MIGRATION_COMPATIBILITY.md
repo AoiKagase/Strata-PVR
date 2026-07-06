@@ -208,7 +208,7 @@ The JS Mirakurun client calls:
 - service/channel stream: used by WUI watch routes.
 - service logo: used by channel logo route.
 
-Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, and `X-Mirakurun-Priority`.
+Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, legacy-style `Chinachu/0.10.7-gamma.1 (<component>)` User-Agent values for scheduler/operator/WUI requests, and `X-Mirakurun-Priority`.
 
 ## Side Effects
 

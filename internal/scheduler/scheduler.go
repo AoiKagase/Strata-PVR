@@ -58,6 +58,7 @@ func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	client.UserAgent = mirakurun.LegacyUserAgent("scheduler")
 	return RunWithSource(ctx, paths, cfg, client, simulation, time.Now())
 }
 

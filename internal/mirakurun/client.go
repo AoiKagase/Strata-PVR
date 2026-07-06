@@ -19,6 +19,15 @@ type Client struct {
 	Priority   int
 }
 
+const legacyVersion = "0.10.7-gamma.1"
+
+func LegacyUserAgent(component string) string {
+	if component == "" {
+		return "Chinachu/" + legacyVersion
+	}
+	return "Chinachu/" + legacyVersion + " (" + component + ")"
+}
+
 func (c *Client) SetPriority(priority int) {
 	c.Priority = priority
 }
@@ -27,7 +36,7 @@ func New(raw string) (*Client, error) {
 	if raw == "" {
 		raw = "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/"
 	}
-	c := &Client{UserAgent: "Chinachu-Go"}
+	c := &Client{UserAgent: LegacyUserAgent("go")}
 	if strings.HasPrefix(raw, "http+unix://") {
 		rest := strings.TrimPrefix(raw, "http+unix://")
 		host := rest

@@ -15,6 +15,9 @@ func TestGetJSON(t *testing.T) {
 		if r.URL.Path != "/api/services" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
+		if got := r.Header.Get("User-Agent"); got != LegacyUserAgent("go") {
+			t.Fatalf("user-agent = %q", got)
+		}
 		fmt.Fprint(w, `[{"id":1,"serviceId":101,"networkId":1,"name":"svc","channel":{"type":"GR","channel":"27"}}]`)
 	}))
 	defer srv.Close()
@@ -58,6 +61,25 @@ func TestStreamEndpoints(t *testing.T) {
 		if paths[i] != want[i] {
 			t.Fatalf("path[%d] = %q, want %q", i, paths[i], want[i])
 		}
+	}
+}
+
+func TestLegacyUserAgentAndPriorityHeaders(t *testing.T) {
+	client, err := New("http://127.0.0.1/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.UserAgent = LegacyUserAgent("operator")
+	client.SetPriority(2)
+	req, err := client.newRequest(context.Background(), http.MethodGet, "/api/programs/1/stream?decode=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := req.Header.Get("User-Agent"); got != "Chinachu/0.10.7-gamma.1 (operator)" {
+		t.Fatalf("user-agent = %q", got)
+	}
+	if got := req.Header.Get("X-Mirakurun-Priority"); got != "2" {
+		t.Fatalf("priority = %q", got)
 	}
 }
 

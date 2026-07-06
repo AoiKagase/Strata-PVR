@@ -1205,6 +1205,7 @@ func validateMirakurun(ctx context.Context, cfg *config.Config, cfgErr error) (s
 	if err != nil {
 		return err, err, err
 	}
+	client.UserAgent = mirakurun.LegacyUserAgent("cli")
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, servicesErr = client.Services(checkCtx)

@@ -1778,6 +1778,7 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	client.UserAgent = mirakurun.LegacyUserAgent("wui")
 	body, err := client.LogoImage(r.Context(), serviceID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -1830,6 +1831,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		client.UserAgent = mirakurun.LegacyUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -1857,6 +1859,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		client.UserAgent = mirakurun.LegacyUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
