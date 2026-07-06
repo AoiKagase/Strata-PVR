@@ -584,6 +584,28 @@ func TestReserve(t *testing.T) {
 	}
 }
 
+func TestReserveChecksScheduleBeforeDuplicateLikeLegacy(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[{"id":"old","start":1,"end":2,"channel":{}}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Run(context.Background(), []string{"reserve", "old"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != "見つかりません" {
+		t.Fatalf("reserve error = %v", err)
+	}
+}
+
 func TestReserveSimulationDoesNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

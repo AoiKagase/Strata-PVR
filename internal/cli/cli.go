@@ -689,12 +689,12 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
 		return err
 	}
-	if chinachu.GetProgramByID(id, nil, reserves) != nil {
-		return fmt.Errorf("既に予約されています")
-	}
 	target := chinachu.GetProgramByID(id, schedule, nil)
 	if target == nil {
 		return fmt.Errorf("見つかりません")
+	}
+	if chinachu.GetProgramByID(id, nil, reserves) != nil {
+		return fmt.Errorf("既に予約されています")
 	}
 	target.IsManualReserved = true
 	if oneSeg {
