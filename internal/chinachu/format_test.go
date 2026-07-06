@@ -21,6 +21,42 @@ func TestFormatRecordedName(t *testing.T) {
 	}
 }
 
+func TestFormatRecordedNameLegacyDateMasks(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 5, 6, 0, time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+	}
+	got := FormatRecordedName(program, "<date:isoDateTime>-<date:shortTime>-<date:dddd>-<title>.m2ts")
+	want := "2024-07-01T23:05:06-11:05 PM-Monday-Title.m2ts"
+	if got != want {
+		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatRecordedNameLegacyUTCDateMask(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 5, 6, 0, time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+	}
+	got := FormatRecordedName(program, "<date:isoUtcDateTime>.m2ts")
+	want := "2024-07-01T14:05:06Z.m2ts"
+	if got != want {
+		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}
+
 func TestFormatRecordedNameLegacyTunerAndEpisodeTokens(t *testing.T) {
 	program := Program{
 		ID:       "abc",

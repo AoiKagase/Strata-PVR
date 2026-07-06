@@ -122,23 +122,110 @@ func StripFilename(s string) string {
 }
 
 func jsDateFormat(t time.Time, layout string) string {
-	replacements := []struct{ from, to string }{
-		{"yyyy", "2006"},
-		{"yy", "06"},
-		{"mm", "01"},
-		{"m", "1"},
-		{"dd", "02"},
-		{"d", "2"},
-		{"HH", "15"},
-		{"H", "15"},
-		{"MM", "04"},
-		{"M", "4"},
-		{"ss", "05"},
-		{"s", "5"},
+	if mask, ok := dateFormatMasks[layout]; ok {
+		layout = mask
 	}
-	goLayout := layout
-	for _, r := range replacements {
-		goLayout = strings.ReplaceAll(goLayout, r.from, r.to)
+	if layout == "isoUtcDateTime" {
+		return formatDateMask(t.UTC(), `yyyy-mm-dd'T'HH:MM:ss'Z'`)
 	}
-	return t.Format(goLayout)
+	return formatDateMask(t, layout)
+}
+
+var dateFormatMasks = map[string]string{
+	"default":     "ddd mmm dd yyyy HH:MM:ss",
+	"shortDate":   "m/d/yy",
+	"mediumDate":  "mmm d, yyyy",
+	"longDate":    "mmmm d, yyyy",
+	"fullDate":    "dddd, mmmm d, yyyy",
+	"shortTime":   "h:MM TT",
+	"mediumTime":  "h:MM:ss TT",
+	"longTime":    "h:MM:ss TT Z",
+	"isoDate":     "yyyy-mm-dd",
+	"isoTime":     "HH:MM:ss",
+	"isoDateTime": "yyyy-mm-dd'T'HH:MM:ss",
+}
+
+var dayNames = []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+var dayNamesShort = []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+var monthNames = []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+var monthNamesShort = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+
+func formatDateMask(t time.Time, mask string) string {
+	var b strings.Builder
+	for i := 0; i < len(mask); {
+		if mask[i] == '\'' || mask[i] == '"' {
+			quote := mask[i]
+			i++
+			for i < len(mask) && mask[i] != quote {
+				b.WriteByte(mask[i])
+				i++
+			}
+			if i < len(mask) {
+				i++
+			}
+			continue
+		}
+		if token, value, ok := dateFormatToken(t, mask[i:]); ok {
+			b.WriteString(value)
+			i += len(token)
+			continue
+		}
+		b.WriteByte(mask[i])
+		i++
+	}
+	return b.String()
+}
+
+func dateFormatToken(t time.Time, s string) (token, value string, ok bool) {
+	hour12 := t.Hour() % 12
+	if hour12 == 0 {
+		hour12 = 12
+	}
+	tokens := []struct {
+		token string
+		value string
+	}{
+		{"yyyy", fmt.Sprintf("%04d", t.Year())},
+		{"yy", fmt.Sprintf("%02d", t.Year()%100)},
+		{"mmmm", monthNames[int(t.Month())-1]},
+		{"mmm", monthNamesShort[int(t.Month())-1]},
+		{"mm", fmt.Sprintf("%02d", int(t.Month()))},
+		{"m", strconv.Itoa(int(t.Month()))},
+		{"dddd", dayNames[int(t.Weekday())]},
+		{"ddd", dayNamesShort[int(t.Weekday())]},
+		{"dd", fmt.Sprintf("%02d", t.Day())},
+		{"d", strconv.Itoa(t.Day())},
+		{"HH", fmt.Sprintf("%02d", t.Hour())},
+		{"H", strconv.Itoa(t.Hour())},
+		{"hh", fmt.Sprintf("%02d", hour12)},
+		{"h", strconv.Itoa(hour12)},
+		{"MM", fmt.Sprintf("%02d", t.Minute())},
+		{"M", strconv.Itoa(t.Minute())},
+		{"ss", fmt.Sprintf("%02d", t.Second())},
+		{"s", strconv.Itoa(t.Second())},
+		{"TT", meridiem(t, true)},
+		{"tt", meridiem(t, false)},
+		{"T", meridiem(t, true)[:1]},
+		{"t", meridiem(t, false)[:1]},
+		{"Z", t.Format("MST")},
+	}
+	for _, item := range tokens {
+		if strings.HasPrefix(s, item.token) {
+			return item.token, item.value, true
+		}
+	}
+	return "", "", false
+}
+
+func meridiem(t time.Time, upper bool) string {
+	if t.Hour() < 12 {
+		if upper {
+			return "AM"
+		}
+		return "am"
+	}
+	if upper {
+		return "PM"
+	}
+	return "pm"
 }
