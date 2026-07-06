@@ -340,6 +340,45 @@ func TestReserveSimulationDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestReserveAcceptsLegacyIDOption(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
+	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"reserve", "-s", "-id", "p1", "--1seg"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 0 {
+		t.Fatalf("simulation should not write reserves: %#v", reserves)
+	}
+	if err := Run(context.Background(), []string{"reserve", "--id=p1", "--1seg"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	reserves = nil
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].ID != "p1" || !reserves[0].OneSeg {
+		t.Fatalf("reserve did not use legacy id option: %#v", reserves)
+	}
+}
+
 func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
@@ -381,6 +420,42 @@ func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 	}
 	if len(got) != len(initial) || !got[2].IsSkip {
 		t.Fatalf("simulation mutated reserves: %#v", got)
+	}
+}
+
+func TestReserveMutationsAcceptLegacyIDOption(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reserves := []chinachu.Program{{ID: "auto", Title: "Auto"}}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), reserves, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"skip", "--id", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].IsSkip {
+		t.Fatalf("skip did not use legacy id option: %#v", got)
+	}
+	if err := Run(context.Background(), []string{"unskip", "-id", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	got = nil
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].IsSkip {
+		t.Fatalf("unskip did not use legacy id option: %#v", got)
 	}
 }
 
@@ -507,6 +582,35 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	}
 	if !reserves[0].IsSkip || reserves[1].IsSkip {
 		t.Fatalf("auto reserve skip was not updated correctly: %#v", reserves)
+	}
+}
+
+func TestStopAcceptsLegacyIDOption(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recording := []chinachu.Program{{ID: "rec", Title: "Recording"}}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), recording, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "rec"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"stop", "--id=rec"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var got []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].Abort {
+		t.Fatalf("stop did not use legacy id option: %#v", got)
 	}
 }
 

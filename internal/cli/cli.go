@@ -668,12 +668,12 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 }
 
 func reserve(p paths, args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Usage: reserve <pgid>")
+	id, rest, err := programIDArg(args, "reserve")
+	if err != nil {
+		return err
 	}
-	id := args[0]
-	simulation := hasFlag(args[1:], "-s", "--simulation")
-	oneSeg := hasFlag(args[1:], "--1seg", "-1seg")
+	simulation := hasFlag(rest, "-s", "--simulation")
+	oneSeg := hasFlag(rest, "--1seg", "-1seg")
 	var schedule []chinachu.ChannelSchedule
 	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
 		return err
@@ -710,11 +710,11 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 }
 
 func updateReserve(p paths, args []string, stdout io.Writer, mode string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Usage: %s <pgid>", mode)
+	id, rest, err := programIDArg(args, mode)
+	if err != nil {
+		return err
 	}
-	id := args[0]
-	simulation := hasFlag(args[1:], "-s", "--simulation")
+	simulation := hasFlag(rest, "-s", "--simulation")
 	var reserves []chinachu.Program
 	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
 		return err
@@ -787,16 +787,17 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 }
 
 func stopRecording(p paths, args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Usage: stop <pgid>")
+	id, rest, err := programIDArg(args, "stop")
+	if err != nil {
+		return err
 	}
-	simulation := hasFlag(args[1:], "-s", "--simulation")
+	simulation := hasFlag(rest, "-s", "--simulation")
 	var recording []chinachu.Program
 	if err := storage.ReadJSON(p.recording, &recording, "[]"); err != nil {
 		return err
 	}
 	for i := range recording {
-		if recording[i].ID == args[0] {
+		if recording[i].ID == id {
 			recording[i].Abort = true
 			target := recording[i]
 			if simulation {
@@ -1067,6 +1068,37 @@ func hasFlag(args []string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func programIDArg(args []string, command string) (string, []string, error) {
+	if len(args) == 0 {
+		return "", nil, fmt.Errorf("Usage: %s <pgid>", command)
+	}
+	if !strings.HasPrefix(args[0], "-") {
+		return args[0], args[1:], nil
+	}
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "--id=") {
+			id := strings.TrimPrefix(arg, "--id=")
+			if id == "" {
+				return "", nil, fmt.Errorf("missing value for %s", arg)
+			}
+			rest = append(rest, args[i+1:]...)
+			return id, rest, nil
+		}
+		if arg == "-id" || arg == "--id" {
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("missing value for %s", arg)
+			}
+			id := args[i+1]
+			rest = append(rest, args[:i]...)
+			rest = append(rest, args[i+2:]...)
+			return id, rest, nil
+		}
+	}
+	return "", nil, fmt.Errorf("Usage: %s <pgid>", command)
 }
 
 func firstArg(args []string) string {
