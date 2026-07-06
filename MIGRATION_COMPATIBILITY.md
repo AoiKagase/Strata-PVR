@@ -84,7 +84,7 @@ Fields from `config.sample.json` and JS references:
 
 | Field | Semantics | Status |
 | --- | --- | --- |
-| `uid`, `gid` | Drop privileges when started as root. | not started |
+| `uid`, `gid` | Drop privileges when started as root. | partially compatible; operator and WUI call `setgid` then `setuid` on Unix, defaulting missing `gid` to `video` and requiring `uid` when running as root. |
 | `mirakurunPath` | Mirakurun base URL; supports HTTP and `http+unix`. | partially compatible |
 | `schedulerMirakurunPath` | Legacy fallback for Mirakurun URL. | partially compatible |
 | `recordedDir` | Directory prefix for recorded files. | partially compatible |

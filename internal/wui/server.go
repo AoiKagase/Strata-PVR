@@ -45,6 +45,9 @@ func Run(ctx context.Context, paths Paths) error {
 	if err != nil {
 		return err
 	}
+	if err := system.DropPrivileges(cfg.UID, cfg.GID); err != nil {
+		return err
+	}
 	servers, err := buildHTTPServers(paths, cfg)
 	if err != nil {
 		return err

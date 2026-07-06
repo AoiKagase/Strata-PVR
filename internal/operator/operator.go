@@ -54,15 +54,18 @@ type Result struct {
 }
 
 func Run(ctx context.Context, paths Paths, interval time.Duration) error {
+	cfg, err := config.Load(paths.Config)
+	if err != nil {
+		return err
+	}
+	if err := system.DropPrivileges(cfg.UID, cfg.GID); err != nil {
+		return err
+	}
 	if err := writePIDFile(paths.PID); err != nil {
 		return err
 	}
 	defer removePIDFile(paths.PID)
 
-	cfg, err := config.Load(paths.Config)
-	if err != nil {
-		return err
-	}
 	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
 	if err != nil {
 		return err
