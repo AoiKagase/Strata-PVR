@@ -29,7 +29,7 @@ Top-level commands accepted by `./chinachu`:
 | `unreserve <pgid> [-s|--simulation]` | partially compatible | Data side effect and simulation output implemented; exact JSON field ordering/output spacing still incomplete. |
 | `skip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and target JSON output implemented; exact JSON field ordering/output spacing still incomplete. |
 | `unskip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and legacy `skip:` output label implemented; exact JSON field ordering/output spacing still incomplete. |
-| `stop <pgid>` | partially compatible | Marks recording entry with `abort:true` and sets the matching auto reserve to `isSkip:true` like the Node CLI. |
+| `stop <pgid> [-s|--simulation]` | partially compatible | Marks recording entry with `abort:true`, sets the matching auto reserve to `isSkip:true`, and supports simulation/JSON output like the Node CLI. |
 | `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; table output still needs more work. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |

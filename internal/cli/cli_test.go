@@ -422,8 +422,12 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), []string{"stop", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"stop", "auto"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "stop:") || !strings.Contains(out.String(), `"abort": true`) {
+		t.Fatalf("unexpected stop output: %s", out.String())
 	}
 	var recording []chinachu.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
@@ -438,5 +442,44 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	}
 	if !reserves[0].IsSkip || reserves[1].IsSkip {
 		t.Fatalf("auto reserve skip was not updated correctly: %#v", reserves)
+	}
+}
+
+func TestStopSimulationDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []chinachu.Program{{ID: "auto"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "auto"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"stop", "auto", "--simulation"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "[simulation] stop:") || !strings.Contains(out.String(), `"abort": true`) {
+		t.Fatalf("unexpected stop simulation output: %s", out.String())
+	}
+	var recording []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if recording[0].Abort {
+		t.Fatalf("simulation mutated recording: %#v", recording)
+	}
+	var reserves []chinachu.Program
+	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if reserves[0].IsSkip {
+		t.Fatalf("simulation mutated reserves: %#v", reserves)
 	}
 }

@@ -782,6 +782,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("Usage: stop <pgid>")
 	}
+	simulation := hasFlag(args[1:], "-s", "--simulation")
 	var recording []chinachu.Program
 	if err := storage.ReadJSON(p.recording, &recording, "[]"); err != nil {
 		return err
@@ -789,6 +790,12 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	for i := range recording {
 		if recording[i].ID == args[0] {
 			recording[i].Abort = true
+			target := recording[i]
+			if simulation {
+				fmt.Fprintln(stdout, "[simulation] stop:")
+				writePretty(stdout, target)
+				return nil
+			}
 			if !recording[i].IsManualReserved {
 				if err := markReserveSkip(p.reserves, recording[i].ID); err != nil {
 					return err
@@ -797,6 +804,8 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 			if err := storage.WriteJSONAtomic(p.recording, recording, false); err != nil {
 				return err
 			}
+			fmt.Fprintln(stdout, "stop:")
+			writePretty(stdout, target)
 			fmt.Fprintln(stdout, "録画を停止しました。 ")
 			return nil
 		}
