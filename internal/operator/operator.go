@@ -344,6 +344,9 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 					return recorded, err
 				}
 			}
+			if _, err := storage.BackupFile(paths.Recorded); err != nil {
+				return recorded, err
+			}
 			if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
 				return recorded, err
 			}

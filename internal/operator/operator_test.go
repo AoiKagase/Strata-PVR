@@ -414,6 +414,20 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	if len(remaining) != 1 || remaining[0].ID != "new" {
 		t.Fatalf("unexpected recorded list: %#v", remaining)
 	}
+	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
+	}
+	var backup []chinachu.Program
+	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(backup) != 2 {
+		t.Fatalf("backup should contain original recorded list: %#v", backup)
+	}
 }
 
 func TestLowStorageSendsNotification(t *testing.T) {
