@@ -38,6 +38,15 @@ func (f *fakeStreamer) ProgramStream(_ context.Context, id int64, decode bool) (
 	return io.NopCloser(strings.NewReader(f.body)), nil
 }
 
+type priorityStreamer struct {
+	fakeStreamer
+	priority int
+}
+
+func (f *priorityStreamer) SetPriority(priority int) {
+	f.priority = priority
+}
+
 type abortableStreamer struct {
 	stream *abortableReadCloser
 }
@@ -140,6 +149,37 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "START: 21i3v9") || !strings.Contains(string(logData), "FIN: 21i3v9") {
 		t.Fatalf("operator log missing expected lines: %s", string(logData))
+	}
+}
+
+func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
+	dir := t.TempDir()
+	recordingPath := filepath.Join(dir, "data", "recording.json")
+	if err := storage.WriteJSONAtomic(recordingPath, []chinachu.Program{}, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		RecordedDir:        filepath.Join(dir, "recorded"),
+		RecordedFormat:     "<id>.m2ts",
+		RecordingPriority:  5,
+		ConflictedPriority: 1,
+	}
+	program := chinachu.Program{ID: "1", Title: "Priority"}
+	normal := &priorityStreamer{fakeStreamer: fakeStreamer{body: "normal"}}
+	if _, err := recordProgram(context.Background(), recordingPath, cfg, normal, program); err != nil {
+		t.Fatal(err)
+	}
+	if normal.priority != 5 {
+		t.Fatalf("normal priority = %d", normal.priority)
+	}
+
+	conflicted := &priorityStreamer{fakeStreamer: fakeStreamer{body: "conflict"}}
+	program.IsConflict = true
+	if _, err := recordProgram(context.Background(), recordingPath, cfg, conflicted, program); err != nil {
+		t.Fatal(err)
+	}
+	if conflicted.priority != 1 {
+		t.Fatalf("conflicted priority = %d", conflicted.priority)
 	}
 }
 

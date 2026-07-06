@@ -100,7 +100,7 @@ Fields from `config.sample.json` and JS references:
 | `wuiMdnsAdvertisement` | mDNS advertisement. | not started |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |
 | `recordedFormat` | Filename template. | partially compatible |
-| `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | not started |
+| `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | partially compatible; Go sets `X-Mirakurun-Priority` before program stream requests. Conflict recordings remain limited because Go currently skips conflict reserves. |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | not started |
 | `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
 | `operTweeter`, `operTweeterAuth`, `operTweeterFormat` | Experimental Twitter notifications. | not started |
@@ -201,7 +201,7 @@ The JS Mirakurun client calls:
 - service/channel stream: used by WUI watch routes.
 - service logo: used by channel logo route.
 
-Current Go client status: partially compatible for HTTP and `http+unix` URL setup plus services/programs/tuners, program stream, service stream, and service logo requests.
+Current Go client status: partially compatible for HTTP and `http+unix` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, and `X-Mirakurun-Priority`.
 
 ## Side Effects
 

@@ -29,6 +29,10 @@ type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
 }
 
+type prioritySetter interface {
+	SetPriority(int)
+}
+
 type Paths struct {
 	Config    string
 	Reserves  string
@@ -58,7 +62,6 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if err != nil {
 		return err
 	}
-	client.Priority = cfg.RecordingPriority
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -173,6 +176,9 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	}
 	recordCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if setter, ok := source.(prioritySetter); ok {
+		setter.SetPriority(programPriority(cfg, program))
+	}
 	stream, err := source.ProgramStream(recordCtx, streamID, true)
 	if err != nil {
 		return program, err
@@ -212,6 +218,19 @@ func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config
 	}
 	program.Recorded = filepath.ToSlash(finalPath)
 	return program, nil
+}
+
+func programPriority(cfg *config.Config, program chinachu.Program) int {
+	if program.IsConflict {
+		if cfg.ConflictedPriority != 0 {
+			return cfg.ConflictedPriority
+		}
+		return 1
+	}
+	if cfg.RecordingPriority != 0 {
+		return cfg.RecordingPriority
+	}
+	return 2
 }
 
 func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {

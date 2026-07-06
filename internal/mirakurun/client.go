@@ -19,6 +19,10 @@ type Client struct {
 	Priority   int
 }
 
+func (c *Client) SetPriority(priority int) {
+	c.Priority = priority
+}
+
 func New(raw string) (*Client, error) {
 	if raw == "" {
 		raw = "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/"
