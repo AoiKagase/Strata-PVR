@@ -106,7 +106,7 @@ Fields from `config.sample.json` and JS references:
 | `wuiXFF` | Trust first `X-Forwarded-For` IP. | partially compatible; access logging uses the first forwarded address and normalizes IPv4-mapped IPv6. GeoIP country filtering is still not implemented. |
 | `wuiMdnsAdvertisement` | mDNS advertisement. | partially compatible; the existing config field is parsed explicitly, but mDNS service advertisement is not implemented without adding a Go mDNS dependency. |
 | `normalizationForm` | Unicode normalization form used by title/detail matching. | partially compatible |
-| `recordedFormat` | Filename template. | partially compatible; supports legacy date masks/tokens including `UTC:` prefix plus id/type/channel/channel-id/channel-sid/channel-name/tuner/title/fulltitle/subtitle/episode/episode:N/category tokens and filename character stripping. Remaining risk is unusual JavaScript `dateformat` masks not covered by Go tests. |
+| `recordedFormat` | Filename template. | partially compatible; supports legacy date masks/tokens including `UTC:` prefix, common `dateformat` masks, ordinal/timezone tokens, plus id/type/channel/channel-id/channel-sid/channel-name/tuner/title/fulltitle/subtitle/episode/episode:N/category tokens and filename character stripping. Remaining risk is obscure JavaScript `dateformat` edge cases not covered by Go tests. |
 | `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | partially compatible; Go sets `X-Mirakurun-Priority` before program stream requests. Conflict recordings remain limited because Go currently skips conflict reserves. |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | partially compatible; `remove`, `stop`, hook command, sendmail notification, and three-hour notification throttling are implemented. |
 | `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
@@ -243,7 +243,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Atomic JSON state | implemented |
 | CLI command acceptance | partially compatible |
 | Rule engine | partially compatible |
-| Recorded filename format | partially compatible; legacy tuner, episode, common dateformat masks, and `UTC:` prefix are implemented, but unusual JavaScript `dateformat` masks still need oracle tests. |
+| Recorded filename format | partially compatible; legacy tuner, episode, common dateformat masks, `S`/`o` date tokens, and `UTC:` prefix are implemented, but unusual JavaScript `dateformat` edge cases still need oracle tests. |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
 | Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, process context cancellation on `SIGINT`/`SIGTERM`/Unix `SIGQUIT`, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and all in-flight signal side effects remain incomplete. |

@@ -135,17 +135,18 @@ func jsDateFormat(t time.Time, layout string) string {
 }
 
 var dateFormatMasks = map[string]string{
-	"default":     "ddd mmm dd yyyy HH:MM:ss",
-	"shortDate":   "m/d/yy",
-	"mediumDate":  "mmm d, yyyy",
-	"longDate":    "mmmm d, yyyy",
-	"fullDate":    "dddd, mmmm d, yyyy",
-	"shortTime":   "h:MM TT",
-	"mediumTime":  "h:MM:ss TT",
-	"longTime":    "h:MM:ss TT Z",
-	"isoDate":     "yyyy-mm-dd",
-	"isoTime":     "HH:MM:ss",
-	"isoDateTime": "yyyy-mm-dd'T'HH:MM:ss",
+	"default":       "ddd mmm dd yyyy HH:MM:ss",
+	"shortDate":     "m/d/yy",
+	"mediumDate":    "mmm d, yyyy",
+	"longDate":      "mmmm d, yyyy",
+	"fullDate":      "dddd, mmmm d, yyyy",
+	"shortTime":     "h:MM TT",
+	"mediumTime":    "h:MM:ss TT",
+	"longTime":      "h:MM:ss TT Z",
+	"isoDate":       "yyyy-mm-dd",
+	"isoTime":       "HH:MM:ss",
+	"isoDateTime":   "yyyy-mm-dd'T'HH:MM:ss",
+	"expiresHeader": "ddd, dd mmm yyyy HH:MM:ss Z",
 }
 
 var dayNames = []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
@@ -198,6 +199,7 @@ func dateFormatToken(t time.Time, s string) (token, value string, ok bool) {
 		{"ddd", dayNamesShort[int(t.Weekday())]},
 		{"dd", fmt.Sprintf("%02d", t.Day())},
 		{"d", strconv.Itoa(t.Day())},
+		{"S", ordinalSuffix(t.Day())},
 		{"HH", fmt.Sprintf("%02d", t.Hour())},
 		{"H", strconv.Itoa(t.Hour())},
 		{"hh", fmt.Sprintf("%02d", hour12)},
@@ -211,6 +213,7 @@ func dateFormatToken(t time.Time, s string) (token, value string, ok bool) {
 		{"T", meridiem(t, true)[:1]},
 		{"t", meridiem(t, false)[:1]},
 		{"Z", t.Format("MST")},
+		{"o", timezoneOffset(t)},
 	}
 	for _, item := range tokens {
 		if strings.HasPrefix(s, item.token) {
@@ -218,6 +221,32 @@ func dateFormatToken(t time.Time, s string) (token, value string, ok bool) {
 		}
 	}
 	return "", "", false
+}
+
+func ordinalSuffix(day int) string {
+	if day%100 >= 11 && day%100 <= 13 {
+		return "th"
+	}
+	switch day % 10 {
+	case 1:
+		return "st"
+	case 2:
+		return "nd"
+	case 3:
+		return "rd"
+	default:
+		return "th"
+	}
+}
+
+func timezoneOffset(t time.Time) string {
+	_, offset := t.Zone()
+	sign := "+"
+	if offset < 0 {
+		sign = "-"
+		offset = -offset
+	}
+	return fmt.Sprintf("%s%02d%02d", sign, offset/3600, (offset%3600)/60)
 }
 
 func meridiem(t time.Time, upper bool) string {
