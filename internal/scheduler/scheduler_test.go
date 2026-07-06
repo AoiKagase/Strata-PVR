@@ -169,6 +169,48 @@ func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
 	}
 }
 
+func TestRunWithSourceLogsManualReserveOverriddenByRule(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Rule Match"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(time.Hour).UnixMilli()
+	oldReserve := `[{"id":"a","title":"Manual Title","start":` + strconv.FormatInt(start, 10) + `,"end":` + strconv.FormatInt(start+3600000, 10) + `,"isManualReserved":true,"channel":{"name":"manual-svc"}}]`
+	if err := os.WriteFile(paths.Reserves, []byte(oldReserve), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := fakeSource{
+		services: []mirakurun.Service{{ID: 1, ServiceID: 101, NetworkID: 1, Name: "svc"}},
+		programs: []mirakurun.Program{
+			{ID: 10, NetworkID: 1, ServiceID: 101, Name: "Rule Match", StartAt: start, Duration: 3600000},
+		},
+		tuners: []mirakurun.Tuner{{Types: []string{"GR"}}},
+	}
+	src.services[0].Channel.Type = "GR"
+	src.services[0].Channel.Channel = "27"
+
+	_, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "OVERRIDEBYRULE: a ") || !strings.Contains(string(logData), "[manual-svc] Manual Title") {
+		t.Fatalf("scheduler log missing manual override line: %s", string(logData))
+	}
+}
+
 func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
 	dir := t.TempDir()
 	paths := Paths{

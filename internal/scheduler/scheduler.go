@@ -35,11 +35,12 @@ type Paths struct {
 }
 
 type Result struct {
-	Matches    int
-	Duplicates int
-	Conflicts  int
-	Skips      int
-	Reserves   int
+	Matches         int
+	Duplicates      int
+	Conflicts       int
+	Skips           int
+	Reserves        int
+	OverridesByRule []chinachu.Program
 }
 
 func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
@@ -126,6 +127,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	}
 
 	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
+	for _, reserve := range result.OverridesByRule {
+		if err := logging.AppendLine(paths.Log, "OVERRIDEBYRULE: %s %s [%s] %s", reserve.ID, legacyISODateTime(reserve.Start), reserve.Channel.Name, reserve.Title); err != nil {
+			return Result{}, err
+		}
+	}
 	for _, reserve := range reserves {
 		startText := legacyISODateTime(reserve.Start)
 		switch {
@@ -284,6 +290,7 @@ func runHook(ctx context.Context, logPath, command string, args []string) error 
 
 func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time) ([]chinachu.Program, Result) {
 	matches := []chinachu.Program{}
+	overridesByRule := []chinachu.Program{}
 	for _, channel := range schedule {
 		for _, program := range channel.Programs {
 			if chinachu.MatchesAnyRule(rules, program) {
@@ -298,6 +305,7 @@ func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, o
 				continue
 			}
 			if containsProgramID(matches, reserve.ID) {
+				overridesByRule = append(overridesByRule, reserve)
 				continue
 			}
 			if updated := chinachu.GetProgramByID(reserve.ID, schedule, nil); updated != nil {
@@ -326,7 +334,7 @@ func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, o
 	applyRecordedFormats(matches, rules)
 
 	reserves := []chinachu.Program{}
-	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts}
+	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts, OverridesByRule: overridesByRule}
 	for _, program := range matches {
 		if program.IsDuplicate {
 			continue
