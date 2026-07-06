@@ -122,6 +122,9 @@ func StripFilename(s string) string {
 }
 
 func jsDateFormat(t time.Time, layout string) string {
+	if strings.HasPrefix(layout, "UTC:") {
+		return jsDateFormat(t.UTC(), strings.TrimPrefix(layout, "UTC:"))
+	}
 	if mask, ok := dateFormatMasks[layout]; ok {
 		layout = mask
 	}

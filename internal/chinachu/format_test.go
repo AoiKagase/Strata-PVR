@@ -57,6 +57,24 @@ func TestFormatRecordedNameLegacyUTCDateMask(t *testing.T) {
 	}
 }
 
+func TestFormatRecordedNameLegacyUTCDatePrefix(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 5, 6, 0, time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+	}
+	got := FormatRecordedName(program, "<date:UTC:yymmdd-HHMM>.m2ts")
+	want := "240701-1405.m2ts"
+	if got != want {
+		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}
+
 func TestFormatRecordedNameLegacyTunerAndEpisodeTokens(t *testing.T) {
 	program := Program{
 		ID:       "abc",
