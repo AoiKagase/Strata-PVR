@@ -1250,7 +1250,7 @@ func (s *server) status() map[string]any {
 		"connectedCount": 0,
 		"feature": map[string]any{
 			"previewer":         false,
-			"streamer":          false,
+			"streamer":          true,
 			"filer":             true,
 			"configurator":      true,
 			"normalizationForm": s.cfg.NormalizationForm,

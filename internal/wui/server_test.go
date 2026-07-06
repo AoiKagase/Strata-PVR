@@ -730,12 +730,16 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	var status struct {
 		Operator  map[string]any `json:"operator"`
 		Scheduler map[string]any `json:"scheduler"`
+		Feature   map[string]any `json:"feature"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
 	if status.Operator["pid"].(float64) != 123 || status.Scheduler["pid"].(float64) != 456 {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+	if status.Feature["streamer"] != true || status.Feature["previewer"] != false || status.Feature["filer"] != true || status.Feature["configurator"] != true {
+		t.Fatalf("unexpected feature flags: %#v", status.Feature)
 	}
 }
 
