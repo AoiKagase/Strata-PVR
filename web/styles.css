@@ -265,6 +265,19 @@ button:disabled {
   resize: vertical;
 }
 
+.compact-json-editor {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfd;
+  color: var(--ink);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+}
+
 .rule-builder {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -277,6 +290,10 @@ button:disabled {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.rule-builder .rule-extra-json {
+  grid-column: span 2;
 }
 
 .rule-builder span {
@@ -306,6 +323,7 @@ input[type="checkbox"] {
 }
 
 .json-editor:focus,
+.compact-json-editor:focus,
 input:focus,
 select:focus,
 button:focus-visible {

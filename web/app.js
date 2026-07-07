@@ -475,6 +475,23 @@
     }).filter(Boolean);
   }
 
+  function readExtraRuleJSON(input) {
+    if (!input || !input.value.trim()) {
+      return {};
+    }
+    try {
+      var extra = JSON.parse(input.value);
+      if (!extra || Array.isArray(extra) || typeof extra !== "object") {
+        showError(new Error("Extra JSON must be an object"));
+        return null;
+      }
+      return extra;
+    } catch (error) {
+      showError(new Error("Extra JSON is invalid"));
+      return null;
+    }
+  }
+
   function addBasicRule() {
     var title = byId("ruleTitle");
     var ignoreTitle = byId("ruleIgnoreTitle");
@@ -493,7 +510,15 @@
     var hourEnd = byId("ruleHourEnd");
     var recordedFormat = byId("ruleRecordedFormat");
     var disabled = byId("ruleDisabled");
+    var extraJSON = byId("ruleExtraJson");
     var rule = {};
+    var extraRule = readExtraRuleJSON(extraJSON);
+    if (extraRule === null) {
+      return;
+    }
+    Object.keys(extraRule).forEach(function (key) {
+      rule[key] = extraRule[key];
+    });
     if (title && title.value.trim()) {
       rule.reserve_titles = [title.value.trim()];
     }
@@ -573,7 +598,7 @@
     if (disabled && disabled.checked) {
       rule.isDisabled = true;
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.sid && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour) {
+    if (!Object.keys(rule).length || (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.sid && !rule.category && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour)) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -626,6 +651,9 @@
       }
       if (disabled) {
         disabled.checked = false;
+      }
+      if (extraJSON) {
+        extraJSON.value = "";
       }
       refresh();
     }).catch(showError);
