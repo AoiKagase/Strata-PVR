@@ -183,3 +183,20 @@ func TestFormatRecordedNameLegacyEpisodeZeroFallback(t *testing.T) {
 		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
 	}
 }
+
+func TestFormatRecordedNameLegacyUndefinedTokens(t *testing.T) {
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 30, 0, 0, time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+		Raw: map[string]json.RawMessage{
+			"episode": json.RawMessage(`7`),
+		},
+	}
+	got := FormatRecordedName(program, "<unknown>-<date:>-<episode:x>.m2ts")
+	want := "undefined-undefined-undefined.m2ts"
+	if got != want {
+		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}

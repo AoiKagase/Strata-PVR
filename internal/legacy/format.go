@@ -17,6 +17,9 @@ func FormatRecordedName(program Program, format string) string {
 	name := tokenRE.ReplaceAllStringFunc(format, func(token string) string {
 		key := strings.TrimSuffix(strings.TrimPrefix(token, "<"), ">")
 		if strings.HasPrefix(key, "date:") {
+			if key == "date:" {
+				return "undefined"
+			}
 			return jsDateFormat(time.UnixMilli(program.Start), strings.TrimPrefix(key, "date:"))
 		}
 		switch {
@@ -44,10 +47,11 @@ func FormatRecordedName(program Program, format string) string {
 			return program.Category
 		default:
 			if strings.HasPrefix(key, "episode:") {
-				width, err := strconv.Atoi(strings.TrimPrefix(key, "episode:"))
-				if err != nil {
-					width = 1
+				widthText := strings.TrimPrefix(key, "episode:")
+				if !digitsOnly(widthText) {
+					return "undefined"
 				}
+				width, _ := strconv.Atoi(widthText)
 				episode, ok := rawEpisode(program)
 				if !ok {
 					return "n"
@@ -61,7 +65,7 @@ func FormatRecordedName(program Program, format string) string {
 				}
 				return strconv.FormatInt(episode, 10)
 			}
-			return token
+			return "undefined"
 		}
 	})
 	dir, file := filepath.Split(name)
@@ -73,6 +77,18 @@ func FormatRecordedName(program Program, format string) string {
 		base = base[:len(base)-size]
 	}
 	return filepath.ToSlash(filepath.Join(dir, base+ext))
+}
+
+func digitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func rawTunerName(program Program) string {
