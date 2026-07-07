@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -448,14 +449,65 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
+	filePath, info, ok := s.staticFileInfo(r.URL.Path)
+	if !ok {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
+		legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
 	switch strings.ToLower(filepath.Ext(r.URL.Path)) {
 	case ".ico", ".png":
 		w.Header().Set("Cache-Control", "private, max-age=86400")
 	}
-	if contentType := legacyStaticContentType(r.URL.Path); contentType != "" {
+	if contentType := legacyStaticContentType(filePath); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
 	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
+}
+
+func (s *server) staticFileInfo(urlPath string) (string, os.FileInfo, bool) {
+	clean := path.Clean("/" + urlPath)
+	rel := strings.TrimPrefix(clean, "/")
+	if rel == "" || strings.HasSuffix(urlPath, "/") {
+		rel = path.Join(rel, "index.html")
+	}
+	filePath := filepath.Join(s.webRoot, filepath.FromSlash(rel))
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return filePath, nil, false
+	}
+	if info.IsDir() {
+		filePath = filepath.Join(filePath, "index.html")
+		info, err = os.Stat(filePath)
+		if err != nil {
+			return filePath, nil, false
+		}
+	}
+	return filePath, info, true
+}
+
+func staticRangeExceedsSize(header string, size int64) bool {
+	if !strings.HasPrefix(header, "bytes=") {
+		return false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(header, "bytes="), "-", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	start, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return false
+	}
+	end := size - 1
+	if parts[1] != "" {
+		if parsed, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+			end = parsed
+		}
+	}
+	return start > size || end > size
 }
 
 func legacyStaticContentType(path string) string {

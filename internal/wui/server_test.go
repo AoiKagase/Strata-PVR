@@ -353,6 +353,21 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	if got := res.Header().Get("Content-Range"); got != "bytes 0-3/15" {
 		t.Fatalf("Content-Range = %q", got)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/missing.html", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound || res.Body.String() != "404 Not Found\n" {
+		t.Fatalf("missing static status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Range", "bytes=16-20")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+		t.Fatalf("invalid range status=%d body=%q", res.Code, res.Body.String())
+	}
 }
 
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
