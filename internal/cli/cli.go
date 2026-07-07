@@ -1246,7 +1246,9 @@ exec "$DAEMON" "$@"
 }
 
 func compatWarnings(cfg *config.Config) []string {
-	warnings := []string{}
+	warnings := []string{
+		"native settings editing: the Go dashboard is intentionally read-only; edit config.json directly or use the legacy-compatible /api/config.json PUT endpoint with care",
+	}
 	if len(cfg.WUIAllowCountries) > 0 {
 		warnings = append(warnings, "wuiAllowCountries: GeoIP country filtering is not implemented; restrict access at firewall/reverse proxy if needed")
 	}

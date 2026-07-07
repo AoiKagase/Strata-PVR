@@ -431,6 +431,7 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	}
 	text := out.String()
 	for _, want := range []string{
+		"WARN native settings editing",
 		"WARN wuiAllowCountries",
 		"WARN wuiMdnsAdvertisement",
 		"WARN operTweeter",

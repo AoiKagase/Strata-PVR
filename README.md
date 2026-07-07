@@ -98,6 +98,7 @@ keeping the existing `/api/schedule.json` data path.
 
 The frontend still needs advanced rule editing and, if desired, advanced
 playback/transcode controls before it can replace every legacy WUI workflow. For
-personal deployments, settings editing may remain intentionally read-only because
-direct `config.json` editing is safer and easier to audit. The frontend does not
-require Node.js, npm, webpack, or any Node-based build step.
+personal deployments, settings editing is intentionally read-only because direct
+`config.json` editing is safer and easier to audit; the legacy-compatible
+`/api/config.json` PUT endpoint remains available for old clients. The frontend
+does not require Node.js, npm, webpack, or any Node-based build step.
