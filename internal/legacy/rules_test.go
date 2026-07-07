@@ -2,6 +2,8 @@ package legacy
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -28,6 +30,29 @@ func TestProgramMatchesRuleOvernightHour(t *testing.T) {
 	rule.IgnoreFlags = []string{"新"}
 	if ProgramMatchesRule(rule, program) {
 		t.Fatal("expected ignore flag to reject")
+	}
+}
+
+func TestSampleRulesLoad(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "rules.sample.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules []Rule
+	if err := json.Unmarshal(b, &rules); err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 3 {
+		t.Fatalf("sample rule count = %d", len(rules))
+	}
+	if len(rules[0].Types) == 0 || rules[0].Hour == nil || rules[0].Duration == nil {
+		t.Fatalf("first sample rule did not load core fields: %#v", rules[0])
+	}
+	if len(rules[1].ReserveTitles) == 0 {
+		t.Fatalf("second sample rule did not load reserve_titles: %#v", rules[1])
+	}
+	if rules[2].SID != 333 {
+		t.Fatalf("third sample rule SID = %d", rules[2].SID)
 	}
 }
 

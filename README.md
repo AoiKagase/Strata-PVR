@@ -108,6 +108,9 @@ from the production PVR directory:
 ./strata-pvr service operator execute
 ```
 
+If `config.json` or `rules.json` is missing, `service ... execute` copies the
+included `config.sample.json` and `rules.sample.json` before starting.
+
 For a conservative first run, start the WUI and operator manually in separate
 terminals and confirm that `log/wui`, `log/operator`, `data/reserves.json`,
 `data/recording.json`, and `data/recorded.json` update as expected. Only after

@@ -38,3 +38,22 @@ func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
 		t.Fatal("unknown field was not preserved in Raw")
 	}
 }
+
+func TestSampleConfigLoads(t *testing.T) {
+	cfg, err := Load(filepath.Join("..", "..", "config.sample.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EffectiveMirakurunPath() == "" {
+		t.Fatal("sample config has no Mirakurun path")
+	}
+	if cfg.RecordedDir == "" {
+		t.Fatal("sample config has no recordedDir")
+	}
+	if cfg.RecordedFormat == "" {
+		t.Fatal("sample config has no recordedFormat")
+	}
+	if len(cfg.WUIUsers) == 0 {
+		t.Fatal("sample config has no WUI user")
+	}
+}

@@ -16,7 +16,7 @@ Description: A Chinachu-compatible PVR for Mirakurun, written in Go.
 - Operator: `app-operator.js`
 - WUI/API: `app-wui.js`, `api/resource-*.json`, `api/script-*.vm.js`
 - Shared behavior: `common/lib/chinachu-common.js`
-- Samples: `config.sample.json`, `rules.sample.json`
+- Samples: `config.sample.json`, `rules.sample.json` are included in the Go tree and covered by parse tests.
 - Static WUI: `web/`
 
 ## CLI Commands And Options
