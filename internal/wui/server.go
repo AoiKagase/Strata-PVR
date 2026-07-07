@@ -663,8 +663,14 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		s.handleJSONFile(w, r, s.paths.Recording, "[]")
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "preview":
+		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
+			return
+		}
 		s.handleProgramPreview(w, r, s.paths.Recording, parts[1])
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
+		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
+			return
+		}
 		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
 		if !requireAPIType(w, r, apiType, "json") {
@@ -682,8 +688,14 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		s.handleRecordedFile(w, r, parts[1], apiType)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "preview":
+		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
+			return
+		}
 		s.handleProgramPreview(w, r, s.paths.Recorded, parts[1])
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
+		if !requireAPIType(w, r, apiType, "mp4", "xspf", "m2ts") {
+			return
+		}
 		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
 		if !requireAPIType(w, r, apiType, "json") {
@@ -696,8 +708,14 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		s.handleProgram(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "logo":
+		if !requireAPIType(w, r, apiType, "png") {
+			return
+		}
 		s.handleChannelLogo(w, r, parts[1], apiType)
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
+		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
+			return
+		}
 		s.handleChannelWatch(w, r, parts[1], apiType)
 	default:
 		if len(parts) > 0 && knownAPIResource(parts[0]) {

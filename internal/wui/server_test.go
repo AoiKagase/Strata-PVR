@@ -199,6 +199,23 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		t.Fatalf("log json status = %d body=%s", res.Code, res.Body.String())
 	}
 
+	for _, target := range []string{
+		"/api/recording/missing/preview",
+		"/api/recording/missing/watch",
+		"/api/recorded/missing/preview",
+		"/api/recorded/missing/watch",
+		"/api/channel/missing/logo",
+		"/api/channel/missing/watch",
+		"/api/channel/missing/logo.jpg",
+	} {
+		req = httptest.NewRequest(http.MethodGet, target, nil)
+		res = httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "415 Unsupported Media Type\n" {
+			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
+		}
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
