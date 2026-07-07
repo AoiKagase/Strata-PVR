@@ -109,7 +109,7 @@ Fields from `config.sample.json` and JS references:
 | `recordedFormat` | Filename template. | partially compatible; supports legacy date masks/tokens including `UTC:` prefix, common `dateformat` masks, ordinal/timezone/millisecond tokens, plus id/type/channel/channel-id/channel-sid/channel-name/tuner/title/fulltitle/subtitle/episode/episode:N/category tokens and filename character stripping. Remaining risk is obscure JavaScript `dateformat` edge cases not covered by Go tests. |
 | `recordingPriority`, `conflictedPriority` | Mirakurun stream priorities. | partially compatible; Go sets `X-Mirakurun-Priority` before program stream requests. Conflict recordings remain limited because Go currently skips conflict reserves. |
 | `storageLowSpaceThresholdMB`, `storageLowSpaceAction`, `storageLowSpaceNotifyTo`, `storageLowSpaceCommand` | Low disk behavior. | partially compatible; `remove`, `stop`, hook command, sendmail notification, and three-hour notification throttling are implemented. |
-| `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Difference: Go waits for all scheduler hook commands to exit; Node started `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` asynchronously. |
+| `schedulerStartCommand`, `schedulerEndCommand`, `epgStartCommand`, `epgEndCommand`, `conflictCommand`, `recordedCommand` | Hook subprocesses. Scheduler and operator hooks are implemented. Go waits for legacy synchronous `epgStartCommand` and `schedulerStartCommand`, while `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` are started asynchronously like the Node scheduler. |
 | `operTweeter`, `operTweeterAuth`, `operTweeterFormat` | Experimental Twitter notifications. | partially compatible; existing config fields are parsed explicitly, but Twitter posting is intentionally not implemented yet because the Node-era `mtwitter` integration has no Go runtime equivalent in this port. |
 
 Unknown fields are preserved by the config loader.
@@ -216,7 +216,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 - Wrapper ensures `log/` and `data/`.
 - Scheduler writes `data/schedule.json`, `data/reserves.json`, and maintains `data/scheduler.pid` while running.
 - Scheduler logs Mirakurun fetch counts, reserve/duplicate/conflict/skip/rule-override/write/tuner-count/duplicate-ID lines, and the Node-style result counters, including legacy `DUPLICATE:`, `!CONFLICT:`, and `OVERRIDEBYRULE:` lines and `dateformat`-style `isoDateTime` timestamps without a timezone colon.
-- Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. Go waits for these hooks to finish.
+- Scheduler runs `epgStartCommand`, `epgEndCommand`, `schedulerStartCommand`, `conflictCommand`, and `schedulerEndCommand`, passing the same path/counter/program arguments as the Node scheduler. `epgStartCommand` and `schedulerStartCommand` are synchronous; `epgEndCommand`, `conflictCommand`, and `schedulerEndCommand` are launched asynchronously.
 - Operator clears `data/recording.json` on start.
 - Operator creates `recordedDir` and nested recorded directories.
 - Operator writes `data/recording.json`, `data/recorded.json`, and may remove manual reserves.

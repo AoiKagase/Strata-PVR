@@ -18,6 +18,11 @@ import (
 
 func TestMain(m *testing.M) {
 	if strings.HasPrefix(filepath.Base(os.Args[0]), "scheduler-hook") {
+		if value := os.Getenv("SCHEDULER_HOOK_SLEEP_MS"); value != "" {
+			if ms, err := strconv.Atoi(value); err == nil {
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+			}
+		}
 		out := os.Args[0] + ".args"
 		f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
@@ -458,7 +463,7 @@ func TestRunWithSourceRunsSchedulerHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data, err := os.ReadFile(hook + ".args")
+	data, err := waitForHookArgs(hook+".args", 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,6 +492,51 @@ func TestRunWithSourceRunsSchedulerHooks(t *testing.T) {
 	if got := strings.Count(string(logData), "SPAWN: "+hook); got != 5 {
 		t.Fatalf("SPAWN log count = %d in %s", got, logData)
 	}
+}
+
+func TestRunHookAsyncDoesNotWaitForProcessExit(t *testing.T) {
+	dir := t.TempDir()
+	hook := copyHookExecutable(t, dir)
+	t.Setenv("SCHEDULER_HOOK_SLEEP_MS", "3000")
+	logPath := filepath.Join(dir, "scheduler.log")
+
+	start := time.Now()
+	if err := runHookAsync(context.Background(), logPath, hook, []string{"async"}); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed >= 2*time.Second {
+		t.Fatalf("runHookAsync waited for hook: %s", elapsed)
+	}
+	if _, err := waitForHookArgs(hook+".args", 1); err != nil {
+		t.Fatal(err)
+	}
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "SPAWN: "+hook) {
+		t.Fatalf("spawn log missing: %s", logData)
+	}
+}
+
+func waitForHookArgs(path string, wantLines int) ([]byte, error) {
+	var lastErr error
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if len(lines) >= wantLines {
+				return data, nil
+			}
+		}
+		lastErr = err
+		time.Sleep(10 * time.Millisecond)
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return os.ReadFile(path)
 }
 
 func copyHookExecutable(t *testing.T, dir string) string {

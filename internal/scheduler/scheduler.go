@@ -125,7 +125,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 	if !simulation {
-		if err := runHook(ctx, paths.Log, cfg.EPGEndCommand, schedulerHookArgs(paths)); err != nil {
+		if err := runHookAsync(ctx, paths.Log, cfg.EPGEndCommand, schedulerHookArgs(paths)); err != nil {
 			return Result{}, err
 		}
 	}
@@ -183,7 +183,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 				reserve.Title,
 				string(payload),
 			}
-			if err := runHook(ctx, paths.Log, cfg.ConflictCommand, args); err != nil {
+			if err := runHookAsync(ctx, paths.Log, cfg.ConflictCommand, args); err != nil {
 				return Result{}, err
 			}
 		case reserve.IsSkip:
@@ -219,7 +219,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			strconv.Itoa(result.Skips),
 			strconv.Itoa(result.Reserves),
 		)
-		if err := runHook(ctx, paths.Log, cfg.SchedulerEndCommand, args); err != nil {
+		if err := runHookAsync(ctx, paths.Log, cfg.SchedulerEndCommand, args); err != nil {
 			return Result{}, err
 		}
 	}
@@ -335,6 +335,25 @@ func runHook(ctx context.Context, logPath, command string, args []string) error 
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("wait hook %s: %w", command, err)
 	}
+	return nil
+}
+
+func runHookAsync(ctx context.Context, logPath, command string, args []string) error {
+	if command == "" {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, command, args...)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start hook %s: %w", command, err)
+	}
+	if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return err
+	}
+	go func() {
+		_ = cmd.Wait()
+	}()
 	return nil
 }
 
