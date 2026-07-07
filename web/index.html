@@ -374,6 +374,10 @@
             <input id="configMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http://127.0.0.1:40772">
           </label>
           <label>
+            <span>旧Mirakurun URL</span>
+            <input id="configSchedulerMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http+unix://%2Fvar%2Frun%2Fmirakurun.sock/">
+          </label>
+          <label>
             <span>録画ディレクトリ</span>
             <input id="configRecordedDir" class="config-form-control" type="text" autocomplete="off" placeholder="./recorded/">
           </label>
@@ -432,6 +436,14 @@
         </div>
         <h4 class="config-form-heading">詳細設定</h4>
         <div class="config-form config-form-detail">
+          <label>
+            <span>実行ユーザーID</span>
+            <input id="configUid" class="config-form-control" type="text" autocomplete="off" placeholder="chinachu または 1001">
+          </label>
+          <label>
+            <span>実行グループID</span>
+            <input id="configGid" class="config-form-control" type="text" autocomplete="off" placeholder="video または 44">
+          </label>
           <label>
             <span>WUIユーザー</span>
             <input id="configWuiUsers" class="config-form-control" type="text" autocomplete="off" placeholder="user:password, user2:password2">

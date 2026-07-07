@@ -1514,7 +1514,8 @@
       return;
     }
     var cfg = state.config || {};
-    setControlValue("configMirakurunPath", cfg.mirakurunPath || cfg.schedulerMirakurunPath);
+    setControlValue("configMirakurunPath", cfg.mirakurunPath);
+    setControlValue("configSchedulerMirakurunPath", cfg.schedulerMirakurunPath);
     setControlValue("configRecordedDir", cfg.recordedDir);
     setControlValue("configRecordedFormat", cfg.recordedFormat);
     setControlValue("configWuiHost", cfg.wuiHost);
@@ -1526,6 +1527,8 @@
     setControlValue("configStorageLowSpaceThresholdMB", cfg.storageLowSpaceThresholdMB);
     setControlValue("configStorageLowSpaceAction", cfg.storageLowSpaceAction);
     setControlValue("configExcludeServices", cfg.excludeServices);
+    setControlValue("configUid", cfg.uid);
+    setControlValue("configGid", cfg.gid);
     setControlValue("configWuiUsers", cfg.wuiUsers);
     setControlValue("configWuiAllowCountries", cfg.wuiAllowCountries);
     setControlValue("configServiceOrder", cfg.serviceOrder);
@@ -1559,6 +1562,9 @@
     var cfg = state.config || {};
     var rows = [
       ["Mirakurun", cfg.mirakurunPath || cfg.schedulerMirakurunPath],
+      ["旧Mirakurun", cfg.schedulerMirakurunPath],
+      ["実行ユーザーID", cfg.uid],
+      ["実行グループID", cfg.gid],
       ["録画ディレクトリ", cfg.recordedDir],
       ["録画ファイル名", cfg.recordedFormat],
       ["WUIホスト", cfg.wuiHost],
@@ -1666,6 +1672,28 @@
     }
   }
 
+  function setOptionalStringOrInteger(config, field, id, label) {
+    var value = controlString(id);
+    if (!value) {
+      delete config[field];
+      return true;
+    }
+    if (/^-?\d+$/.test(value)) {
+      config[field] = Number(value);
+      return true;
+    }
+    if (value.toLowerCase() === "null") {
+      config[field] = null;
+      return true;
+    }
+    if (value.indexOf(",") !== -1) {
+      showError(new Error(label + " はユーザー名/グループ名、整数ID、または null を入力してください"));
+      return false;
+    }
+    config[field] = value;
+    return true;
+  }
+
   function setOptionalPort(config, field, id) {
     var value = controlString(id);
     if (!value) {
@@ -1759,7 +1787,7 @@
       return null;
     }
     setOptionalString(config, "mirakurunPath", "configMirakurunPath");
-    delete config.schedulerMirakurunPath;
+    setOptionalString(config, "schedulerMirakurunPath", "configSchedulerMirakurunPath");
     setOptionalString(config, "recordedDir", "configRecordedDir");
     setOptionalString(config, "recordedFormat", "configRecordedFormat");
     setOptionalString(config, "wuiHost", "configWuiHost");
@@ -1791,6 +1819,12 @@
       config.excludeServices = excludeServices;
     } else {
       delete config.excludeServices;
+    }
+    if (!setOptionalStringOrInteger(config, "uid", "configUid", "実行ユーザーID")) {
+      return null;
+    }
+    if (!setOptionalStringOrInteger(config, "gid", "configGid", "実行グループID")) {
+      return null;
     }
     setOptionalStringList(config, "wuiUsers", "configWuiUsers");
     setOptionalStringList(config, "wuiAllowCountries", "configWuiAllowCountries");
