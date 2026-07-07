@@ -495,6 +495,7 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 const socketIOCompatScript = `(function(global){
   function later(fn){ if (typeof fn === 'function') { setTimeout(fn, 0); } }
+  function repeat(fn, ms){ later(fn); return setInterval(fn, ms); }
   function apiRoot(path) {
     var base = global.location && global.location.pathname ? global.location.pathname.replace(/[^\/]*$/g, '') : '/';
     return base + 'api/' + path;
@@ -514,8 +515,8 @@ const socketIOCompatScript = `(function(global){
     return {
       on: function(name, cb) {
         if (name === 'connect') { later(cb); return this; }
-        if (name === 'status') { later(function(){ fetchJSON('status.json', cb); }); return this; }
-        if (name.indexOf('notify-') === 0) { later(cb); return this; }
+        if (name === 'status') { repeat(function(){ fetchJSON('status.json', cb); }, 5000); return this; }
+        if (name.indexOf('notify-') === 0) { repeat(cb, 15000); return this; }
         return this;
       },
       emit: function(){ return this; },
