@@ -283,6 +283,14 @@ input {
   font-size: 13px;
 }
 
+input[type="checkbox"] {
+  width: auto;
+}
+
+.checkbox-label input {
+  justify-self: start;
+}
+
 .json-editor:focus,
 input:focus,
 select:focus,

@@ -114,6 +114,10 @@
             </select>
           </label>
           <label>
+            <span>SID</span>
+            <input id="ruleSid" type="number" min="1" step="1" inputmode="numeric">
+          </label>
+          <label>
             <span>Category</span>
             <input id="ruleCategory" type="text" autocomplete="off">
           </label>
@@ -148,6 +152,14 @@
           <label>
             <span>End hour</span>
             <input id="ruleHourEnd" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="1-24">
+          </label>
+          <label>
+            <span>Recorded format</span>
+            <input id="ruleRecordedFormat" type="text" autocomplete="off" placeholder="<title>.m2ts">
+          </label>
+          <label class="checkbox-label">
+            <span>Disabled</span>
+            <input id="ruleDisabled" type="checkbox">
           </label>
           <button id="addBasicRuleButton" type="button" title="Add basic rule">Add Basic Rule</button>
         </div>

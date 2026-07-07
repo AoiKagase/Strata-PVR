@@ -443,6 +443,7 @@
     var description = byId("ruleDescription");
     var ignoreDescription = byId("ruleIgnoreDescription");
     var type = byId("ruleType");
+    var sid = byId("ruleSid");
     var category = byId("ruleCategory");
     var channels = byId("ruleChannels");
     var ignoreChannels = byId("ruleIgnoreChannels");
@@ -452,6 +453,8 @@
     var durationMax = byId("ruleDurationMax");
     var hourStart = byId("ruleHourStart");
     var hourEnd = byId("ruleHourEnd");
+    var recordedFormat = byId("ruleRecordedFormat");
+    var disabled = byId("ruleDisabled");
     var rule = {};
     if (title && title.value.trim()) {
       rule.reserve_titles = [title.value.trim()];
@@ -467,6 +470,15 @@
     }
     if (type && type.value) {
       rule.types = [type.value];
+    }
+    var sidText = sid ? sid.value.trim() : "";
+    if (sidText) {
+      var sidValue = Number(sidText);
+      if (!Number.isInteger(sidValue) || sidValue <= 0) {
+        showError(new Error("SID is invalid"));
+        return;
+      }
+      rule.sid = sidValue;
     }
     if (category && category.value.trim()) {
       rule.categories = [category.value.trim()];
@@ -517,7 +529,13 @@
       }
       rule.hour = { start: startHour, end: endHour };
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour) {
+    if (recordedFormat && recordedFormat.value.trim()) {
+      rule.recorded_format = recordedFormat.value.trim();
+    }
+    if (disabled && disabled.checked) {
+      rule.isDisabled = true;
+    }
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.sid && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -537,6 +555,9 @@
       }
       if (category) {
         category.value = "";
+      }
+      if (sid) {
+        sid.value = "";
       }
       if (channels) {
         channels.value = "";
@@ -561,6 +582,12 @@
       }
       if (hourEnd) {
         hourEnd.value = "";
+      }
+      if (recordedFormat) {
+        recordedFormat.value = "";
+      }
+      if (disabled) {
+        disabled.checked = false;
       }
       refresh();
     }).catch(showError);

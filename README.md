@@ -119,7 +119,7 @@ basic Go API actions for reserving schedule items, skipping/unskipping reserves,
 removing manual reserves, stopping active recordings, and opening/downloading or
 deleting recorded items. It also lists auto-reservation rules, can enable,
 disable, delete, add rules from JSON, and add common title/description/type/
-category/channel/flag/duration/hour rules from form fields. Recorded items expose M2TS, direct MP4,
+SID/category/channel/flag/duration/hour/recorded-format rules from form fields. Recorded items expose M2TS, direct MP4,
 720p MP4, low-bitrate MP4, XSPF, download, and delete actions, and active
 recordings expose a live M2TS watch action. The legacy WUI
 asset fallback remains available during compatibility work. Scheduler, operator,
@@ -129,10 +129,10 @@ Mirakurun URL, recorded directory, WUI ports, storage policy, and normalization.
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
-The frontend still needs full rule editing for less common legacy fields such as
-`sid`, `isDisabled`, `recordedFormat`, and arbitrary JSON extensions, plus
-custom playback/transcode controls if desired, before it can replace every
-legacy WUI workflow. For personal deployments, settings editing is intentionally
+The frontend still needs full rule editing for arbitrary JSON extensions and
+fine-grained rule update workflows, plus custom playback/transcode controls if
+desired, before it can replace every legacy WUI workflow. For personal
+deployments, settings editing is intentionally
 read-only because direct `config.json` editing is safer and easier to audit; the
 legacy-compatible `/api/config.json` PUT endpoint remains available for old
 clients. The frontend does not require Node.js, npm, webpack, or any Node-based
