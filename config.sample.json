@@ -29,7 +29,7 @@
   "wuiUsers": [
     "strata:yoshikawa"
   ],
-  "wuiAllowCountries": ["JP"],
+  "wuiAllowCountries": [],
 
   "wuiPort": null,
   "wuiHost": "0.0.0.0",
@@ -41,7 +41,7 @@
   "wuiOpenServer": true,
   "wuiOpenPort": 20772,
   "wuiXFF": false,
-  "wuiMdnsAdvertisement": true,
+  "wuiMdnsAdvertisement": false,
 
   "recordedFormat": "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
   "storageLowSpaceThresholdMB": 3000,

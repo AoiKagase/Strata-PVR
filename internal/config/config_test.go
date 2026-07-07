@@ -56,4 +56,10 @@ func TestSampleConfigLoads(t *testing.T) {
 	if len(cfg.WUIUsers) == 0 {
 		t.Fatal("sample config has no WUI user")
 	}
+	if len(cfg.WUIAllowCountries) != 0 {
+		t.Fatalf("sample config should not enable GeoIP filtering by default: %#v", cfg.WUIAllowCountries)
+	}
+	if cfg.WUIMdnsAdvertisement {
+		t.Fatal("sample config should not enable mDNS advertisement by default")
+	}
 }
