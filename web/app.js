@@ -186,9 +186,21 @@
         row.appendChild(actionButton("Stop", "Stop this recording", function () {
           runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "Stop this recording?");
         }));
-      } else if (name === "watch") {
-        row.appendChild(actionButton("Watch", "Open m2ts stream", function () {
+      } else if (name === "watch-recording") {
+        row.appendChild(actionButton("Watch M2TS", "Open live M2TS stream", function () {
+          window.location.href = "/api/recording/" + encodeURIComponent(program.id) + "/watch.m2ts";
+        }));
+      } else if (name === "watch-m2ts") {
+        row.appendChild(actionButton("Watch M2TS", "Open M2TS stream", function () {
           window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.m2ts";
+        }));
+      } else if (name === "watch-mp4") {
+        row.appendChild(actionButton("Watch MP4", "Open MP4 stream", function () {
+          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.mp4";
+        }));
+      } else if (name === "playlist") {
+        row.appendChild(actionButton("XSPF", "Open XSPF playlist", function () {
+          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.xspf";
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("Download", "Download recorded file", function () {
@@ -444,9 +456,9 @@
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
-    renderList("recordingList", state.recording, "No active recordings", 8, ["stop"]);
+    renderList("recordingList", state.recording, "No active recordings", 8, ["watch-recording", "stop"]);
     renderList("reserveList", state.reserves, "No reserves", 8, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch", "download", "delete-recorded"]);
+    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch-m2ts", "watch-mp4", "playlist", "download", "delete-recorded"]);
     renderSchedule();
     renderRules();
     renderSettings();

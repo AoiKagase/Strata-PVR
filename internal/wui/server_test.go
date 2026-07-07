@@ -444,7 +444,7 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contains    string
 	}{
 		{"/", "text/html", "scheduleChannel"},
-		{"/app.js", "text/javascript", "renderScheduleChannelOptions"},
+		{"/app.js", "text/javascript", "watch.mp4"},
 		{"/styles.css", "text/css", ".schedule-controls"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
