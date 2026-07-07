@@ -16,8 +16,13 @@ Compatibility scaffolding and major runtime pieces are present:
 - `cmd/strata-pvr` is the binary entrypoint.
 - Config loading preserves unknown fields.
 - JSON state helpers write through a temp file and rename.
-- Rule matching and recorded filename formatting are partially implemented.
-- A Mirakurun client supports HTTP and `http+unix` setup.
+- Rule matching covers the core legacy rule fields, including title, ignore
+  title, description, type, channel, category, hour, duration, flags, and
+  configured Unicode normalization.
+- Recorded filename formatting covers the common legacy tokens, date masks,
+  unknown-token `undefined` behavior, and UTC-prefix handling.
+- A Mirakurun client supports HTTP, `http+unix`, and legacy `http://unix:`
+  socket URL setup.
 - `strata-pvr update` performs the first scheduler pass against Mirakurun and
   writes legacy JSON state.
 - `strata-pvr service operator execute` runs the Go operator loop, starts due
@@ -27,8 +32,9 @@ Compatibility scaffolding and major runtime pieces are present:
   static asset serving, rule/reservation mutations, recorded file access,
   recorded/recording TS watch routes, channel logo/watch proxying,
   scheduler/storage/log endpoints, and compatible JSON API endpoints.
-- CLI command names are accepted, with reservation state and rule operations
-  partially implemented.
+- CLI command names are accepted, with reservation, skip/unskip, stop,
+  cleanup, rule mutation, compat check/doctor/diff/backup/wrapper, and
+  service execution paths implemented for the Go runtime.
 
 ## Build
 
