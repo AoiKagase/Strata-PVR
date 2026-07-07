@@ -1078,8 +1078,11 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	req.Header.Set("Range", "bytes=7-10")
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
-		t.Fatalf("file invalid range status=%d body=%q", res.Code, res.Body.String())
+	if res.Code != http.StatusOK || res.Body.String() != "tsdata" {
+		t.Fatalf("file range should be ignored like legacy status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Length"); got != "6" {
+		t.Fatalf("file content-length=%q", got)
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/recorded/abc/file.json", nil)

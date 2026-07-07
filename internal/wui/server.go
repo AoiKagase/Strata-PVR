@@ -1502,10 +1502,6 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	case http.MethodGet, http.MethodHead:
 		switch apiType {
 		case "m2ts":
-			if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
-				legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
-				return
-			}
 			file, err := os.Open(path)
 			if err != nil {
 				legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -1513,8 +1509,12 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			}
 			defer file.Close()
 			w.Header().Set("Content-Type", "video/MP2T")
+			w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.m2ts"`, id))
-			http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+			w.WriteHeader(http.StatusOK)
+			if r.Method == http.MethodGet {
+				_, _ = io.Copy(w, file)
+			}
 		case "json":
 			writePrettyJSON(w, http.StatusOK, fileStatJSON(info))
 		default:
