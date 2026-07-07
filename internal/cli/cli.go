@@ -1188,6 +1188,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			{"config.json", validateJSONFile("config.json", "")},
 			{"rules.json", validateJSONFile("rules.json", "")},
 			{"data directory", validateDir("data")},
+			{"log directory", validateWritableDir("log")},
 			{"recordedDir", recordedDirErr},
 			{"data/schedule.json", validateJSONFile(filepath.Join("data", "schedule.json"), "")},
 			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},

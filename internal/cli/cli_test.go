@@ -208,6 +208,9 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	if err := os.Mkdir("recorded", 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Mkdir("log", 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Mkdir("web", 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -236,6 +239,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"OK config.json",
 		"OK rules.json",
 		"OK data directory",
+		"OK log directory",
 		"OK recordedDir",
 		"OK data/schedule.json",
 		"OK data/reserves.json",
@@ -432,6 +436,9 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir("recorded", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("log", 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir("web", 0o755); err != nil {
