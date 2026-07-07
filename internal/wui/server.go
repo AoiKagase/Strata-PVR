@@ -2234,8 +2234,6 @@ func (s *server) status() map[string]any {
 			"filer":             true,
 			"configurator":      true,
 			"normalizationForm": s.cfg.NormalizationForm,
-			"goImplementation":  true,
-			"partialCompatible": true,
 		},
 		"system": map[string]any{"core": runtime.NumCPU()},
 		"operator": map[string]any{

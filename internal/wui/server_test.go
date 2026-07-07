@@ -1948,6 +1948,12 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	if status.Feature["streamer"] != true || status.Feature["previewer"] != true || status.Feature["filer"] != true || status.Feature["configurator"] != true {
 		t.Fatalf("unexpected feature flags: %#v", status.Feature)
 	}
+	if _, ok := status.Feature["goImplementation"]; ok {
+		t.Fatalf("status feature should not expose Go-only flags: %#v", status.Feature)
+	}
+	if _, ok := status.Feature["partialCompatible"]; ok {
+		t.Fatalf("status feature should not expose compatibility flags: %#v", status.Feature)
+	}
 }
 
 func TestAPIAuth(t *testing.T) {
