@@ -1597,6 +1597,12 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
+		if r.URL.Query().Has("ss") {
+			if !s.streamLegacyM2TSOffset(w, r, filePath) {
+				return
+			}
+			return
+		}
 		file, err := os.Open(filePath)
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -1657,6 +1663,36 @@ func (s *server) checkLegacyWatchStart(w http.ResponseWriter, r *http.Request, f
 	return true
 }
 
+func (s *server) streamLegacyM2TSOffset(w http.ResponseWriter, r *http.Request, filePath string) bool {
+	format, err := probeMediaFormat(r.Context(), filePath)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "error %v", err)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return false
+	}
+	startSeconds, _ := strconv.Atoi(legacyWatchStart(r.URL.Query().Get("ss")))
+	offset := int64(format.BitRate/8) * int64(startSeconds-2)
+	offset -= offset % 188
+	if offset < 0 {
+		offset = 0
+	}
+	totalSize := format.Size - offset
+	if totalSize < 0 {
+		totalSize = 0
+	}
+	w.Header().Set("Content-Type", "video/MP2T")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Length", strconv.FormatInt(totalSize, 10))
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return true
+	}
+	if err := copyFileFromOffset(w, filePath, offset); err != nil {
+		return false
+	}
+	return true
+}
+
 func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
 	data, err := runFFprobeFormat(ctx, filePath)
 	if err != nil {
@@ -1671,6 +1707,42 @@ func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
 		return 0, err
 	}
 	return strconv.ParseFloat(value.Format.Duration, 64)
+}
+
+type mediaFormat struct {
+	Duration float64
+	Size     int64
+	BitRate  int64
+}
+
+func probeMediaFormat(ctx context.Context, filePath string) (mediaFormat, error) {
+	data, err := runFFprobeFormat(ctx, filePath)
+	if err != nil {
+		return mediaFormat{}, err
+	}
+	var value struct {
+		Format struct {
+			Duration string `json:"duration"`
+			Size     string `json:"size"`
+			BitRate  string `json:"bit_rate"`
+		} `json:"format"`
+	}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return mediaFormat{}, err
+	}
+	duration, err := strconv.ParseFloat(value.Format.Duration, 64)
+	if err != nil {
+		return mediaFormat{}, err
+	}
+	size, err := strconv.ParseInt(value.Format.Size, 10, 64)
+	if err != nil {
+		return mediaFormat{}, err
+	}
+	bitRate, err := strconv.ParseInt(value.Format.BitRate, 10, 64)
+	if err != nil {
+		return mediaFormat{}, err
+	}
+	return mediaFormat{Duration: duration, Size: size, BitRate: bitRate}, nil
 }
 
 func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, initialBytes int64) {

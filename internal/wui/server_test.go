@@ -1184,6 +1184,37 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedWatchM2TSLegacyStartOffset(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	body := strings.Repeat("A", 188) + strings.Repeat("B", 188)
+	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"376","bit_rate":"752"}}`, nil)
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=4", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("m2ts offset status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Accept-Ranges"); got != "bytes" {
+		t.Fatalf("Accept-Ranges = %q", got)
+	}
+	if got := res.Header().Get("Content-Length"); got != "188" {
+		t.Fatalf("Content-Length = %q", got)
+	}
+	if got := res.Body.String(); got != strings.Repeat("B", 188) {
+		t.Fatalf("unexpected offset body: %q", got)
+	}
+}
+
 func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
