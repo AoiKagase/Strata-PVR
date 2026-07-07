@@ -85,6 +85,23 @@ Go binary without overwriting any file automatically:
 ./strata-pvr compat wrapper > strata-pvr-wrapper
 ```
 
+## Personal Deployment Checklist
+
+Before replacing any existing command wrapper or service, verify the Go runtime
+from the production PVR directory:
+
+```sh
+./strata-pvr compat backup
+./strata-pvr compat doctor
+./strata-pvr update -s
+./strata-pvr reserves
+```
+
+For a conservative first run, start the WUI and operator manually in separate
+terminals and confirm that `log/wui`, `log/operator`, `data/reserves.json`,
+`data/recording.json`, and `data/recorded.json` update as expected. Only after
+that should generated init scripts or a compatibility wrapper be installed.
+
 ## Frontend
 
 The repository now includes an initial native Strata PVR frontend under `web/`.
