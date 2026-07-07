@@ -104,6 +104,8 @@ from the production PVR directory:
 ./strata-pvr compat doctor
 ./strata-pvr update -s
 ./strata-pvr reserves
+./strata-pvr service wui execute
+./strata-pvr service operator execute
 ```
 
 For a conservative first run, start the WUI and operator manually in separate

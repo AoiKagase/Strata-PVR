@@ -282,6 +282,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"NEXT strata-pvr compat backup",
 		"NEXT strata-pvr update -s",
 		"NEXT strata-pvr reserves",
+		"NEXT strata-pvr service wui execute",
+		"NEXT strata-pvr service operator execute",
 		"WARN strata-pvr binary not found in the current directory",
 	} {
 		if !strings.Contains(text, want) {

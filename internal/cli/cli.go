@@ -1336,6 +1336,8 @@ func writeCompatNextSteps(stdout io.Writer) {
 		"compat backup",
 		"update -s",
 		"reserves",
+		"service wui execute",
+		"service operator execute",
 	} {
 		fmt.Fprintf(stdout, "NEXT strata-pvr %s\n", step)
 	}
