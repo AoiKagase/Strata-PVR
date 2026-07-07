@@ -1113,6 +1113,8 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: `Title <&"'> One`, Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"9","bit_rate":"2400"}}`, nil)
+	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf?prefix=/api/recorded/abc/&ext=m2ts", nil)
@@ -1158,6 +1160,8 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
 	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m&t=30&mode=download&ext=mp4", nil)
 	res := httptest.NewRecorder()
@@ -1196,6 +1200,8 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "mpegtsdata", &gotInput, &gotArgs)
 	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?t=30&b:v=1m", nil)
 	res := httptest.NewRecorder()
@@ -1330,7 +1336,7 @@ func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
 	}
 }
 
-func TestAPIRecordedWatchProbeError(t *testing.T) {
+func TestAPIRecordedWatchXSPFProbeError(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recorded.m2ts")
@@ -1343,7 +1349,7 @@ func TestAPIRecordedWatchProbeError(t *testing.T) {
 	restoreProbe := installFakeFFprobe(t, "", fmt.Errorf("fake ffprobe error"))
 	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=15", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusInternalServerError || res.Body.String() != "500 Internal Server Error\n" {
@@ -1380,6 +1386,8 @@ func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
 	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{VAAPIEnabled: true, VAAPIDevice: "/dev/dri/test"})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=1280x720", nil)
 	res := httptest.NewRecorder()

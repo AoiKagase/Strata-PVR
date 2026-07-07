@@ -1575,6 +1575,11 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
+	if !requirePID {
+		if !s.checkLegacyRecordedWatchProbe(w, r, filePath) {
+			return
+		}
+	}
 	switch apiType {
 	case "xspf":
 		ext := r.URL.Query().Get("ext")
@@ -1685,6 +1690,21 @@ func (s *server) checkLegacyWatchStart(w http.ResponseWriter, r *http.Request, f
 	start, _ := strconv.Atoi(legacyWatchStart(r.URL.Query().Get("ss")))
 	if float64(start) > duration {
 		legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+		return false
+	}
+	return true
+}
+
+func (s *server) checkLegacyRecordedWatchProbe(w http.ResponseWriter, r *http.Request, filePath string) bool {
+	data, err := runFFprobeFormat(r.Context(), filePath)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "error %v", err)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return false
+	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return false
 	}
 	return true
