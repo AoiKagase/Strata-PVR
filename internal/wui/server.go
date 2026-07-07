@@ -55,21 +55,25 @@ var runFFmpegPreview = func(ctx context.Context, args ...string) ([]byte, error)
 var runFFmpegStream = func(ctx context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	cmd.Stdin = input
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, nil, err
-	}
-	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := cmd.Start(); err != nil {
 		return nil, nil, err
 	}
-	go func() {
-		_, _ = io.Copy(io.Discard, stderr)
-	}()
-	return stdout, cmd.Wait, nil
+	wait := func() error {
+		if err := cmd.Wait(); err != nil {
+			if text := strings.TrimSpace(stderr.String()); text != "" {
+				return fmt.Errorf("%w: %s", err, text)
+			}
+			return err
+		}
+		return nil
+	}
+	return stdout, wait, nil
 }
 
 var runFFprobeFormat = func(ctx context.Context, filePath string) ([]byte, error) {
@@ -2393,7 +2397,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	}
 	args := []string{}
 	if !q.Has("debug") {
-		args = append(args, "-v", "0")
+		args = append(args, "-v", "error")
 	}
 	if cfg.VAAPIEnabled {
 		device := cfg.VAAPIDevice
@@ -2411,6 +2415,9 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	}
 	if duration := q.Get("t"); duration != "" {
 		args = append(args, "-t", duration)
+	}
+	if format == "mp4" {
+		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn")
 	}
 	if cfg.VAAPIEnabled {
 		filter := "format=nv12|vaapi,hwupload,deinterlace_vaapi"
@@ -2436,6 +2443,9 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	}
 	if audioCodec != "" {
 		args = append(args, "-c:a", audioCodec)
+		if format == "mp4" && audioCodec != "copy" {
+			args = append(args, "-ac", "2")
+		}
 	}
 	if size := q.Get("s"); size != "" && !cfg.VAAPIEnabled {
 		args = append(args, "-s", size)

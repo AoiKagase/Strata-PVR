@@ -1240,13 +1240,50 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mp4", "-c:v h264", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-ss 2", "-t 30"} {
+	for _, want := range []string{"-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v h264", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-ss 2", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
 	}
 	if strings.Contains(joined, "-c:a aac") {
 		t.Fatalf("legacy b:v path should omit explicit audio codec: %s", joined)
+	}
+	if strings.Contains(joined, "-ac 2") {
+		t.Fatalf("legacy b:v path should not force audio channels without an explicit audio codec: %s", joined)
+	}
+}
+
+func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-v error", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:a aac", "-ac 2"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+	if gotInput != "tsdata" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 }
 
