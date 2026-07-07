@@ -962,8 +962,9 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 		if _, err := storage.BackupFile(p.recorded); err != nil {
 			return err
 		}
+		return storage.WriteJSONAtomic(p.recorded, kept, false)
 	}
-	return storage.WriteJSONAtomic(p.recorded, kept, false)
+	return nil
 }
 
 func dumpJSONFile(path, empty string, stdout io.Writer) error {

@@ -1480,3 +1480,54 @@ func TestStopSimulationDoesNotWrite(t *testing.T) {
 		t.Fatalf("simulation mutated reserves: %#v", reserves)
 	}
 }
+
+func TestCleanupDoesNotRewriteWhenNothingRemoved(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(dir, "exists.m2ts")
+	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recordedPath := filepath.Join("data", "recorded.json")
+	original := `[{"id":"exists","recorded":"` + filepath.ToSlash(existing) + `"}]`
+	if err := os.WriteFile(recordedPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(recordedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"cleanup"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	afterInfo, err := os.Stat(recordedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !afterInfo.ModTime().Equal(info.ModTime()) {
+		t.Fatalf("cleanup rewrote recorded.json without removals: before=%s after=%s", info.ModTime(), afterInfo.ModTime())
+	}
+	after, err := os.ReadFile(recordedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != original {
+		t.Fatalf("recorded.json changed without removals: %s", string(after))
+	}
+	backups, err := filepath.Glob(filepath.Join("data", "recorded.json.bak-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("cleanup created backups without removals: %#v", backups)
+	}
+}
