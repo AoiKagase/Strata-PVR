@@ -322,6 +322,31 @@ func TestCompatStateSummaryReportsArrayLengths(t *testing.T) {
 	}
 }
 
+func TestCompatStateWarningsDetectActiveRecording(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "recording.json"), []byte(`[{"id":"rec"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	warnings := compatStateWarnings()
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "active recordings detected: 1") {
+		t.Fatalf("active recording warnings = %#v", warnings)
+	}
+	if err := os.WriteFile(filepath.Join("data", "recording.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if warnings := compatStateWarnings(); len(warnings) != 0 {
+		t.Fatalf("idle recording warnings = %#v", warnings)
+	}
+}
+
 func installFakeCompatCommand(t *testing.T, dir, name string) {
 	t.Helper()
 	bin := filepath.Join(dir, "bin")

@@ -1220,6 +1220,9 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			if args[0] == "doctor" {
 				writeCompatConfigSummary(stdout, cfg)
 				writeCompatStateSummary(stdout)
+				for _, warning := range compatStateWarnings() {
+					fmt.Fprintf(stdout, "WARN %s\n", warning)
+				}
 				for _, warning := range compatDoctorWarnings() {
 					fmt.Fprintf(stdout, "WARN %s\n", warning)
 				}
@@ -1317,6 +1320,14 @@ func jsonArrayLength(path string) (int, error) {
 		return 0, err
 	}
 	return len(values), nil
+}
+
+func compatStateWarnings() []string {
+	recording, err := jsonArrayLength(filepath.Join("data", "recording.json"))
+	if err != nil || recording == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("active recordings detected: %d; avoid migration, wrapper replacement, or service changes until recording finishes", recording)}
 }
 
 func compatWrapperScript() string {
