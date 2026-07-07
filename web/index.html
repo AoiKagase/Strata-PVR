@@ -1,126 +1,215 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Strata PVR</title>
+  <title>Strata PVR WUI</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>Strata PVR</h1>
-      <p>A Chinachu-compatible PVR for Mirakurun, written in Go.</p>
+      <p>Chinachu compatible WUI for Mirakurun</p>
     </div>
-    <div id="statusBadge" class="status-badge">Loading</div>
+    <div id="statusBadge" class="status-badge" aria-live="polite">読み込み中</div>
   </header>
+
+  <nav class="main-nav" aria-label="WUI sections">
+    <div class="main-nav-links">
+      <a href="#dashboard" data-view-link="dashboard" class="active">ダッシュボード</a>
+      <a href="#schedule" data-view-link="schedule">番組表</a>
+      <a href="#reserves" data-view-link="reserves">予約</a>
+      <a href="#recorded" data-view-link="recorded">録画済み</a>
+      <a href="#rules" data-view-link="rules">ルール</a>
+      <a href="#logs" data-view-link="logs">ログ</a>
+      <a href="#settings" data-view-link="settings">設定</a>
+    </div>
+    <div class="schedule-nav-controls" aria-label="番組表フィルタ">
+      <label for="scheduleStreamChannel">視聴Ch</label>
+      <select id="scheduleStreamChannel">
+        <option value="">選択</option>
+      </select>
+      <label for="scheduleType">種別</label>
+      <select id="scheduleType">
+        <option value="">すべて</option>
+        <option value="GR">GR</option>
+        <option value="BS">BS</option>
+        <option value="CS">CS</option>
+        <option value="EX">EX</option>
+      </select>
+      <label for="scheduleDay">日付</label>
+      <select id="scheduleDay"></select>
+      <label for="scheduleGenre">ジャンル</label>
+      <select id="scheduleGenre">
+        <option value="">全ジャンル</option>
+      </select>
+      <label for="scheduleHiddenChannel">隠すCh</label>
+      <select id="scheduleHiddenChannel">
+        <option value="">選択</option>
+      </select>
+      <button id="scheduleHideChannelButton" type="button">隠す</button>
+      <button id="scheduleClearHiddenButton" type="button">解除</button>
+    </div>
+  </nav>
 
   <main class="workspace">
     <section class="overview" aria-label="Overview">
-      <div class="metric">
-        <span class="metric-label">Reserves</span>
+      <a class="metric" href="#reserves">
+        <span class="metric-label">予約</span>
         <strong id="reserveCount">0</strong>
-      </div>
-      <div class="metric">
-        <span class="metric-label">Recording</span>
+      </a>
+      <a class="metric" href="#dashboard">
+        <span class="metric-label">録画中</span>
         <strong id="recordingCount">0</strong>
-      </div>
-      <div class="metric">
-        <span class="metric-label">Recorded</span>
+      </a>
+      <a class="metric" href="#recorded">
+        <span class="metric-label">録画済み</span>
         <strong id="recordedCount">0</strong>
-      </div>
-      <div class="metric">
-        <span class="metric-label">Channels</span>
+      </a>
+      <a class="metric" href="#schedule">
+        <span class="metric-label">チャンネル</span>
         <strong id="channelCount">0</strong>
-      </div>
-      <div class="metric">
-        <span class="metric-label">Rules</span>
+      </a>
+      <a class="metric" href="#rules">
+        <span class="metric-label">ルール</span>
         <strong id="ruleCount">0</strong>
-      </div>
+      </a>
     </section>
 
-    <section class="content-grid">
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Recording</h2>
-          <button id="refreshButton" type="button" title="Refresh">Refresh</button>
+    <section class="view active" data-view="dashboard">
+      <div class="view-head">
+        <div>
+          <h2>ダッシュボード</h2>
+          <p>現在の録画状態、直近の予約、最近の録画だけを確認します。</p>
         </div>
-        <div id="recordingList" class="list empty">No active recordings</div>
-      </section>
-
-      <section class="panel">
-        <h2>Reserves</h2>
-        <div id="reserveList" class="list empty">No reserves</div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Recently Recorded</h2>
-          <div class="media-controls" aria-label="Playback controls">
-            <input id="playbackStart" type="number" min="0" step="1" inputmode="numeric" placeholder="start min" aria-label="Playback start minutes">
-            <input id="playbackDuration" type="number" min="0" step="1" inputmode="numeric" placeholder="length min" aria-label="Playback duration minutes">
-            <select id="playbackQuality" aria-label="Playback quality">
-              <option value="">Source</option>
-              <option value="720p">720p</option>
-              <option value="low">Low</option>
-            </select>
+        <button id="refreshButton" type="button" title="Refresh">更新</button>
+      </div>
+      <section class="content-grid">
+        <section class="panel">
+          <h3>録画中</h3>
+          <div id="recordingList" class="list empty">録画中の番組はありません</div>
+        </section>
+        <section class="panel">
+          <h3>予約</h3>
+          <div id="reserveList" class="list empty">予約はありません</div>
+        </section>
+        <section class="panel wide-panel">
+          <div class="panel-head">
+            <h3>最近の録画</h3>
+            <div class="media-controls" aria-label="Playback controls">
+              <label class="control-field" for="playbackStart">
+                <span>開始分</span>
+                <input id="playbackStart" type="number" min="0" step="1" inputmode="numeric">
+              </label>
+              <label class="control-field" for="playbackDuration">
+                <span>長さ分</span>
+                <input id="playbackDuration" type="number" min="0" step="1" inputmode="numeric">
+              </label>
+              <label class="control-field" for="playbackQuality">
+                <span>画質</span>
+                <select id="playbackQuality">
+                  <option value="">元データ</option>
+                  <option value="720p">720p</option>
+                  <option value="low">低画質</option>
+                </select>
+              </label>
+            </div>
           </div>
-        </div>
-        <div id="recordedList" class="list empty">No recorded items</div>
+          <div id="recordedList" class="list empty">録画済み番組はありません</div>
+        </section>
       </section>
+    </section>
 
+    <section class="view" data-view="schedule" hidden>
+      <div class="view-head">
+        <div>
+          <h2>番組表</h2>
+          <p>旧Chinachuに近い時間軸・チャンネル軸のテレビ番組表です。</p>
+        </div>
+        <div class="schedule-controls" aria-label="Schedule controls">
+          <label class="control-field" for="scheduleChannel">
+            <span>表示チャンネル</span>
+            <select id="scheduleChannel">
+              <option value="">すべて</option>
+            </select>
+          </label>
+          <label class="control-field" for="scheduleWindow">
+            <span>範囲</span>
+            <select id="scheduleWindow">
+              <option value="24">24時間</option>
+              <option value="72">72時間</option>
+              <option value="0">今後すべて</option>
+            </select>
+          </label>
+          <label class="control-field" for="scheduleLimit">
+            <span>表示数</span>
+            <select id="scheduleLimit">
+              <option value="50">50件</option>
+              <option value="100">100件</option>
+              <option value="250">250件</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="scheduleChannelTools" class="channel-tools" hidden></div>
+      <div id="scheduleList" class="list empty">番組表データがありません</div>
+    </section>
+
+    <section class="view" data-view="reserves" hidden>
+      <div class="view-head">
+        <div>
+          <h2>予約</h2>
+          <p>手動予約、自動予約、スキップ状態を確認します。</p>
+        </div>
+      </div>
+      <div id="reserveListPage" class="list empty">予約はありません</div>
+    </section>
+
+    <section class="view" data-view="recorded" hidden>
+      <div class="view-head">
+        <div>
+          <h2>録画済み</h2>
+          <p>録画済み番組の再生、変換、ダウンロード、削除を行います。</p>
+        </div>
+      </div>
+      <div id="recordedListPage" class="list empty">録画済み番組はありません</div>
+    </section>
+
+    <section class="view" data-view="rules" hidden>
+      <div class="view-head">
+        <div>
+          <h2>ルール</h2>
+          <p>Chinachu互換の予約ルールを編集します。</p>
+        </div>
+        <div class="panel-actions">
+          <button id="addRuleButton" type="button" title="ルールを追加">JSON追加</button>
+          <button id="saveRuleButton" type="button" title="編集中のルールを保存">JSON保存</button>
+        </div>
+      </div>
       <section class="panel">
-        <div class="panel-head">
-          <h2>Schedule</h2>
-          <div class="schedule-controls" aria-label="Schedule controls">
-            <select id="scheduleChannel" aria-label="Schedule channel">
-              <option value="">All channels</option>
-            </select>
-            <select id="scheduleWindow" aria-label="Schedule time range">
-              <option value="24">Next 24h</option>
-              <option value="72">Next 72h</option>
-              <option value="0">All upcoming</option>
-            </select>
-            <select id="scheduleLimit" aria-label="Schedule item limit">
-              <option value="20">20 items</option>
-              <option value="50">50 items</option>
-              <option value="100">100 items</option>
-            </select>
-          </div>
-        </div>
-        <div id="scheduleList" class="list empty">No schedule data</div>
-      </section>
-
-      <section class="panel wide-panel">
-        <div class="panel-head">
-          <h2>Rules</h2>
-          <div class="panel-actions">
-            <button id="addRuleButton" type="button" title="Add rule">Add Rule</button>
-            <button id="saveRuleButton" type="button" title="Save edited rule">Save Rule</button>
-          </div>
-        </div>
-        <div id="ruleList" class="list empty">No rules</div>
+        <div id="ruleList" class="list empty">ルールはありません</div>
         <div class="rule-builder">
           <label>
-            <span>Title</span>
+            <span>タイトル</span>
             <input id="ruleTitle" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Ignore title</span>
+            <span>除外タイトル</span>
             <input id="ruleIgnoreTitle" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Description</span>
+            <span>説明</span>
             <input id="ruleDescription" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Ignore description</span>
+            <span>除外説明</span>
             <input id="ruleIgnoreDescription" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Type</span>
+            <span>種別</span>
             <select id="ruleType">
-              <option value="">Any</option>
+              <option value="">すべて</option>
               <option value="GR">GR</option>
               <option value="BS">BS</option>
               <option value="CS">CS</option>
@@ -132,93 +221,137 @@
             <input id="ruleSid" type="number" min="1" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>Category</span>
+            <span>カテゴリ</span>
             <input id="ruleCategory" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Channels</span>
-            <input id="ruleChannels" type="text" autocomplete="off" placeholder="comma separated">
+            <span>チャンネル</span>
+            <input id="ruleChannels" type="text" autocomplete="off" placeholder="カンマ区切り">
           </label>
           <label>
-            <span>Ignore channels</span>
-            <input id="ruleIgnoreChannels" type="text" autocomplete="off" placeholder="comma separated">
+            <span>除外チャンネル</span>
+            <input id="ruleIgnoreChannels" type="text" autocomplete="off" placeholder="カンマ区切り">
           </label>
           <label>
-            <span>Flags</span>
-            <input id="ruleFlags" type="text" autocomplete="off" placeholder="comma separated">
+            <span>フラグ</span>
+            <input id="ruleFlags" type="text" autocomplete="off" placeholder="カンマ区切り">
           </label>
           <label>
-            <span>Ignore flags</span>
-            <input id="ruleIgnoreFlags" type="text" autocomplete="off" placeholder="comma separated">
+            <span>除外フラグ</span>
+            <input id="ruleIgnoreFlags" type="text" autocomplete="off" placeholder="カンマ区切り">
           </label>
           <label>
-            <span>Min duration</span>
-            <input id="ruleDurationMin" type="number" min="0" step="1" inputmode="numeric" placeholder="min">
+            <span>最短分</span>
+            <input id="ruleDurationMin" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>Max duration</span>
-            <input id="ruleDurationMax" type="number" min="0" step="1" inputmode="numeric" placeholder="min">
+            <span>最長分</span>
+            <input id="ruleDurationMax" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>Start hour</span>
+            <span>開始時</span>
             <input id="ruleHourStart" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0-23">
           </label>
           <label>
-            <span>End hour</span>
+            <span>終了時</span>
             <input id="ruleHourEnd" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="1-24">
           </label>
           <label>
-            <span>Recorded format</span>
+            <span>録画ファイル名</span>
             <input id="ruleRecordedFormat" type="text" autocomplete="off" placeholder="<title>.m2ts">
           </label>
           <label class="checkbox-label">
-            <span>Disabled</span>
+            <span>無効</span>
             <input id="ruleDisabled" type="checkbox">
           </label>
           <label class="rule-extra-json">
-            <span>Extra JSON</span>
-            <textarea id="ruleExtraJson" class="compact-json-editor" spellcheck="false" aria-label="Extra rule JSON" placeholder="{ &quot;field&quot;: &quot;value&quot; }"></textarea>
+            <span>追加JSON</span>
+            <textarea id="ruleExtraJson" class="compact-json-editor" spellcheck="false" aria-label="追加ルールJSON" placeholder="{ &quot;field&quot;: &quot;value&quot; }"></textarea>
           </label>
-          <button id="addBasicRuleButton" type="button" title="Add basic rule">Add Basic Rule</button>
+          <button id="addBasicRuleButton" type="button" title="フォームの内容からルールを追加">フォームから追加</button>
         </div>
-        <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="Rule JSON">{
+        <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="ルールJSON">{
   "types": ["GR"],
   "reserve_titles": ["title"]
 }</textarea>
       </section>
+    </section>
 
-      <section class="panel wide-panel">
+    <section class="view" data-view="logs" hidden>
+      <div class="view-head">
+        <div>
+          <h2>ログ</h2>
+          <p>スケジューラ / オペレータ / WUI のログ末尾を確認します。</p>
+        </div>
+        <button id="refreshLogsButton" type="button" title="ログを更新">ログ更新</button>
+      </div>
+      <div class="log-grid">
+        <section>
+          <h3>スケジューラ</h3>
+          <pre id="schedulerLog" class="log-view">ログはありません</pre>
+        </section>
+        <section>
+          <h3>オペレータ</h3>
+          <pre id="operatorLog" class="log-view">ログはありません</pre>
+        </section>
+        <section>
+          <h3>WUI</h3>
+          <pre id="wuiLog" class="log-view">ログはありません</pre>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" data-view="settings" hidden>
+      <div class="view-head">
+        <div>
+          <h2>設定</h2>
+          <p>Chinachu互換設定の現在値を確認します。</p>
+        </div>
+        <button id="forceSchedulerButton" type="button" title="スケジューラを実行">スケジューラ実行</button>
+      </div>
+      <div class="settings-grid">
+        <section class="panel">
+          <h3>設定</h3>
+          <dl id="settingsList" class="settings-list">
+            <dt>設定</dt>
+            <dd>読み込み中</dd>
+          </dl>
+        </section>
+        <section class="panel">
+          <h3>ストレージ</h3>
+          <dl id="storageList" class="settings-list">
+            <dt>ストレージ</dt>
+            <dd>読み込み中</dd>
+          </dl>
+        </section>
+      </div>
+      <section class="panel config-editor-panel">
         <div class="panel-head">
-          <h2>Logs</h2>
-          <button id="refreshLogsButton" type="button" title="Refresh logs">Refresh Logs</button>
-        </div>
-        <div class="log-grid">
-          <section>
-            <h3>Scheduler</h3>
-            <pre id="schedulerLog" class="log-view">No log data</pre>
-          </section>
-          <section>
-            <h3>Operator</h3>
-            <pre id="operatorLog" class="log-view">No log data</pre>
-          </section>
-          <section>
-            <h3>WUI</h3>
-            <pre id="wuiLog" class="log-view">No log data</pre>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel wide-panel">
-        <h2>Settings</h2>
-        <dl id="settingsList" class="settings-list">
           <div>
-            <dt>Configuration</dt>
-            <dd>Loading</dd>
+            <h3>設定JSON</h3>
+            <p>保存すると config.json を更新します。反映には再起動が必要な項目があります。</p>
           </div>
-        </dl>
+          <div class="row-actions">
+            <button id="resetConfigButton" type="button" title="現在の設定を再読み込み">再読込</button>
+            <button id="saveConfigButton" type="button" title="設定JSONを保存">設定保存</button>
+          </div>
+        </div>
+        <textarea id="configEditor" class="json-editor config-json-editor" spellcheck="false" aria-label="設定JSON"></textarea>
       </section>
     </section>
   </main>
+
+  <dialog id="programDialog" class="program-dialog" aria-labelledby="programDialogTitle">
+    <div class="program-dialog-head">
+      <div>
+        <span id="programDialogMeta" class="program-dialog-meta"></span>
+        <h2 id="programDialogTitle">番組詳細</h2>
+      </div>
+      <button id="programDialogClose" class="small-button" type="button">閉じる</button>
+    </div>
+    <p id="programDialogDescription" class="program-dialog-description"></p>
+    <div id="programDialogActions" class="program-dialog-actions"></div>
+  </dialog>
 
   <script src="/app.js"></script>
 </body>

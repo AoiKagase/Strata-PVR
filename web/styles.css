@@ -24,6 +24,9 @@ body {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -31,6 +34,80 @@ body {
   padding: 24px clamp(18px, 4vw, 48px);
   border-bottom: 1px solid var(--line);
   background: #ffffff;
+}
+
+.main-nav {
+  position: sticky;
+  top: 86px;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 clamp(14px, 3vw, 40px);
+  border-bottom: 1px solid var(--line);
+  background: #edf3f5;
+}
+
+.main-nav-links {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.main-nav a {
+  display: block;
+  flex: 0 0 auto;
+  padding: 12px 14px 10px;
+  border-bottom: 3px solid transparent;
+  color: #33444c;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.main-nav a:hover {
+  background: #f8fbfc;
+  color: var(--ink);
+}
+
+.main-nav a.active {
+  border-bottom-color: var(--accent);
+  background: #ffffff;
+  color: var(--accent);
+}
+
+.schedule-nav-controls {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 0;
+  white-space: nowrap;
+}
+
+.schedule-nav-controls label {
+  color: #52636b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.schedule-nav-controls select {
+  min-height: 28px;
+  max-width: 118px;
+  padding: 0 22px 0 7px;
+  font-size: 12px;
+}
+
+.schedule-nav-controls #scheduleStreamChannel {
+  max-width: 180px;
+}
+
+.schedule-nav-controls button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 h1,
@@ -91,6 +168,32 @@ h3 {
   padding: 22px clamp(14px, 3vw, 40px) 40px;
 }
 
+.view[hidden] {
+  display: none;
+}
+
+.view {
+  animation: view-in 160ms ease-out;
+}
+
+.view-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.view-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .overview {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -99,11 +202,19 @@ h3 {
 }
 
 .metric {
+  display: block;
   min-height: 86px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+  color: inherit;
+  text-decoration: none;
+}
+
+.metric:hover {
+  border-color: #9ab9b7;
+  background: #fbfefd;
 }
 
 .metric-label {
@@ -168,6 +279,18 @@ h3 {
 
 .media-controls input {
   max-width: 96px;
+}
+
+.control-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.control-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 select {
@@ -241,11 +364,289 @@ button:disabled {
   font-size: 12px;
 }
 
+.schedule-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.schedule-group {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.schedule-group h3 {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.schedule-guide {
+  margin-top: 0;
+}
+
+.schedule-guide-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 190px);
+  border: 1px solid #aebfc7;
+  border-radius: 8px;
+  background: #dce6eb;
+}
+
+.schedule-guide-grid {
+  display: grid;
+  grid-template-rows: 48px auto;
+  align-items: stretch;
+}
+
+.schedule-corner,
+.schedule-channel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid #c7d2d8;
+  background: #d7e2e7;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.schedule-corner {
+  left: 0;
+  z-index: 3;
+  padding: 0 5px;
+  border-right: 1px solid #c7d2d8;
+}
+
+.schedule-channel-head {
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 3px 5px;
+  border-right: 1px solid #c7d2d8;
+  text-align: center;
+}
+
+.schedule-channel-logo {
+  display: block;
+  max-width: 44px;
+  max-height: 24px;
+  object-fit: contain;
+}
+
+.schedule-channel-head strong {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-time-rail {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  grid-column: 1;
+  background: #f4f8fa;
+  border-right: 1px solid #c7d2d8;
+}
+
+.schedule-time-rail span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  padding: 0 4px;
+  border-top: 1px solid #d8e0e4;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.schedule-channel-lane {
+  position: relative;
+  min-width: 0;
+  border-right: 1px solid #d8e0e4;
+  background:
+    linear-gradient(to bottom, rgba(216, 224, 228, 0.9) 1px, transparent 1px) 0 0 / 100% 43.2px,
+    #ffffff;
+}
+
+.schedule-card {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-height: 24px;
+  overflow: hidden;
+  padding: 2px 4px;
+  border: 1px solid #7aa8a3;
+  border-radius: 3px;
+  background: #ecf8f6;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.schedule-card:hover {
+  z-index: 4;
+  border-color: #0f766e;
+  background: #f7fffd;
+}
+
+.schedule-card.category-anime {
+  border-color: #9b8bd3;
+  background: #f1edff;
+}
+
+.schedule-card.category-movie {
+  border-color: #c0843b;
+  background: #fff3df;
+}
+
+.schedule-card.category-news {
+  border-color: #6f9fce;
+  background: #edf6ff;
+}
+
+.schedule-card.category-sports {
+  border-color: #76a35d;
+  background: #eff9e8;
+}
+
+.schedule-card.category-drama {
+  border-color: #c46f85;
+  background: #fff0f4;
+}
+
+.schedule-card.category-music {
+  border-color: #8b9bcf;
+  background: #eef2ff;
+}
+
+.schedule-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-top: 2px solid #d12f2f;
+  pointer-events: none;
+}
+
+.schedule-card-time,
+.schedule-card-meta {
+  overflow: hidden;
+  color: #415058;
+  font-size: 9px;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-card strong {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.channel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.channel-actions button {
+  min-height: 22px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.channel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border: 1px solid #c7d2d8;
+  border-radius: 6px;
+  background: #f8fbfc;
+}
+
+.channel-tools[hidden] {
+  display: none;
+}
+
+.channel-tool-label {
+  overflow: hidden;
+  max-width: 220px;
+  color: #33444c;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
+}
+
+.program-dialog {
+  width: min(560px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid #aebfc7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.program-dialog::backdrop {
+  background: rgba(15, 28, 34, 0.42);
+}
+
+.program-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f4f8fa;
+}
+
+.program-dialog-head h2 {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.program-dialog-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.program-dialog-description {
+  padding: 14px 16px 0;
+  color: #33444c;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.program-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px 16px;
 }
 
 .small-button {
@@ -370,6 +771,39 @@ button:focus-visible {
   margin: 12px 0 0;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 12px;
+}
+
+.config-editor-panel {
+  margin-top: 12px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-head h3,
+.panel-head p {
+  margin: 0;
+}
+
+.panel-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.config-json-editor {
+  min-height: 360px;
+  margin-top: 12px;
+}
+
 .settings-list div {
   min-width: 0;
   padding-bottom: 8px;
@@ -390,8 +824,19 @@ button:focus-visible {
 
 @media (max-width: 820px) {
   .topbar {
+    position: static;
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .main-nav {
+    position: sticky;
+    top: 0;
+  }
+
+  .view-head {
+    flex-direction: column;
+    padding: 14px;
   }
 
   .overview,
@@ -408,6 +853,14 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-head {
+    flex-direction: column;
+  }
+
   .schedule-controls {
     justify-content: flex-start;
     width: 100%;
@@ -418,14 +871,20 @@ button:focus-visible {
     width: 100%;
   }
 
-  .schedule-controls select {
+  .schedule-controls .control-field {
     flex: 1 1 140px;
+  }
+
+  .schedule-controls select {
     max-width: none;
+  }
+
+  .media-controls .control-field {
+    flex: 1 1 100px;
   }
 
   .media-controls input,
   .media-controls select {
-    flex: 1 1 100px;
     max-width: none;
   }
 
@@ -435,5 +894,57 @@ button:focus-visible {
 
   .settings-list {
     grid-template-columns: 1fr;
+  }
+}
+
+body.view-schedule .topbar,
+body.view-schedule .overview,
+body.view-schedule [data-view="schedule"] .view-head {
+  display: none;
+}
+
+body.view-schedule .main-nav {
+  top: 0;
+}
+
+body.view-schedule .schedule-nav-controls {
+  display: flex;
+}
+
+body.view-schedule .workspace {
+  width: 100%;
+  padding: 0;
+}
+
+body.view-schedule [data-view="schedule"] {
+  animation: none;
+}
+
+body.view-schedule .schedule-guide,
+body.view-schedule #scheduleList {
+  margin: 0;
+}
+
+body.view-schedule .schedule-guide-scroll {
+  max-height: calc(100vh - 39px);
+  border-width: 0;
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view {
+    animation: none;
+  }
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

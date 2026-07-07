@@ -45,6 +45,15 @@ go test ./...
 go build -o strata-pvr ./cmd/strata-pvr
 ```
 
+On the local Windows development machine, Go is installed at the default path
+`C:\Program Files\Go\bin\go.exe`. Use that binary directly if `go` is not on
+`PATH`.
+
+WUI MP4 playback is browser-oriented, but it is generated on demand by
+`ffmpeg`. Install `ffmpeg` and make sure the WUI process can find it on `PATH`;
+otherwise MP4 watch routes return `503 Service Unavailable` and `log/wui`
+contains `exec: "ffmpeg": executable file not found in %PATH%`.
+
 The final runtime must not require Node.js. Optional JS-vs-Go compatibility
 oracle tests may be added later, but ordinary Go tests must pass without Node.
 Mirakurun scheduler fixtures are kept under `testdata/mirakurun/` for Go tests
@@ -136,18 +145,19 @@ disable, delete, add rules from JSON, and add common title/description/type/
 SID/category/channel/flag/duration/hour/recorded-format rules from form fields.
 The rule form also accepts an extra JSON object for less common fields, and
 existing rules can be copied into a JSON editor and saved back in place.
-Recorded items expose M2TS, direct MP4, 720p MP4, low-bitrate MP4, custom
-start/length/quality playback, XSPF, download, and delete actions, and active
-recordings expose a live M2TS watch action. The legacy WUI
+Recorded items expose M2TS, browser-oriented MP4 transcode, 720p MP4,
+low-bitrate MP4, custom start/length/quality playback, XSPF, download, and
+delete actions, and active recordings expose live M2TS/MP4/XSPF watch actions.
+MP4 actions require `ffmpeg` on the WUI process `PATH`. The legacy WUI
 asset fallback remains available during compatibility work. Scheduler, operator,
 and WUI logs are visible from the dashboard as tail-style text panels. A
-read-only settings panel shows non-secret runtime configuration such as
-Mirakurun URL, recorded directory, WUI ports, storage policy, and normalization.
+settings panel shows non-secret runtime configuration such as Mirakurun URL,
+recorded directory, WUI ports, storage policy, and normalization, and includes
+a validated raw JSON editor for `config.json` updates through the legacy API.
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
-For personal deployments, settings editing is intentionally
-read-only because direct `config.json` editing is safer and easier to audit; the
-legacy-compatible `/api/config.json` PUT endpoint remains available for old
-clients. The frontend does not require Node.js, npm, webpack, or any Node-based
-build step.
+Field-specific native settings forms remain incomplete; use the raw JSON editor
+or direct `config.json` edits for less common fields. The legacy-compatible
+`/api/config.json` PUT endpoint remains available for old clients. The frontend
+does not require Node.js, npm, webpack, or any Node-based build step.
