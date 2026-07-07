@@ -61,12 +61,14 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	text := out.String()
 	for _, want := range []string{
 		"### BEGIN INIT INFO",
-		"# Provides:          chinachu-operator",
+		"# Provides:          strata-pvr-operator",
 		"# Short-Description: starts the Strata PVR operator",
 		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
 		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
 		`DAEMON_OPTS="service operator execute"`,
+		"NAME=strata-pvr-operator",
 		"USER=$USER",
+		"PIDFILE=/var/run/chinachu-operator.pid",
 		"cd $STRATA_PVR_DIR || exit 1",
 		"test -x $DAEMON || exit 0",
 		`PID=$(su $USER -c "exec $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 & echo \$!")`,

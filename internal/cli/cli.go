@@ -1059,7 +1059,7 @@ func serviceInitScript(name string) string {
 # /etc/
 
 ### BEGIN INIT INFO
-# Provides:          chinachu-%[1]s
+# Provides:          strata-pvr-%[1]s
 # Required-Start:    $local_fs $remote_fs $network $syslog
 # Required-Stop:     $local_fs $remote_fs $network $syslog
 # Default-Start:     2 3 4 5
@@ -1072,9 +1072,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 STRATA_PVR_DIR=%[2]s
 DAEMON=${STRATA_PVR_DIR}/strata-pvr
 DAEMON_OPTS="service %[1]s execute"
-NAME=chinachu-%[1]s
+NAME=strata-pvr-%[1]s
 USER=$USER
-PIDFILE=/var/run/${NAME}.pid
+PIDFILE=/var/run/chinachu-%[1]s.pid
 
 cd $STRATA_PVR_DIR || exit 1
 test -x $DAEMON || exit 0
