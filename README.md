@@ -156,7 +156,10 @@ recorded directory, WUI ports, storage policy, and normalization, and includes
 common and detailed settings forms plus a validated raw JSON editor for
 `config.json` updates through the legacy API.
 The schedule panel can filter by channel, time range, and item count while
-keeping the existing `/api/schedule.json` data path.
+keeping the existing `/api/schedule.json` data path. Program detail dialogs can
+open the selected program's channel MP4 stream and prefill the rule form from
+the selected schedule program. Hidden-channel filters are remembered locally in
+the browser.
 
 Native settings forms cover WUI auth/country/service-order/proxy/mDNS/TLS,
 VAAPI, priorities, low-space notify/command settings, and hook commands. Use

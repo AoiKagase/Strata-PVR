@@ -1,4 +1,6 @@
 (function () {
+  var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
+
   var state = {
     status: null,
     reserves: [],
@@ -13,7 +15,7 @@
     scheduleType: "",
     scheduleDay: "",
     scheduleGenre: "",
-    scheduleHiddenChannels: [],
+    scheduleHiddenChannels: loadHiddenChannels(),
     scheduleWindowHours: 24,
     scheduleLimit: 50,
     editingRuleIndex: null,
@@ -23,6 +25,28 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function loadHiddenChannels() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(hiddenChannelsStorageKey) : "";
+      var values = raw ? JSON.parse(raw) : [];
+      return Array.isArray(values) ? values.filter(function (value) {
+        return typeof value === "string" && value;
+      }) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveHiddenChannels() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(hiddenChannelsStorageKey, JSON.stringify(state.scheduleHiddenChannels));
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
+    }
   }
 
   function text(node, value) {
@@ -139,6 +163,23 @@
       return "";
     }
     return program.channel.name || program.channel.channel || program.channel.id || "";
+  }
+
+  function programChannelID(program) {
+    if (!program || !program.channel) {
+      return "";
+    }
+    if (typeof program.channel === "object") {
+      return String(program.channel.id || program.channel.serviceId || program.channel.sid || program.channel.channel || "");
+    }
+    return String(program.channel || "");
+  }
+
+  function programChannelType(program) {
+    if (!program || !program.channel || typeof program.channel !== "object") {
+      return String(program && program.type || "");
+    }
+    return String(program.channel.type || program.channel.channelType || program.type || "");
   }
 
   function scheduleChannelID(channel) {
@@ -467,6 +508,17 @@
       } else if (name === "delete-recorded") {
         row.appendChild(actionButton("削除", "録画済み項目とファイルを削除", function () {
           runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？");
+        }));
+      } else if (name === "watch-channel-mp4") {
+        var channelID = programChannelID(program);
+        if (channelID) {
+          row.appendChild(actionButton("MP4", "この番組のチャンネルをMP4変換視聴で開く", function () {
+            openURL(channelURL(channelID, "watch", "mp4"));
+          }));
+        }
+      } else if (name === "create-rule-from-program") {
+        row.appendChild(actionButton("ルール作成", "この番組を元にルールフォームを開く", function () {
+          fillRuleFormFromProgram(program);
         }));
       }
     });
@@ -819,7 +871,7 @@
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
-      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip"]);
+      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-channel-mp4", "create-rule-from-program"]);
     }
     if (dialog && dialog.showModal) {
       dialog.showModal();
@@ -1515,6 +1567,62 @@
     }
   }
 
+  function setFormValue(id, value) {
+    var control = byId(id);
+    if (!control) {
+      return;
+    }
+    if (control.type === "checkbox") {
+      control.checked = Boolean(value);
+      return;
+    }
+    control.value = value === undefined || value === null ? "" : String(value);
+  }
+
+  function fillRuleFormFromProgram(program) {
+    if (!program) {
+      return;
+    }
+    var end = program.end || (program.start + 30 * 60 * 1000);
+    var durationMinutes = program.start !== undefined && end > program.start ? Math.round((end - program.start) / 60000) : "";
+    var startDate = program.start !== undefined ? new Date(program.start) : null;
+    var endDate = end ? new Date(end) : null;
+    var endHour = "";
+    if (startDate && endDate && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+      endHour = dateKey(startDate.getTime()) !== dateKey(endDate.getTime()) ? 24 : Math.min(24, Math.max(1, Math.ceil((endDate.getHours() * 60 + endDate.getMinutes()) / 60)));
+    }
+    var channelID = programChannelID(program);
+    var type = programChannelType(program);
+    setFormValue("ruleTitle", program.title || program.fullTitle || programTitle(program));
+    setFormValue("ruleIgnoreTitle", "");
+    setFormValue("ruleDescription", "");
+    setFormValue("ruleIgnoreDescription", "");
+    setFormValue("ruleType", type);
+    if (byId("ruleType") && byId("ruleType").value !== type) {
+      setFormValue("ruleType", "");
+    }
+    setFormValue("ruleSid", channelID && /^\d+$/.test(channelID) ? channelID : "");
+    setFormValue("ruleCategory", program.category || "");
+    setFormValue("ruleChannels", channelID && !/^\d+$/.test(channelID) ? channelID : "");
+    setFormValue("ruleIgnoreChannels", "");
+    setFormValue("ruleFlags", "");
+    setFormValue("ruleIgnoreFlags", "");
+    setFormValue("ruleDurationMin", durationMinutes);
+    setFormValue("ruleDurationMax", durationMinutes);
+    setFormValue("ruleHourStart", startDate && !isNaN(startDate.getTime()) ? startDate.getHours() : "");
+    setFormValue("ruleHourEnd", endHour);
+    setFormValue("ruleRecordedFormat", "");
+    setFormValue("ruleDisabled", false);
+    setFormValue("ruleExtraJson", "");
+    closeProgramDialog();
+    window.location.hash = "rules";
+    setBusy("番組情報をルールフォームに反映しました");
+    var title = byId("ruleTitle");
+    if (title) {
+      title.focus();
+    }
+  }
+
   function addBasicRule() {
     var title = byId("ruleTitle");
     var ignoreTitle = byId("ruleIgnoreTitle");
@@ -1875,6 +1983,7 @@
         var select = byId("scheduleHiddenChannel");
         if (select && select.value && state.scheduleHiddenChannels.indexOf(select.value) < 0) {
           state.scheduleHiddenChannels.push(select.value);
+          saveHiddenChannels();
           renderSchedule();
         }
       });
@@ -1883,6 +1992,7 @@
     if (scheduleClearHiddenButton) {
       scheduleClearHiddenButton.addEventListener("click", function () {
         state.scheduleHiddenChannels = [];
+        saveHiddenChannels();
         renderSchedule();
       });
     }
