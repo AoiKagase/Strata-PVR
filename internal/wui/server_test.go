@@ -165,6 +165,13 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		t.Fatalf("status.txt status = %d body=%s", res.Code, res.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status without extension status = %d body=%s", res.Code, res.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.json", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
