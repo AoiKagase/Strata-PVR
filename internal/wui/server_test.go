@@ -240,6 +240,9 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("unknown resource status=%d body=%q", res.Code, res.Body.String())
 	}
+	if res.Body.String() != "404 Not Found\n" {
+		t.Fatalf("unknown resource body=%q", res.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource", nil)
 	res = httptest.NewRecorder()

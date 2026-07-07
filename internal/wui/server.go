@@ -640,7 +640,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
 		}
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 	}
 }
 
@@ -813,7 +813,7 @@ func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	if channel == nil {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, channel)
@@ -831,7 +831,7 @@ func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if channel == nil {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, channel.Programs)
@@ -849,7 +849,7 @@ func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *htt
 		return
 	}
 	if channel == nil {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, broadcastingPrograms([]chinachu.ChannelSchedule{*channel}, time.Now()))
@@ -960,7 +960,7 @@ func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, 
 		return
 	}
 	if name != "wui" && name != "operator" && name != "scheduler" {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	path := filepath.Join(s.logDir(), name)
@@ -1142,7 +1142,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) {
 	index, ok := parseIndex(num)
 	if !ok {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	var rules []map[string]json.RawMessage
@@ -1151,7 +1151,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 		return
 	}
 	if index < 0 || index >= len(rules) {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
@@ -1191,7 +1191,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 	}
 	index, ok := parseIndex(num)
 	if !ok {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	var rules []map[string]json.RawMessage
@@ -1200,7 +1200,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		return
 	}
 	if index < 0 || index >= len(rules) {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch action {
@@ -1209,7 +1209,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 	case "disable":
 		rules[index]["isDisabled"] = json.RawMessage("true")
 	default:
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
@@ -1276,7 +1276,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	}
 	index := findProgram(reserves, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
@@ -1299,7 +1299,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 		} else if action == "unskip" {
 			reserves[index].IsSkip = false
 		} else {
-			http.NotFound(w, r)
+			legacyHTTPError(w, r, http.StatusNotFound)
 			return
 		}
 		if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
@@ -1322,7 +1322,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 	}
 	index := findProgram(recording, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
@@ -1364,7 +1364,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	}
 	index := findProgram(recorded, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
@@ -1398,7 +1398,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	}
 	index := findProgram(recorded, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	path := filepath.FromSlash(recorded[index].Recorded)
@@ -1458,7 +1458,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	}
 	index := findProgram(programs, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	program := programs[index]
@@ -1637,7 +1637,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	}
 	index := findProgram(programs, id)
 	if index == -1 {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	program := programs[index]
@@ -1758,10 +1758,10 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 	if r.Method == http.MethodPut {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	http.NotFound(w, r)
+	legacyHTTPError(w, r, http.StatusNotFound)
 }
 
 func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program chinachu.Program) {
@@ -1796,7 +1796,7 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 	}
 	channel, ok := s.findChannel(id)
 	if !ok {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
@@ -1831,7 +1831,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 	}
 	channel, ok := s.findChannel(id)
 	if !ok {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch apiType {
@@ -2151,6 +2151,14 @@ func writeCompactJSON(w http.ResponseWriter, status int, value any) {
 	}
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+func legacyHTTPError(w http.ResponseWriter, r *http.Request, status int) {
+	if r.Method == http.MethodHead {
+		w.WriteHeader(status)
+		return
+	}
+	http.Error(w, fmt.Sprintf("%d %s", status, http.StatusText(status)), status)
 }
 
 func requireAPIType(w http.ResponseWriter, apiType string, allowed ...string) bool {
