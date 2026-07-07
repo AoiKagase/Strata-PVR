@@ -113,7 +113,9 @@ included `config.sample.json` and `rules.sample.json` before starting. The Go
 sample keeps GeoIP country filtering and mDNS advertisement disabled by default
 because those Node-era integrations are intentionally omitted. Change the sample
 `wuiUsers` credential before enabling or exposing the authenticated listener;
-`compat check` warns if the sample credential is still configured.
+`compat check` warns if the sample credential is still configured. It also warns
+when `wuiOpenServer` enables the unauthenticated listener; keep that listener on
+a trusted network or disable it for authenticated-only access.
 
 For a conservative first run, start the WUI and operator manually in separate
 terminals and confirm that `log/wui`, `log/operator`, `data/reserves.json`,

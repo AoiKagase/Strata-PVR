@@ -1373,6 +1373,9 @@ func compatWarnings(cfg *config.Config) []string {
 	if len(cfg.WUIAllowCountries) > 0 {
 		warnings = append(warnings, "wuiAllowCountries: GeoIP country filtering is not implemented; restrict access at firewall/reverse proxy if needed")
 	}
+	if cfg.WUIOpenServer {
+		warnings = append(warnings, "wuiOpenServer: unauthenticated WUI listener is enabled; bind it to a trusted network or disable it for authenticated-only access")
+	}
 	if cfg.WUIMdnsAdvertisement {
 		warnings = append(warnings, "wuiMdnsAdvertisement: mDNS advertisement is intentionally not implemented")
 	}
