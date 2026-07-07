@@ -164,12 +164,25 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	if res.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status.txt status = %d body=%s", res.Code, res.Body.String())
 	}
+	if res.Body.String() != "415 Unsupported Media Type\n" {
+		t.Fatalf("status.txt body=%q", res.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status without extension status = %d body=%s", res.Code, res.Body.String())
+	}
+	if res.Body.String() != "415 Unsupported Media Type\n" {
+		t.Fatalf("status without extension body=%q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodHead, "/api/schedule.txt", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType || res.Body.Len() != 0 {
+		t.Fatalf("schedule.txt HEAD status=%d body=%q", res.Code, res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.json", nil)
@@ -232,6 +245,19 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("known resource bad path status=%d body=%q", res.Code, res.Body.String())
+	}
+	if res.Body.String() != "400 Bad Request\n" {
+		t.Fatalf("known resource bad path body=%q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/status.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("method not allowed status=%d body=%q", res.Code, res.Body.String())
+	}
+	if res.Body.String() != "405 Method Not Allowed\n" {
+		t.Fatalf("method not allowed body=%q", res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource/foo.json", nil)

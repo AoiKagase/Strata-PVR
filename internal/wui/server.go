@@ -382,7 +382,7 @@ func (s *server) withMethodOverride(next http.Handler) http.Handler {
 func (s *server) withHostRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host == "" {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -441,11 +441,11 @@ func (s *server) remoteAddress(r *http.Request) string {
 func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	if s.webRoot == "" {
-		http.NotFound(w, r)
+		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch strings.ToLower(filepath.Ext(r.URL.Path)) {
@@ -501,103 +501,103 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if methods, ok := apiAllowedMethods(parts); ok && !methodAllowed(r.Method, methods) {
 		w.Header().Set("Allow", strings.Join(methods, ", "))
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 
 	switch {
 	case len(parts) == 1 && parts[0] == "status":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		writePrettyJSON(w, http.StatusOK, s.status())
 	case len(parts) == 1 && parts[0] == "scheduler":
-		if !requireAPIType(w, apiType, "json", "txt") {
+		if !requireAPIType(w, r, apiType, "json", "txt") {
 			return
 		}
 		s.handleScheduler(w, r, apiType)
 	case len(parts) == 2 && parts[0] == "scheduler" && parts[1] == "force":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleSchedulerForce(w, r)
 	case len(parts) == 1 && parts[0] == "storage":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleStorage(w, r)
 	case len(parts) == 2 && parts[0] == "log":
-		if !requireAPIType(w, apiType, "txt") {
+		if !requireAPIType(w, r, apiType, "txt") {
 			return
 		}
 		s.handleLog(w, r, parts[1], false)
 	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
-		if !requireAPIType(w, apiType, "txt") {
+		if !requireAPIType(w, r, apiType, "txt") {
 			return
 		}
 		s.handleLog(w, r, parts[1], true)
 	case len(parts) == 1 && parts[0] == "config":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleConfig(w, r)
 	case len(parts) == 1 && parts[0] == "rules":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRules(w, r)
 	case len(parts) == 2 && parts[0] == "rules":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRule(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "rules":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRuleAction(w, r, parts[1], parts[2])
 	case len(parts) == 1 && parts[0] == "schedule":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleSchedule(w, r)
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "programs":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleSchedulePrograms(w, r)
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "broadcasting":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleScheduleBroadcasting(w, r)
 	case len(parts) == 2 && parts[0] == "schedule":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleScheduleChannel(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "programs":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleScheduleChannelPrograms(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "schedule" && parts[2] == "broadcasting":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleScheduleChannelBroadcasting(w, r, parts[1])
 	case len(parts) == 1 && parts[0] == "reserves":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleJSONFile(w, r, s.paths.Reserves, "[]")
 	case len(parts) >= 2 && parts[0] == "reserves":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleReserveProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recording":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleJSONFile(w, r, s.paths.Recording, "[]")
@@ -606,12 +606,12 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRecordingProgram(w, r, parts[1:])
 	case len(parts) == 1 && parts[0] == "recorded":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRecorded(w, r)
@@ -622,12 +622,12 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleRecordedProgram(w, r, parts[1:])
 	case len(parts) == 2 && parts[0] == "program":
-		if !requireAPIType(w, apiType, "json") {
+		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
 		s.handleProgram(w, r, parts[1])
@@ -637,7 +637,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleChannelWatch(w, r, parts[1], apiType)
 	default:
 		if len(parts) > 0 && knownAPIResource(parts[0]) {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		legacyHTTPError(w, r, http.StatusNotFound)
@@ -647,7 +647,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, empty string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	var v any
@@ -661,7 +661,7 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	info, err := os.Stat(s.paths.Schedule)
@@ -726,12 +726,12 @@ func acceptsDeflate(value string) bool {
 func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	if _, err := os.Stat(s.paths.Config); err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "410 Gone", http.StatusGone)
+			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -740,12 +740,12 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		raw := r.URL.Query().Get("json")
 		if raw == "" {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		var obj any
 		if err := json.Unmarshal([]byte(raw), &obj); err != nil {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		if err := storage.WriteFileAtomic(s.paths.Config, []byte(raw)); err != nil {
@@ -772,7 +772,7 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	schedules, err := s.readSchedule()
@@ -790,7 +790,7 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	schedules, err := s.readSchedule()
@@ -804,7 +804,7 @@ func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Reque
 func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	channel, err := s.findScheduleChannel(id)
@@ -822,7 +822,7 @@ func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, i
 func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	channel, err := s.findScheduleChannel(id)
@@ -840,7 +840,7 @@ func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Re
 func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	channel, err := s.findScheduleChannel(id)
@@ -858,7 +858,7 @@ func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *htt
 func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	var recorded []chinachu.Program
@@ -896,7 +896,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	if r.Method == http.MethodPut {
@@ -942,7 +942,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.Header().Set("Allow", "PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	go func() {
@@ -956,7 +956,7 @@ func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, stream bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	if name != "wui" && name != "operator" && name != "scheduler" {
@@ -1123,7 +1123,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		normalizeRuleEnabled(rule)
@@ -1135,7 +1135,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 		writeCompactJSON(w, http.StatusCreated, rule)
 	default:
 		w.Header().Set("Allow", "HEAD, GET, POST")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1160,7 +1160,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 	case http.MethodPut:
 		rule, err := decodeRuleRequest(r)
 		if err != nil || len(rule) == 0 {
-			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		normalizeRuleEnabled(rule)
@@ -1179,14 +1179,14 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "HEAD, GET, PUT, DELETE")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
 func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, action string) {
 	if r.Method != http.MethodPut {
 		w.Header().Set("Allow", "PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	index, ok := parseIndex(num)
@@ -1222,7 +1222,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	var recorded []chinachu.Program
@@ -1284,7 +1284,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 		writePrettyJSON(w, http.StatusOK, reserves[index])
 	case http.MethodDelete:
 		if !reserves[index].IsManualReserved {
-			http.Error(w, "409 Conflict", http.StatusConflict)
+			legacyHTTPError(w, r, http.StatusConflict)
 			return
 		}
 		reserves = removeProgram(reserves, id)
@@ -1309,7 +1309,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE, PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1351,7 +1351,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1386,7 +1386,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1405,7 +1405,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "410 Gone", http.StatusGone)
+			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1427,7 +1427,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 		case "json", "":
 			writePrettyJSON(w, http.StatusOK, fileStatJSON(info))
 		default:
-			http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+			legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		}
 	case http.MethodDelete:
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -1441,14 +1441,14 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
 }
 
 func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path, id, apiType string, requirePID bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	var programs []chinachu.Program
@@ -1463,22 +1463,22 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	}
 	program := programs[index]
 	if requirePID && !programHasPID(program) {
-		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
 	if programIsScrambling(program) {
-		http.Error(w, "409 Conflict", http.StatusConflict)
+		legacyHTTPError(w, r, http.StatusConflict)
 		return
 	}
 	if program.Recorded == "" {
-		http.Error(w, "410 Gone", http.StatusGone)
+		legacyHTTPError(w, r, http.StatusGone)
 		return
 	}
 	filePath := filepath.FromSlash(program.Recorded)
 	info, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "410 Gone", http.StatusGone)
+			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1536,7 +1536,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		defer file.Close()
 		s.streamFFmpeg(w, r, file, "mp4", false)
 	default:
-		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	}
 }
 
@@ -1622,12 +1622,12 @@ func setWatchDownloadHeader(w http.ResponseWriter, r *http.Request, filePath, ap
 func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, path, id string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	apiType := apiExtension(r.URL.Path)
 	if apiType != "png" && apiType != "jpg" && apiType != "txt" {
-		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
 	}
 	var programs []chinachu.Program
@@ -1642,21 +1642,21 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	}
 	program := programs[index]
 	if path == s.paths.Recording && !programHasPID(program) {
-		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
 	if programIsScrambling(program) {
-		http.Error(w, "409 Conflict", http.StatusConflict)
+		legacyHTTPError(w, r, http.StatusConflict)
 		return
 	}
 	if program.Recorded == "" {
-		http.Error(w, "410 Gone", http.StatusGone)
+		legacyHTTPError(w, r, http.StatusGone)
 		return
 	}
 	filePath := filepath.FromSlash(program.Recorded)
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "410 Gone", http.StatusGone)
+			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1688,7 +1688,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
-		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -1741,7 +1741,7 @@ func previewPosition(r *http.Request) string {
 func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		w.Header().Set("Allow", "HEAD, GET, PUT")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	schedules, err := s.readSchedule()
@@ -1771,7 +1771,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 		return
 	}
 	if findProgram(reserves, program.ID) != -1 {
-		http.Error(w, "409 Conflict", http.StatusConflict)
+		legacyHTTPError(w, r, http.StatusConflict)
 		return
 	}
 	program.IsManualReserved = true
@@ -1787,11 +1787,11 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, apiType string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	if apiType != "png" {
-		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
 	}
 	channel, ok := s.findChannel(id)
@@ -1812,7 +1812,7 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 	client.UserAgent = mirakurun.LegacyUserAgent("wui")
 	body, err := client.LogoImage(r.Context(), serviceID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
 	defer body.Close()
@@ -1826,7 +1826,7 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, apiType string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
-		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 	channel, ok := s.findChannel(id)
@@ -1865,7 +1865,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		client.UserAgent = mirakurun.LegacyUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
 			return
 		}
 		defer body.Close()
@@ -1893,13 +1893,13 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		client.UserAgent = mirakurun.LegacyUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
 			return
 		}
 		defer body.Close()
 		s.streamFFmpeg(w, r, body, "mp4", true)
 	default:
-		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	}
 }
 
@@ -1908,7 +1908,7 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
-		http.Error(w, "503 Service Unavailable", http.StatusServiceUnavailable)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
 	defer output.Close()
@@ -2154,20 +2154,28 @@ func writeCompactJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func legacyHTTPError(w http.ResponseWriter, r *http.Request, status int) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
-		w.WriteHeader(status)
 		return
 	}
-	http.Error(w, fmt.Sprintf("%d %s", status, http.StatusText(status)), status)
+	_, _ = fmt.Fprintf(w, "%d %s\n", status, legacyStatusText(status))
 }
 
-func requireAPIType(w http.ResponseWriter, apiType string, allowed ...string) bool {
+func legacyStatusText(status int) string {
+	if status == http.StatusRequestURITooLong {
+		return "Request-URI Too Long"
+	}
+	return http.StatusText(status)
+}
+
+func requireAPIType(w http.ResponseWriter, r *http.Request, apiType string, allowed ...string) bool {
 	for _, value := range allowed {
 		if apiType == value {
 			return true
 		}
 	}
-	http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
+	legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	return false
 }
 
