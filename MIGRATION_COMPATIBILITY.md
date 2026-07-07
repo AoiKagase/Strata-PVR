@@ -46,7 +46,7 @@ before or after the ID.
 | `recording` | partially compatible | Prints an `easy-table`-style padded program table with filtering/sort support. |
 | `recorded` | partially compatible | Prints an `easy-table`-style padded program table with filtering/sort support. |
 | `cleanup [-s|--simulation]` | partially compatible | Prints an `easy-table`-style padded action table and removes missing recorded entries unless simulation is set. Before destructive writes, Go creates `data/recorded.json.bak-YYYYMMDDHHMMSS`. |
-| `compat check`, `compat doctor`, `compat backup` | implemented | New Go-only safety checks for required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, plus timestamped JSON state backups under `backup/`; does not alter legacy command behavior. |
+| `compat check`, `compat doctor`, `compat diff`, `compat backup` | implemented | New Go-only safety checks for required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, dry-run JSON rewrite difference reporting, plus timestamped JSON state backups under `backup/`; does not alter legacy command behavior. |
 | `ircbot` | intentionally changed | Command is accepted, but the experimental Node-era IRC bot is not implemented; use WUI/API or an external bot against the Go API. |
 | `test <app> [options]` | intentionally changed | Accepted with usage validation and Go-runtime guidance, but Node-era `usr/bin/<app>` execution is not performed. |
 | default/help | implemented | Help command shape is present. |
@@ -262,5 +262,5 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | partially compatible |
-| Compat doctor/check/backup | implemented; validates required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, and can back up current JSON state files under `backup/`. |
+| Compat doctor/check/diff/backup | implemented; validates required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, reports dry-run JSON rewrite differences for compatible state files, and can back up current JSON state files under `backup/`. |
 | Tests | partially compatible |

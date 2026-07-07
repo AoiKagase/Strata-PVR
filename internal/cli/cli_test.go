@@ -373,6 +373,46 @@ func writeCompatWebAssets(t *testing.T, root string) {
 	}
 }
 
+func TestCompatDiffReportsStateRewriteStatus(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"rules.json":                            "[\n  {\n    \"types\": [\n      \"GR\"\n    ]\n  }\n]",
+		filepath.Join("data", "schedule.json"):  `[{"type":"GR","channel":"27","name":"Svc","id":"ch","sid":101,"programs":[]}]`,
+		filepath.Join("data", "reserves.json"):  `[{"id":"p","start":1,"end":2,"channel":{}}]`,
+		filepath.Join("data", "recording.json"): `[{"id":"p","end":2,"start":1,"channel":{}}]`,
+		filepath.Join("data", "recorded.json"):  `not-json`,
+	}
+	for name, data := range files {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "diff"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"OK rules.json",
+		"OK " + filepath.Join("data", "schedule.json"),
+		"OK " + filepath.Join("data", "reserves.json"),
+		"DIFF " + filepath.Join("data", "recording.json"),
+		"INVALID " + filepath.Join("data", "recorded.json"),
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("compat diff output missing %q: %s", want, text)
+		}
+	}
+}
+
 func TestCompatCheckRequiresLegacyWUIAssets(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

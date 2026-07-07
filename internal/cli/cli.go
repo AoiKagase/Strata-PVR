@@ -1142,7 +1142,7 @@ exit 0
 
 func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|backup>")
+		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|diff|backup>")
 	}
 	switch args[0] {
 	case "check", "doctor":
@@ -1188,11 +1188,58 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			return fmt.Errorf("compat check failed")
 		}
 		return nil
+	case "diff":
+		return compatDiff(stdout)
 	case "backup":
 		return compatBackup(stdout)
 	default:
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|backup>")
+		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|diff|backup>")
 	}
+}
+
+func compatDiff(stdout io.Writer) error {
+	checks := []struct {
+		path   string
+		pretty bool
+		value  any
+	}{
+		{"rules.json", true, &[]chinachu.Rule{}},
+		{filepath.Join("data", "schedule.json"), false, &[]chinachu.ChannelSchedule{}},
+		{filepath.Join("data", "reserves.json"), false, &[]chinachu.Program{}},
+		{filepath.Join("data", "recording.json"), false, &[]chinachu.Program{}},
+		{filepath.Join("data", "recorded.json"), false, &[]chinachu.Program{}},
+	}
+	for _, check := range checks {
+		raw, err := os.ReadFile(check.path)
+		if os.IsNotExist(err) {
+			fmt.Fprintf(stdout, "MISSING %s\n", check.path)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(raw, check.value); err != nil {
+			fmt.Fprintf(stdout, "INVALID %s: %v\n", check.path, err)
+			continue
+		}
+		rendered, err := marshalCompatDiffValue(check.value, check.pretty)
+		if err != nil {
+			return err
+		}
+		if string(raw) == string(rendered) {
+			fmt.Fprintf(stdout, "OK %s\n", check.path)
+		} else {
+			fmt.Fprintf(stdout, "DIFF %s original=%d go=%d\n", check.path, len(raw), len(rendered))
+		}
+	}
+	return nil
+}
+
+func marshalCompatDiffValue(value any, pretty bool) ([]byte, error) {
+	if pretty {
+		return json.MarshalIndent(value, "", "  ")
+	}
+	return json.Marshal(value)
 }
 
 func compatBackup(stdout io.Writer) error {
@@ -1583,7 +1630,7 @@ recorded                Show a list of recorded programs.
 
 cleanup                 Clean-up the recorded list.
 
-compat <check|doctor|backup>
+compat <check|doctor|diff|backup>
                         Check or back up Chinachu-Go compatibility state.
 
 ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)
