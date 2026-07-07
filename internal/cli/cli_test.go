@@ -275,10 +275,49 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
 		"CONFIG wui=0.0.0.0:disabled tls=disabled open=disabled",
 		"CONFIG storageLowSpace=3000MB action=remove",
+		"STATE scheduleChannels=0",
+		"STATE reserves=0",
+		"STATE recording=0",
+		"STATE recorded=0",
 		"WARN strata-pvr binary not found in the current directory",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("compat doctor output missing %q: %s", want, text)
+		}
+	}
+}
+
+func TestCompatStateSummaryReportsArrayLengths(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"data/schedule.json":  `[{}, {}]`,
+		"data/reserves.json":  `[{}]`,
+		"data/recording.json": `[]`,
+		"data/recorded.json":  `[{}, {}, {}]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	writeCompatStateSummary(&out)
+	text := out.String()
+	for _, want := range []string{
+		"STATE scheduleChannels=2",
+		"STATE reserves=1",
+		"STATE recording=0",
+		"STATE recorded=3",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("state summary missing %q: %s", want, text)
 		}
 	}
 }

@@ -1219,6 +1219,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			}
 			if args[0] == "doctor" {
 				writeCompatConfigSummary(stdout, cfg)
+				writeCompatStateSummary(stdout)
 				for _, warning := range compatDoctorWarnings() {
 					fmt.Fprintf(stdout, "WARN %s\n", warning)
 				}
@@ -1290,6 +1291,32 @@ func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {
 	if cfg.NormalizationForm != "" {
 		fmt.Fprintf(stdout, "CONFIG normalizationForm=%s\n", cfg.NormalizationForm)
 	}
+}
+
+func writeCompatStateSummary(stdout io.Writer) {
+	for _, item := range []struct {
+		label string
+		path  string
+	}{
+		{"scheduleChannels", filepath.Join("data", "schedule.json")},
+		{"reserves", filepath.Join("data", "reserves.json")},
+		{"recording", filepath.Join("data", "recording.json")},
+		{"recorded", filepath.Join("data", "recorded.json")},
+	} {
+		count, err := jsonArrayLength(item.path)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(stdout, "STATE %s=%d\n", item.label, count)
+	}
+}
+
+func jsonArrayLength(path string) (int, error) {
+	var values []any
+	if err := storage.ReadJSON(path, &values, ""); err != nil {
+		return 0, err
+	}
+	return len(values), nil
 }
 
 func compatWrapperScript() string {
