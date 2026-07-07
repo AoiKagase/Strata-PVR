@@ -1674,6 +1674,52 @@ func installFakeFFmpegStream(t *testing.T, output string, gotInput *string, gotA
 	return func() { runFFmpegStream = old }
 }
 
+func TestGrowingFileReaderFollowsAppends(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "recording.m2ts")
+	if err := os.WriteFile(filePath, []byte("live"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader := newGrowingFileReader(ctx, filePath, 0)
+
+	initial := make([]byte, 4)
+	if _, err := io.ReadFull(reader, initial); err != nil {
+		t.Fatalf("initial read: %v", err)
+	}
+	if string(initial) != "live" {
+		t.Fatalf("initial read = %q", initial)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 6)
+		_, err := io.ReadFull(reader, buf)
+		if err != nil {
+			done <- err
+			return
+		}
+		if string(buf) != "follow" {
+			done <- fmt.Errorf("follow read = %q", buf)
+			return
+		}
+		done <- nil
+	}()
+	time.Sleep(50 * time.Millisecond)
+	if err := os.WriteFile(filePath, []byte("livefollow"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("reader did not follow appended data")
+	}
+}
+
 func installFakeFFprobe(t *testing.T, output string, probeErr error) func() {
 	t.Helper()
 	old := runFFprobeFormat
@@ -1723,6 +1769,52 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	<-done
 	if res.Code != http.StatusOK || res.Body.String() != "livefollow" {
 		t.Fatalf("recording watch status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recording.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("live"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
+		t.Fatal(err)
+	}
+	old := runFFmpegStream
+	var gotInput string
+	var gotArgs []string
+	runFFmpegStream = func(_ context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(input, buf); err != nil {
+			return nil, nil, err
+		}
+		gotInput = string(buf)
+		gotArgs = append(gotArgs[:0], args...)
+		return io.NopCloser(strings.NewReader("mp4data")), func() error { return nil }, nil
+	}
+	defer func() { runFFmpegStream = old }()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.mp4?b:v=1m", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	if gotInput != "live" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-re -i pipe:0", "-b:v 1m", "-c:a aac"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("live recording ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+	for _, notWant := range []string{"-ss", "-bufsize:v", "-b:a 96k", "-bufsize:a"} {
+		if strings.Contains(joined, notWant) {
+			t.Fatalf("live recording ffmpeg args should not contain %q: %s", notWant, joined)
+		}
 	}
 }
 

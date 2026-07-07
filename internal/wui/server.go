@@ -1787,6 +1787,10 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		if requirePID {
+			s.streamFFmpeg(w, r, newGrowingFileReader(r.Context(), filePath, 0), "mp4", true)
+			return
+		}
 		file, err := os.Open(filePath)
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -2064,6 +2068,56 @@ func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, 
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()
 			}
+		}
+	}
+}
+
+type growingFileReader struct {
+	ctx      context.Context
+	filePath string
+	offset   int64
+}
+
+func newGrowingFileReader(ctx context.Context, filePath string, offset int64) io.Reader {
+	if offset < 0 {
+		offset = 0
+	}
+	return &growingFileReader{ctx: ctx, filePath: filePath, offset: offset}
+}
+
+func (r *growingFileReader) Read(p []byte) (int, error) {
+	for {
+		select {
+		case <-r.ctx.Done():
+			return 0, r.ctx.Err()
+		default:
+		}
+		file, err := os.Open(r.filePath)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := file.Seek(r.offset, io.SeekStart); err != nil {
+			_ = file.Close()
+			return 0, err
+		}
+		n, readErr := file.Read(p)
+		_ = file.Close()
+		if n > 0 {
+			r.offset += int64(n)
+			return n, nil
+		}
+		if readErr != nil && readErr != io.EOF {
+			return 0, readErr
+		}
+		if info, err := os.Stat(r.filePath); err == nil && info.Size() < r.offset {
+			r.offset = 0
+		}
+		timer := time.NewTimer(200 * time.Millisecond)
+		select {
+		case <-r.ctx.Done():
+			timer.Stop()
+			return 0, r.ctx.Err()
+		case <-timer.C:
 		}
 	}
 }

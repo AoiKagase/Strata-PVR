@@ -265,7 +265,7 @@ They are used by scheduler tests to exercise schedule import and reservation gen
 - Go WUI `log/:name/stream.txt` writes the legacy padding, the last 100 log lines, and follows appended log data until the request is closed.
 - Go WUI scheduler JSON parses `RESERVE:` and legacy `!CONFLICT:`/`CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
 - Go WUI status includes legacy operator PID values when the operator PID file is present and checks whether the referenced process is alive before setting `alive:true`; it intentionally does not expose a scheduler field because the old `data.status` object did not include one.
-- Go WUI recorded/recording watch supports XSPF and m2ts serving. Recorded watch performs the legacy `ffprobe -show_format` preflight before responding, including XSPF. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed.
+- Go WUI recorded/recording watch supports XSPF, m2ts, and fragmented mp4 serving. Recorded watch performs the legacy `ffprobe -show_format` preflight before responding, including XSPF. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed. Recording mp4 watch now transcodes from a growing file reader with live ffmpeg arguments so browser playback does not stop at the file size that existed when playback started.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.
 
 ## Compatibility Status Matrix
