@@ -1142,10 +1142,13 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-ss 2", "-t 30"} {
+	for _, want := range []string{"-f mp4", "-c:v h264", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-ss 2", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
+	}
+	if strings.Contains(joined, "-c:a aac") {
+		t.Fatalf("legacy b:v path should omit explicit audio codec: %s", joined)
 	}
 }
 
@@ -1183,6 +1186,21 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	}
 	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2") {
 		t.Fatalf("ffmpeg args did not clamp legacy ss: %s", joined)
+	}
+}
+
+func TestLegacyBitrateBits(t *testing.T) {
+	tests := map[string]int64{
+		"96k":  96 * 1024,
+		"1m":   1024 * 1024,
+		"2M":   2 * 1024 * 1024,
+		"1000": 0,
+		"badk": 0,
+	}
+	for input, want := range tests {
+		if got := legacyBitrateBits(input); got != want {
+			t.Fatalf("legacyBitrateBits(%q) = %d, want %d", input, got, want)
+		}
 	}
 }
 

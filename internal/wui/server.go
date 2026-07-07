@@ -1995,6 +1995,8 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	videoCodec := q.Get("c:v")
 	audioCodec := q.Get("c:a")
 	container := q.Get("f")
+	videoBitrate := q.Get("b:v")
+	audioBitrate := q.Get("b:a")
 	if format == "mp4" {
 		container = "mp4"
 		if videoCodec == "" {
@@ -2011,6 +2013,10 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 		if audioCodec == "" {
 			audioCodec = "copy"
 		}
+	}
+	if videoBitrate != "" && (audioCodec == "copy" || audioBitrate == "") {
+		audioCodec = ""
+		audioBitrate = "96k"
 	}
 	args := []string{}
 	if !q.Has("debug") {
@@ -2061,16 +2067,18 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	if size := q.Get("s"); size != "" && !cfg.VAAPIEnabled {
 		args = append(args, "-s", size)
 	}
-	for _, key := range []string{"r", "ar", "b:v", "b:a"} {
+	for _, key := range []string{"r", "ar"} {
 		if value := q.Get(key); value != "" {
 			args = append(args, "-"+key, value)
-			if key == "b:v" {
-				args = append(args, "-minrate:v", value, "-maxrate:v", value)
-			}
-			if key == "b:a" {
-				args = append(args, "-minrate:a", value, "-maxrate:a", value)
-			}
 		}
+	}
+	if videoBitrate != "" {
+		args = append(args, "-b:v", videoBitrate, "-minrate:v", videoBitrate, "-maxrate:v", videoBitrate)
+		args = append(args, "-bufsize:v", strconv.FormatInt(legacyBitrateBits(videoBitrate)*8, 10))
+	}
+	if audioBitrate != "" {
+		args = append(args, "-b:a", audioBitrate, "-minrate:a", audioBitrate, "-maxrate:a", audioBitrate)
+		args = append(args, "-bufsize:a", strconv.FormatInt(legacyBitrateBits(audioBitrate)*8, 10))
 	}
 	if videoCodec == "h264" {
 		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
@@ -2090,6 +2098,24 @@ func legacyWatchStart(value string) string {
 		return "2"
 	}
 	return strconv.Itoa(seconds)
+}
+
+func legacyBitrateBits(value string) int64 {
+	if len(value) < 2 {
+		return 0
+	}
+	unit := value[len(value)-1]
+	if unit != 'k' && unit != 'K' && unit != 'm' && unit != 'M' {
+		return 0
+	}
+	n, err := strconv.ParseInt(value[:len(value)-1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	if unit == 'm' || unit == 'M' {
+		return n * 1024 * 1024
+	}
+	return n * 1024
 }
 
 func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
