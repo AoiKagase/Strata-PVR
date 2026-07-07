@@ -1186,15 +1186,15 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			name string
 			err  error
 		}{
-			{"config.json", validateJSONFile("config.json", "")},
-			{"rules.json", validateJSONFile("rules.json", "")},
+			{"config.json", validateJSONObjectFile("config.json")},
+			{"rules.json", validateJSONArrayFile("rules.json")},
 			{"data directory", validateDir("data")},
 			{"log directory", validateWritableDir("log")},
 			{"recordedDir", recordedDirErr},
-			{"data/schedule.json", validateJSONFile(filepath.Join("data", "schedule.json"), "")},
-			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},
-			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "")},
-			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
+			{"data/schedule.json", validateJSONArrayFile(filepath.Join("data", "schedule.json"))},
+			{"data/reserves.json", validateJSONArrayFile(filepath.Join("data", "reserves.json"))},
+			{"data/recording.json", validateJSONArrayFile(filepath.Join("data", "recording.json"))},
+			{"data/recorded.json", validateJSONArrayFile(filepath.Join("data", "recorded.json"))},
 			{"WUI static assets", validateWUIStaticAssets()},
 			{"available disk space", diskErr},
 			{"ffmpeg command", validateCommandAvailable("ffmpeg")},
@@ -1417,9 +1417,14 @@ func copyBackupFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0o644)
 }
 
-func validateJSONFile(path, empty string) error {
-	var v any
-	return storage.ReadJSON(path, &v, empty)
+func validateJSONObjectFile(path string) error {
+	var v map[string]any
+	return storage.ReadJSON(path, &v, "")
+}
+
+func validateJSONArrayFile(path string) error {
+	var v []any
+	return storage.ReadJSON(path, &v, "")
 }
 
 func validateDir(path string) error {

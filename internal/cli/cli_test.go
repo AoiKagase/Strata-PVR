@@ -393,6 +393,46 @@ func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
 	}
 }
 
+func TestCompatCheckRejectsWrongJSONShapes(t *testing.T) {
+	dir := t.TempDir()
+	mirakurun := newCompatMirakurun(t)
+	defer mirakurun.Close()
+	installFakeCompatCommand(t, dir, "ffmpeg")
+	installFakeCompatCommand(t, dir, "ffprobe")
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"data", "recorded", "log", "web"} {
+		if err := os.Mkdir(name, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeCompatWebAssets(t, "web")
+	for name, data := range map[string]string{
+		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
+		"rules.json":          `{}`,
+		"data/schedule.json":  `[]`,
+		"data/reserves.json":  `[]`,
+		"data/recording.json": `[]`,
+		"data/recorded.json":  `[]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "compat check failed") {
+		t.Fatalf("expected compat failure, got err=%v output=%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "NG rules.json") {
+		t.Fatalf("compat output missing wrong rules shape failure: %s", out.String())
+	}
+}
+
 func TestCompatCheckFailsWhenMirakurunUnavailable(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
