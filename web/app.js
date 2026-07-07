@@ -1039,6 +1039,41 @@
     return String(value);
   }
 
+  function setControlValue(id, value) {
+    var control = byId(id);
+    if (!control) {
+      return;
+    }
+    if (control.type === "checkbox") {
+      control.checked = Boolean(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      control.value = value.join(", ");
+      return;
+    }
+    control.value = value === undefined || value === null ? "" : String(value);
+  }
+
+  function renderConfigForm() {
+    if (state.configEditorDirty) {
+      return;
+    }
+    var cfg = state.config || {};
+    setControlValue("configMirakurunPath", cfg.mirakurunPath || cfg.schedulerMirakurunPath);
+    setControlValue("configRecordedDir", cfg.recordedDir);
+    setControlValue("configRecordedFormat", cfg.recordedFormat);
+    setControlValue("configWuiHost", cfg.wuiHost);
+    setControlValue("configWuiPort", cfg.wuiPort);
+    setControlValue("configWuiOpenServer", cfg.wuiOpenServer);
+    setControlValue("configWuiOpenHost", cfg.wuiOpenHost);
+    setControlValue("configWuiOpenPort", cfg.wuiOpenPort);
+    setControlValue("configNormalizationForm", cfg.normalizationForm);
+    setControlValue("configStorageLowSpaceThresholdMB", cfg.storageLowSpaceThresholdMB);
+    setControlValue("configStorageLowSpaceAction", cfg.storageLowSpaceAction);
+    setControlValue("configExcludeServices", cfg.excludeServices);
+  }
+
   function renderSettings() {
     var root = byId("settingsList");
     if (!root) {
@@ -1068,6 +1103,7 @@
       root.appendChild(key);
       root.appendChild(value);
     });
+    renderConfigForm();
     renderConfigEditor();
     renderStorage();
   }
@@ -1077,7 +1113,7 @@
     if (!editor) {
       return;
     }
-    if (!force && state.configEditorDirty && document.activeElement === editor) {
+    if (!force && state.configEditorDirty) {
       return;
     }
     editor.value = JSON.stringify(state.config || {}, null, 2);
@@ -1111,7 +1147,7 @@
     runAction("scheduler/force.json", "PUT", "スケジューラを実行しますか？");
   }
 
-  function readConfigEditor() {
+  function readConfigEditorObject() {
     var editor = byId("configEditor");
     if (!editor) {
       return null;
@@ -1122,11 +1158,128 @@
         showError(new Error("設定JSONはオブジェクトにしてください"));
         return null;
       }
-      return JSON.stringify(config, null, 2);
+      return config;
     } catch (error) {
       showError(new Error("設定JSONが正しくありません"));
       return null;
     }
+  }
+
+  function readConfigEditor() {
+    var config = readConfigEditorObject();
+    return config ? JSON.stringify(config, null, 2) : null;
+  }
+
+  function controlString(id) {
+    var control = byId(id);
+    return control ? control.value.trim() : "";
+  }
+
+  function setOptionalString(config, field, id) {
+    var value = controlString(id);
+    if (value) {
+      config[field] = value;
+    } else {
+      delete config[field];
+    }
+  }
+
+  function setOptionalPort(config, field, id) {
+    var value = controlString(id);
+    if (!value) {
+      delete config[field];
+      return true;
+    }
+    var number = Number(value);
+    if (!Number.isInteger(number) || number < 1 || number > 65535) {
+      showError(new Error(field + " は 1-65535 の整数にしてください"));
+      return false;
+    }
+    config[field] = number;
+    return true;
+  }
+
+  function setOptionalNonNegativeInteger(config, field, id) {
+    var value = controlString(id);
+    if (!value) {
+      delete config[field];
+      return true;
+    }
+    var number = Number(value);
+    if (!Number.isInteger(number) || number < 0) {
+      showError(new Error(field + " は 0 以上の整数にしてください"));
+      return false;
+    }
+    config[field] = number;
+    return true;
+  }
+
+  function applyConfigFormToEditor(silent) {
+    var config = readConfigEditorObject();
+    var openServer = byId("configWuiOpenServer");
+    if (!config) {
+      return null;
+    }
+    setOptionalString(config, "mirakurunPath", "configMirakurunPath");
+    delete config.schedulerMirakurunPath;
+    setOptionalString(config, "recordedDir", "configRecordedDir");
+    setOptionalString(config, "recordedFormat", "configRecordedFormat");
+    setOptionalString(config, "wuiHost", "configWuiHost");
+    if (!setOptionalPort(config, "wuiPort", "configWuiPort")) {
+      return null;
+    }
+    if (openServer) {
+      config.wuiOpenServer = openServer.checked;
+    }
+    setOptionalString(config, "wuiOpenHost", "configWuiOpenHost");
+    if (!setOptionalPort(config, "wuiOpenPort", "configWuiOpenPort")) {
+      return null;
+    }
+    setOptionalString(config, "normalizationForm", "configNormalizationForm");
+    if (!setOptionalNonNegativeInteger(config, "storageLowSpaceThresholdMB", "configStorageLowSpaceThresholdMB")) {
+      return null;
+    }
+    setOptionalString(config, "storageLowSpaceAction", "configStorageLowSpaceAction");
+    var excludeServices = splitList(controlString("configExcludeServices")).map(function (value) {
+      return Number(value);
+    });
+    if (excludeServices.some(function (value) {
+      return !Number.isInteger(value) || value <= 0;
+    })) {
+      showError(new Error("除外サービスはカンマ区切りの正の整数にしてください"));
+      return null;
+    }
+    if (excludeServices.length) {
+      config.excludeServices = excludeServices;
+    } else {
+      delete config.excludeServices;
+    }
+    var editor = byId("configEditor");
+    if (editor) {
+      editor.value = JSON.stringify(config, null, 2);
+      state.configEditorDirty = true;
+    }
+    if (!silent) {
+      setBusy("フォームの内容を設定JSONに反映しました");
+    }
+    return config;
+  }
+
+  function saveConfigFromForm() {
+    var config = applyConfigFormToEditor(true);
+    if (!config) {
+      return;
+    }
+    if (!confirmAction("フォームの内容で config.json を保存しますか？")) {
+      return;
+    }
+    setBusy("設定保存中");
+    sendConfigJSON(JSON.stringify(config, null, 2)).then(function (savedConfig) {
+      state.config = savedConfig || {};
+      state.configEditorDirty = false;
+      render();
+      setBusy("設定を保存しました");
+    }).catch(showError);
   }
 
   function saveConfigFromEditor() {
@@ -1148,6 +1301,7 @@
 
   function resetConfigEditor() {
     state.configEditorDirty = false;
+    renderConfigForm();
     renderConfigEditor(true);
     setBusy("設定JSONを再読み込みしました");
   }
@@ -1510,6 +1664,21 @@
     if (resetConfigButton) {
       resetConfigButton.addEventListener("click", resetConfigEditor);
     }
+    var applyConfigFormButton = byId("applyConfigFormButton");
+    if (applyConfigFormButton) {
+      applyConfigFormButton.addEventListener("click", function () {
+        applyConfigFormToEditor(false);
+      });
+    }
+    var saveConfigFormButton = byId("saveConfigFormButton");
+    if (saveConfigFormButton) {
+      saveConfigFormButton.addEventListener("click", saveConfigFromForm);
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".config-form-control"), function (control) {
+      control.addEventListener("change", function () {
+        applyConfigFormToEditor(true);
+      });
+    });
     var addRuleButton = byId("addRuleButton");
     if (addRuleButton) {
       addRuleButton.addEventListener("click", addRuleFromEditor);

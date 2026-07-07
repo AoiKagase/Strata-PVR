@@ -781,6 +781,34 @@ button:focus-visible {
   margin-top: 12px;
 }
 
+.config-form-panel {
+  margin-top: 12px;
+}
+
+.config-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.config-form label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.config-form span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.config-form select {
+  max-width: none;
+}
+
 .panel-head {
   display: flex;
   align-items: flex-start;

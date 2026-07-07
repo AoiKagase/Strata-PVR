@@ -325,6 +325,80 @@
           </dl>
         </section>
       </div>
+      <section class="panel config-form-panel">
+        <div class="panel-head">
+          <div>
+            <h3>基本設定</h3>
+            <p>よく使う Chinachu 互換設定を編集します。空欄の項目は config.json から削除されます。</p>
+          </div>
+          <div class="row-actions">
+            <button id="applyConfigFormButton" type="button" title="フォームの内容を設定JSONへ反映">JSONへ反映</button>
+            <button id="saveConfigFormButton" type="button" title="フォームの内容で設定JSONを保存">フォーム保存</button>
+          </div>
+        </div>
+        <div class="config-form">
+          <label>
+            <span>Mirakurun URL</span>
+            <input id="configMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http://127.0.0.1:40772">
+          </label>
+          <label>
+            <span>録画ディレクトリ</span>
+            <input id="configRecordedDir" class="config-form-control" type="text" autocomplete="off" placeholder="./recorded/">
+          </label>
+          <label>
+            <span>録画ファイル名</span>
+            <input id="configRecordedFormat" class="config-form-control" type="text" autocomplete="off" placeholder="<title>.m2ts">
+          </label>
+          <label>
+            <span>WUIホスト</span>
+            <input id="configWuiHost" class="config-form-control" type="text" autocomplete="off" placeholder="0.0.0.0">
+          </label>
+          <label>
+            <span>WUIポート</span>
+            <input id="configWuiPort" class="config-form-control" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="10772">
+          </label>
+          <label>
+            <span>公開ホスト</span>
+            <input id="configWuiOpenHost" class="config-form-control" type="text" autocomplete="off" placeholder="192.168.x.x">
+          </label>
+          <label>
+            <span>公開ポート</span>
+            <input id="configWuiOpenPort" class="config-form-control" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="20772">
+          </label>
+          <label>
+            <span>正規化</span>
+            <select id="configNormalizationForm" class="config-form-control">
+              <option value="">未設定</option>
+              <option value="NFC">NFC</option>
+              <option value="NFD">NFD</option>
+              <option value="NFKC">NFKC</option>
+              <option value="NFKD">NFKD</option>
+            </select>
+          </label>
+          <label>
+            <span>空き容量しきい値MB</span>
+            <input id="configStorageLowSpaceThresholdMB" class="config-form-control" type="number" min="0" step="1" inputmode="numeric" placeholder="10240">
+          </label>
+          <label>
+            <span>空き容量不足時</span>
+            <select id="configStorageLowSpaceAction" class="config-form-control">
+              <option value="">未設定</option>
+              <option value="remove">remove</option>
+              <option value="stop">stop</option>
+              <option value="command">command</option>
+              <option value="notify">notify</option>
+            </select>
+          </label>
+          <label>
+            <span>除外サービス</span>
+            <input id="configExcludeServices" class="config-form-control" type="text" autocomplete="off" placeholder="32736, 32737">
+          </label>
+          <label class="checkbox-label">
+            <span>公開WUI</span>
+            <input id="configWuiOpenServer" class="config-form-control" type="checkbox">
+          </label>
+        </div>
+      </section>
       <section class="panel config-editor-panel">
         <div class="panel-head">
           <div>
