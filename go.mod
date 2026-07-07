@@ -1,4 +1,4 @@
-module chinachu-go
+module strata-pvr
 
 go 1.22
 

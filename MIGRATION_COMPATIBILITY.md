@@ -1,7 +1,12 @@
-# Chinachu Go Migration Compatibility
+# Strata PVR Migration Compatibility
 
-This document tracks compatibility against the gamma branch implementation in
-`../Chinachu`. It must be updated whenever behavior is implemented or changed.
+This document tracks Strata PVR compatibility against the legacy gamma branch
+implementation in the sibling source tree. It must be updated whenever behavior
+is implemented or changed.
+
+Formal name: Strata PVR
+
+Description: A Chinachu-compatible PVR for Mirakurun, written in Go.
 
 ## Audit Source
 
@@ -29,13 +34,13 @@ before or after the ID.
 | --- | --- | --- |
 | `installer` | intentionally changed | Accepted. Node/npm and Node-era dependency installation are intentionally not performed; build or install the Go binary directly. |
 | `updater` | intentionally changed | Accepted, but automatic git/service/installer operations are not performed. This avoids Node/npm runtime assumptions and destructive service changes; users should update repository/binary explicitly. |
-| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation uses the Go binary and includes legacy LSB headers, start/stop/restart/status handling, `/var/run/chinachu-*.pid`, `su $USER` launch, and process-group `SIGQUIT` stop behavior. `execute` creates missing `config.json`/`rules.json` from samples and ensures `log/` and `data/`; `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
+| `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation uses the `strata-pvr` binary and includes legacy LSB headers, start/stop/restart/status handling, `/var/run/chinachu-*.pid`, `su $USER` launch, process-group `SIGQUIT` stop behavior, and an explicit `STRATA_PVR_DIR` working directory. `execute` creates missing `config.json`/`rules.json` from samples and ensures `log/` and `data/`; `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs legacy Mirakurun fetch/error/reserve/conflict/skip/write/tuner/duplicate/result lines. |
 | `search` | partially compatible | Filters `data/schedule.json` with rule-style options plus `-id`, `-now`, `-today`, `-tomorrow`, `-simple`, `-detail`, and `-n/--num`. CLI search/list title and detail matching now honors `config.normalizationForm` for NFC/NFD/NFKC/NFKD; output uses an `easy-table`-style padded table including simple/detail column behavior. |
-| `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves, supports simulation output, the `1seg` flag, legacy `-id/--id` program ID options, and the legacy schedule-before-duplicate error order; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
-| `unreserve <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
-| `skip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, target JSON output, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
-| `unskip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, legacy `skip:` output label, legacy pre-update target JSON output, `isSkip` property removal on write, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
+| `reserve <pgid> [-s|--simulation] [--1seg]` | partially compatible | Reads schedule and writes reserves, supports simulation output, the `1seg` flag, legacy `-id/--id` program ID options, and the legacy schedule-before-duplicate error order; known program/channel JSON fields now emit in legacy struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
+| `unreserve <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in legacy struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
+| `skip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, target JSON output, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in legacy struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
+| `unskip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, legacy `skip:` output label, legacy pre-update target JSON output, `isSkip` property removal on write, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in legacy struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
 | `stop <pgid> [-s|--simulation]` | partially compatible | Marks recording entry with `abort:true`, sets the matching auto reserve to `isSkip:true`, supports simulation/JSON output like the Node CLI, and accepts legacy `-id/--id` program ID options. |
 | `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; known rule JSON fields now emit in legacy-oriented order with `isDisabled` last, but unknown/insertion-order edge cases still differ from Node. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
@@ -144,9 +149,9 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | `config.json` | JSON object, unknown fields allowed. | API config PUT writes the supplied `json` query value after validation. | partially compatible |
 | `rules.json` | Array of rule objects. Pretty printed by rule/API writes; known fields emit in a stable legacy-oriented order. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
-| `data/reserves.json` | Array of program objects. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`; known fields are emitted in a stable Chinachu-compatible order. | scheduler/CLI/API/operator | partially compatible |
-| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. Program and nested channel unknown fields are preserved across Go read/write cycles where practical; known fields are emitted in a stable Chinachu-compatible order. | operator/CLI/API | partially compatible |
-| `data/recorded.json` | Array of recorded program objects with `recorded` path. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`; known fields are emitted in a stable Chinachu-compatible order. | operator/cleanup/API | partially compatible |
+| `data/reserves.json` | Array of program objects. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `legacy.Program`; known fields are emitted in a stable legacy-compatible order. | scheduler/CLI/API/operator | partially compatible |
+| `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. Program and nested channel unknown fields are preserved across Go read/write cycles where practical; known fields are emitted in a stable legacy-compatible order. | operator/CLI/API | partially compatible |
+| `data/recorded.json` | Array of recorded program objects with `recorded` path. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `legacy.Program`; known fields are emitted in a stable legacy-compatible order. | operator/cleanup/API | partially compatible |
 | `data/scheduler.pid` | Scheduler process id text written while `update` or WUI scheduler force runs and removed on exit. | scheduler/WUI status | implemented |
 | `data/operator.pid` | Operator process id text written by `service operator execute` and removed on exit. | operator/WUI status | implemented |
 | `log/scheduler` | Scheduler log stream with `RUNNING SCHEDULER.`, `GETTING EPG from Mirakurun.`, `Mirakurun -> ...` fetch counts, `Mirakurun -> Error:` plus error details, `RESERVE:`, `DUPLICATE:`, `!CONFLICT:`, `SKIP:`, `OVERRIDEBYRULE:`, `WRITE:`, `TUNERS:`, duplicate ID `**WARNING**`, and `MATCHES`/`DUPLICATES`/`CONFLICTS`/`SKIPS`/`RESERVES` result counters. | scheduler/WUI | partially compatible |
@@ -207,7 +212,9 @@ Recorded file note: `/api/recorded/:id/file.m2ts` ignores request `Range` header
 
 XSPF note: recorded watch titles use the old script's replacement order (`<`, `>`, then `&`, then `"`), and channel watch titles are emitted unescaped like `script-channel-watch.vm.js`; XSPF locations only escape `&`.
 
-The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, fixed extension-based content types, Host-header validation, the Socket.IO client script, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to `../Chinachu/web` during development. Static `.ico` and `.png` assets now preserve the legacy `Cache-Control: private, max-age=86400` behavior while other static assets keep `no-cache`; legacy content types for html/js/css/icons/images/video/json/xspf are set explicitly; common legacy security headers and `Server: Chinachu (Node)` are preserved for WUI compatibility; static `Last-Modified`/`If-Modified-Since` conditional requests return 304 like the old WUI; missing static files and out-of-range static Range requests return the old fixed text/plain 404/416 bodies; `/socket.io/socket.io.js` returns a lightweight no-Node compatibility client that fires connect/status/notify callbacks, polls status every 5 seconds plus data notifications every 15 seconds, and clears polling timers on `disconnect()` so existing WUI assets can load and refresh API data. Full Socket.IO realtime push remains incomplete; requests without `Host` return 400. Current status: partially compatible; Node-based frontend builds are not required.
+The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, fixed extension-based content types, Host-header validation, the Socket.IO client script, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to the sibling legacy `web/` directory during development. Static `.ico` and `.png` assets now preserve the legacy `Cache-Control: private, max-age=86400` behavior while other static assets keep `no-cache`; legacy content types for html/js/css/icons/images/video/json/xspf are set explicitly; common legacy security headers are preserved and the `Server` header now identifies `Strata PVR`; static `Last-Modified`/`If-Modified-Since` conditional requests return 304 like the old WUI; missing static files and out-of-range static Range requests return the old fixed text/plain 404/416 bodies; `/socket.io/socket.io.js` returns a lightweight no-Node compatibility client that fires connect/status/notify callbacks, polls status every 5 seconds plus data notifications every 15 seconds, and clears polling timers on `disconnect()` so existing WUI assets can load and refresh API data. Full Socket.IO realtime push remains incomplete; requests without `Host` return 400. Current status: partially compatible; Node-based frontend builds are not required.
+
+Frontend rewrite task: not started. After runtime compatibility is good enough for personal production use, replace the legacy static WUI with a native Strata PVR frontend. The replacement must keep the Go API/browser contract compatible where practical and must not introduce Node.js, npm, webpack, or any Node-based runtime/build requirement for deployment.
 
 ## Mirakurun Endpoints Used
 
@@ -220,7 +227,7 @@ The JS Mirakurun client calls:
 - service/channel stream: used by WUI watch routes.
 - service logo: used by channel logo route.
 
-Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, legacy-style `Chinachu/0.10.7-gamma.1 (<component>)` User-Agent values for scheduler/operator/WUI requests, and `X-Mirakurun-Priority`.
+Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, Strata PVR User-Agent values for scheduler/operator/WUI requests, and `X-Mirakurun-Priority`. The User-Agent product token intentionally uses the new project name instead of the legacy product name.
 
 ## Side Effects
 
@@ -250,7 +257,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Area | Status |
 | --- | --- |
 | Audit | partially compatible |
-| Go module skeleton | implemented |
+| Strata PVR module skeleton | implemented |
 | Config loading | partially compatible |
 | Atomic JSON state | implemented |
 | CLI command acceptance | partially compatible |
@@ -260,7 +267,8 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Scheduler | partially compatible |
 | Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, ctx/signal cancellation that closes active streams and finalizes recording/recorded state, `recordedCommand` execution, `data/operator.pid` lifecycle, process context cancellation on `SIGINT`/`SIGTERM`/Unix `SIGQUIT`, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and every in-flight signal edge case remain incomplete. |
 | WUI/API | partially compatible |
+| Native Strata PVR frontend rewrite | not started |
 | Installer/updater | intentionally changed; commands are accepted and provide Go-runtime guidance, but Node-era dependency installation, git automation, and service mutation are not performed. |
 | Logging | partially compatible |
-| Compat doctor/check/diff/backup | implemented; validates required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, warns about intentionally omitted personal-use-overkill integrations, reports dry-run JSON rewrite differences for compatible state files, and can back up current JSON state files under `backup/`. |
+| Compat doctor/check/diff/backup | implemented; validates required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, warns about intentionally omitted personal-use-overkill integrations, reports dry-run JSON rewrite differences for compatible state files, and can back up current JSON state files under `backup/strata-pvr-*`. |
 | Tests | partially compatible |

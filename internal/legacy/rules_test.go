@@ -1,4 +1,4 @@
-package chinachu
+package legacy
 
 import (
 	"encoding/json"
@@ -31,7 +31,7 @@ func TestProgramMatchesRuleOvernightHour(t *testing.T) {
 	}
 }
 
-func TestProgramMatchesRuleUsesFullTitleLikeChinachuCommon(t *testing.T) {
+func TestProgramMatchesRuleUsesFullTitleLikeLegacyCommon(t *testing.T) {
 	program := Program{
 		Title:     "短い題名",
 		FullTitle: "長い題名 特別版",
@@ -57,10 +57,10 @@ func TestProgramMatchesRuleUsesFullTitleLikeChinachuCommon(t *testing.T) {
 func TestProgramMatchesRuleCLIRequiresDetailForLegacyDescriptionAndReserveFlags(t *testing.T) {
 	program := Program{Title: "番組", Flags: []string{"新"}, Channel: Channel{Type: "GR"}}
 	if !ProgramMatchesRule(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
-		t.Fatal("chinachu-common ignore_descriptions should allow a program without detail")
+		t.Fatal("legacy common ignore_descriptions should allow a program without detail")
 	}
 	if !ProgramMatchesRule(Rule{ReserveFlags: []string{"新"}}, program) {
-		t.Fatal("chinachu-common reserve_flags should match flags without requiring detail")
+		t.Fatal("legacy common reserve_flags should match flags without requiring detail")
 	}
 	if ProgramMatchesRuleForCLI(Rule{IgnoreDescriptions: []string{"再放送"}}, program) {
 		t.Fatal("CLI ignore_descriptions should not match a program without detail")
@@ -108,7 +108,7 @@ func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 	}
 	program := Program{Seconds: 60, FullTitle: "Example", Channel: Channel{Type: "GR"}}
 	if !ProgramMatchesRule(rule, program) {
-		t.Fatal("expected incomplete duration rule to be ignored like legacy Chinachu")
+		t.Fatal("expected incomplete duration rule to be ignored like legacy runtime")
 	}
 
 	if err := json.Unmarshal([]byte(`{"duration":{"min":99999,"max":100000}}`), &rule); err != nil {

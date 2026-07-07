@@ -1,4 +1,4 @@
-package chinachu
+package legacy
 
 import (
 	"regexp"

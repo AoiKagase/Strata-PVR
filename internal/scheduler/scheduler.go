@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/logging"
-	"chinachu-go/internal/mirakurun"
-	"chinachu-go/internal/storage"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/logging"
+	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/storage"
 )
 
 type Source interface {
@@ -40,8 +40,8 @@ type Result struct {
 	Conflicts       int
 	Skips           int
 	Reserves        int
-	OverridesByRule []chinachu.Program
-	DuplicateItems  []chinachu.Program
+	OverridesByRule []legacy.Program
+	DuplicateItems  []legacy.Program
 }
 
 func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
@@ -58,7 +58,7 @@ func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	client.UserAgent = mirakurun.LegacyUserAgent("scheduler")
+	client.UserAgent = mirakurun.StrataUserAgent("scheduler")
 	return RunWithSource(ctx, paths, cfg, client, simulation, time.Now())
 }
 
@@ -141,11 +141,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		}
 	}
 
-	var rules []chinachu.Rule
+	var rules []legacy.Rule
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
 		return Result{}, err
 	}
-	var oldReserves []chinachu.Program
+	var oldReserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &oldReserves, "[]"); err != nil {
 		return Result{}, err
 	}
@@ -254,7 +254,7 @@ func legacyISODateTime(timestampMS int64) string {
 	return time.UnixMilli(timestampMS).In(time.Local).Format("2006-01-02T15:04:05-0700")
 }
 
-func logDuplicateIDs(logPath string, schedule []chinachu.ChannelSchedule) error {
+func logDuplicateIDs(logPath string, schedule []legacy.ChannelSchedule) error {
 	seen := map[string]bool{}
 	for _, channel := range schedule {
 		for _, program := range channel.Programs {
@@ -357,16 +357,16 @@ func runHookAsync(ctx context.Context, logPath, command string, args []string) e
 	return nil
 }
 
-func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time) ([]chinachu.Program, Result) {
+func BuildReserves(schedule []legacy.ChannelSchedule, rules []legacy.Rule, oldReserves []legacy.Program, tuners []mirakurun.Tuner, now time.Time) ([]legacy.Program, Result) {
 	return BuildReservesWithNormalization(schedule, rules, oldReserves, tuners, now, "")
 }
 
-func BuildReservesWithNormalization(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time, normalizationForm string) ([]chinachu.Program, Result) {
-	matches := []chinachu.Program{}
-	overridesByRule := []chinachu.Program{}
+func BuildReservesWithNormalization(schedule []legacy.ChannelSchedule, rules []legacy.Rule, oldReserves []legacy.Program, tuners []mirakurun.Tuner, now time.Time, normalizationForm string) ([]legacy.Program, Result) {
+	matches := []legacy.Program{}
+	overridesByRule := []legacy.Program{}
 	for _, channel := range schedule {
 		for _, program := range channel.Programs {
-			if chinachu.MatchesAnyRuleWithNormalization(rules, program, normalizationForm) {
+			if legacy.MatchesAnyRuleWithNormalization(rules, program, normalizationForm) {
 				matches = append(matches, program)
 			}
 		}
@@ -381,7 +381,7 @@ func BuildReservesWithNormalization(schedule []chinachu.ChannelSchedule, rules [
 				overridesByRule = append(overridesByRule, reserve)
 				continue
 			}
-			if updated := chinachu.GetProgramByID(reserve.ID, schedule, nil); updated != nil {
+			if updated := legacy.GetProgramByID(reserve.ID, schedule, nil); updated != nil {
 				oneSeg := reserve.OneSeg
 				reserve = *updated
 				reserve.IsManualReserved = true
@@ -406,7 +406,7 @@ func BuildReservesWithNormalization(schedule []chinachu.ChannelSchedule, rules [
 	conflicts := markConflicts(matches, tuners)
 	applyRecordedFormats(matches, rules, normalizationForm)
 
-	reserves := []chinachu.Program{}
+	reserves := []legacy.Program{}
 	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts, OverridesByRule: overridesByRule, DuplicateItems: duplicateItems}
 	for _, program := range matches {
 		if program.IsDuplicate {
@@ -422,9 +422,9 @@ func BuildReservesWithNormalization(schedule []chinachu.ChannelSchedule, rules [
 	return removeEnded(reserves, now), result
 }
 
-func markDuplicates(programs []chinachu.Program) (int, []chinachu.Program) {
+func markDuplicates(programs []legacy.Program) (int, []legacy.Program) {
 	count := 0
-	duplicates := []chinachu.Program{}
+	duplicates := []legacy.Program{}
 	for i := range programs {
 		a := &programs[i]
 		for j := range programs {
@@ -447,8 +447,8 @@ func markDuplicates(programs []chinachu.Program) (int, []chinachu.Program) {
 	return count, duplicates
 }
 
-func markConflicts(programs []chinachu.Program, tuners []mirakurun.Tuner) int {
-	threads := make([][]chinachu.Program, len(tuners))
+func markConflicts(programs []legacy.Program, tuners []mirakurun.Tuner) int {
+	threads := make([][]legacy.Program, len(tuners))
 	count := 0
 	for i := range programs {
 		p := &programs[i]
@@ -481,17 +481,17 @@ func markConflicts(programs []chinachu.Program, tuners []mirakurun.Tuner) int {
 	return count
 }
 
-func applyRecordedFormats(programs []chinachu.Program, rules []chinachu.Rule, normalizationForm string) {
+func applyRecordedFormats(programs []legacy.Program, rules []legacy.Rule, normalizationForm string) {
 	for i := range programs {
 		for _, rule := range rules {
-			if rule.RecordedFormat != "" && chinachu.ProgramMatchesRuleWithNormalization(rule, programs[i], normalizationForm) {
+			if rule.RecordedFormat != "" && legacy.ProgramMatchesRuleWithNormalization(rule, programs[i], normalizationForm) {
 				programs[i].RecordedFormat = rule.RecordedFormat
 			}
 		}
 	}
 }
 
-func removeEnded(programs []chinachu.Program, now time.Time) []chinachu.Program {
+func removeEnded(programs []legacy.Program, now time.Time) []legacy.Program {
 	out := programs[:0]
 	nowMS := now.UnixMilli()
 	for _, program := range programs {
@@ -502,7 +502,7 @@ func removeEnded(programs []chinachu.Program, now time.Time) []chinachu.Program 
 	return out
 }
 
-func containsProgramID(programs []chinachu.Program, id string) bool {
+func containsProgramID(programs []legacy.Program, id string) bool {
 	for _, program := range programs {
 		if program.ID == id {
 			return true

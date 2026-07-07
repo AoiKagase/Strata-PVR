@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"chinachu-go/internal/cli"
+	"strata-pvr/internal/cli"
 )
 
 func main() {

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/mirakurun"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/mirakurun"
 )
 
 func TestMain(m *testing.M) {
@@ -56,15 +56,15 @@ func (f fakeSource) Tuners(context.Context) ([]mirakurun.Tuner, error) {
 
 func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
 	now := time.Date(2024, 7, 1, 20, 0, 0, 0, time.Local)
-	schedule := []chinachu.ChannelSchedule{{
-		Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101},
-		Programs: []chinachu.Program{
-			{ID: "auto", FullTitle: "Anime", Title: "Anime", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli(), Seconds: 3600, Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
-			{ID: "manual", FullTitle: "News", Title: "News", Category: "news", Start: now.Add(3 * time.Hour).UnixMilli(), End: now.Add(4 * time.Hour).UnixMilli(), Seconds: 3600, Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
+	schedule := []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101},
+		Programs: []legacy.Program{
+			{ID: "auto", FullTitle: "Anime", Title: "Anime", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli(), Seconds: 3600, Channel: legacy.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
+			{ID: "manual", FullTitle: "News", Title: "News", Category: "news", Start: now.Add(3 * time.Hour).UnixMilli(), End: now.Add(4 * time.Hour).UnixMilli(), Seconds: 3600, Channel: legacy.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
 		},
 	}}
-	rules := []chinachu.Rule{{Categories: []string{"anime"}, RecordedFormat: "<title>.m2ts"}}
-	old := []chinachu.Program{
+	rules := []legacy.Rule{{Categories: []string{"anime"}, RecordedFormat: "<title>.m2ts"}}
+	old := []legacy.Program{
 		{ID: "auto", IsSkip: true},
 		{ID: "manual", IsManualReserved: true, OneSeg: true, Start: now.Add(3 * time.Hour).UnixMilli(), End: now.Add(4 * time.Hour).UnixMilli()},
 	}
@@ -88,13 +88,13 @@ func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
 
 func TestBuildReservesUsesNormalizationForm(t *testing.T) {
 	now := time.Date(2024, 7, 1, 20, 0, 0, 0, time.Local)
-	schedule := []chinachu.ChannelSchedule{{
-		Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101},
-		Programs: []chinachu.Program{
-			{ID: "norm", FullTitle: "ＡＢＣ特集", Title: "ＡＢＣ", Detail: "第１話", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli(), Seconds: 3600, Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
+	schedule := []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101},
+		Programs: []legacy.Program{
+			{ID: "norm", FullTitle: "ＡＢＣ特集", Title: "ＡＢＣ", Detail: "第１話", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli(), Seconds: 3600, Channel: legacy.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
 		},
 	}}
-	rules := []chinachu.Rule{{ReserveTitles: []string{"ABC特集"}, ReserveDescriptions: []string{"第1話"}, RecordedFormat: "<title>.m2ts"}}
+	rules := []legacy.Rule{{ReserveTitles: []string{"ABC特集"}, ReserveDescriptions: []string{"第1話"}, RecordedFormat: "<title>.m2ts"}}
 	without, _ := BuildReserves(schedule, rules, nil, []mirakurun.Tuner{{Types: []string{"GR"}}}, now)
 	if len(without) != 0 {
 		t.Fatalf("unexpected unnormalized reserves: %#v", without)

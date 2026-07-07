@@ -26,16 +26,16 @@ import (
 	"testing"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/storage"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/storage"
 )
 
 func TestAPIReadsLegacyJSONState(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	program := chinachu.Program{ID: "abc", Title: "番組", Channel: chinachu.Channel{Name: "svc"}}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	program := legacy.Program{ID: "abc", Title: "番組", Channel: legacy.Channel{Name: "svc"}}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -45,7 +45,7 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := json.Unmarshal(res.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
@@ -61,27 +61,27 @@ func TestAPIProgramReadsUseLegacyPrettyJSON(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	now := time.Now()
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:      "abc",
 		Title:   "番組",
 		Start:   now.Add(-time.Minute).UnixMilli(),
 		End:     now.Add(time.Minute).UnixMilli(),
-		Channel: chinachu.Channel{ID: "gr101", Name: "GR 101"},
+		Channel: legacy.Channel{ID: "gr101", Name: "GR 101"},
 	}
-	schedule := []chinachu.ChannelSchedule{{
-		Channel:  chinachu.Channel{ID: "gr101", Name: "GR 101"},
-		Programs: []chinachu.Program{program},
+	schedule := []legacy.ChannelSchedule{{
+		Channel:  legacy.Channel{ID: "gr101", Name: "GR 101"},
+		Programs: []legacy.Program{program},
 	}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -117,14 +117,14 @@ func TestAPIProgramReadsUseLegacyPrettyJSON(t *testing.T) {
 func TestAPIListReadsUseLegacyCompactJSON(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	program := chinachu.Program{ID: "abc", Title: "番組", Start: 1, End: 2}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	program := legacy.Program{ID: "abc", Title: "番組", Start: 1, End: 2}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -139,7 +139,7 @@ func TestAPIListReadsUseLegacyCompactJSON(t *testing.T) {
 		if strings.Contains(res.Body.String(), "\n") {
 			t.Fatalf("%s should use compact JSON, got %q", path, res.Body.String())
 		}
-		var decoded []chinachu.Program
+		var decoded []legacy.Program
 		if err := json.Unmarshal(res.Body.Bytes(), &decoded); err != nil {
 			t.Fatalf("%s invalid JSON: %v", path, err)
 		}
@@ -230,7 +230,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Schedule, []chinachu.ChannelSchedule{}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -375,7 +375,7 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	if got := res.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("index Cache-Control = %q", got)
 	}
-	if got := res.Header().Get("Server"); got != "Chinachu (Node)" {
+	if got := res.Header().Get("Server"); got != "Strata PVR" {
 		t.Fatalf("Server = %q", got)
 	}
 	for key, want := range map[string]string{
@@ -494,7 +494,7 @@ func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
 func TestAPIReserveSkipAndDelete(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -507,7 +507,7 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	if got := res.Body.String(); got != `{}` {
 		t.Fatalf("skip body = %q", got)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +535,7 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -546,7 +546,7 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("method override status = %d body=%s", res.Code, res.Body.String())
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -738,8 +738,8 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	program := chinachu.Program{ID: "abc", Title: "番組", Start: time.Now().UnixMilli()}
-	schedule := []chinachu.ChannelSchedule{{Programs: []chinachu.Program{program}}}
+	program := legacy.Program{ID: "abc", Title: "番組", Start: time.Now().UnixMilli()}
+	schedule := []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
@@ -750,7 +750,7 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -762,14 +762,14 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	program := chinachu.Program{ID: "abc", Title: "予約だけの番組", Start: 1, End: 2}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	program := legacy.Program{ID: "abc", Title: "予約だけの番組", Start: 1, End: 2}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -784,9 +784,9 @@ func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
 func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	schedule := []chinachu.ChannelSchedule{{
-		Channel:  chinachu.Channel{ID: "ch", Type: "GR", Channel: "27"},
-		Programs: []chinachu.Program{{ID: "p1", Title: "番組", Start: 1, End: 2, Channel: chinachu.Channel{ID: "ch"}}},
+	schedule := []legacy.ChannelSchedule{{
+		Channel:  legacy.Channel{ID: "ch", Type: "GR", Channel: "27"},
+		Programs: []legacy.Program{{ID: "p1", Title: "番組", Start: 1, End: 2, Channel: legacy.Channel{ID: "ch"}}},
 	}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
@@ -831,17 +831,17 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	now := time.Now()
-	schedule := []chinachu.ChannelSchedule{
+	schedule := []legacy.ChannelSchedule{
 		{
-			Channel: chinachu.Channel{ID: "gr101", Name: "GR 101"},
-			Programs: []chinachu.Program{
+			Channel: legacy.Channel{ID: "gr101", Name: "GR 101"},
+			Programs: []legacy.Program{
 				{ID: "onair", Title: "On Air", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Minute).UnixMilli()},
 				{ID: "future", Title: "Future", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli()},
 			},
 		},
 		{
-			Channel:  chinachu.Channel{ID: "gr102", Name: "GR 102"},
-			Programs: []chinachu.Program{{ID: "other", Title: "Other", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Minute).UnixMilli()}},
+			Channel:  legacy.Channel{ID: "gr102", Name: "GR 102"},
+			Programs: []legacy.Program{{ID: "other", Title: "Other", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Minute).UnixMilli()}},
 		},
 	}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
@@ -855,7 +855,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("channel status = %d body=%s", res.Code, res.Body.String())
 	}
-	var channel chinachu.ChannelSchedule
+	var channel legacy.ChannelSchedule
 	if err := json.Unmarshal(res.Body.Bytes(), &channel); err != nil {
 		t.Fatal(err)
 	}
@@ -869,7 +869,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("channel programs status = %d body=%s", res.Code, res.Body.String())
 	}
-	var programs []chinachu.Program
+	var programs []legacy.Program
 	if err := json.Unmarshal(res.Body.Bytes(), &programs); err != nil {
 		t.Fatal(err)
 	}
@@ -914,7 +914,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{{ID: "abc"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -929,10 +929,10 @@ func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc"}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{{ID: "abc"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -942,14 +942,14 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(recording) != 1 || !recording[0].Abort {
 		t.Fatalf("recording was not aborted: %#v", recording)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -965,7 +965,7 @@ func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
 	if err := os.WriteFile(existingPath, []byte("ts"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	recorded := []chinachu.Program{
+	recorded := []legacy.Program{
 		{ID: "exists", Recorded: filepath.ToSlash(existingPath)},
 		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
 	}
@@ -987,14 +987,14 @@ func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
 	}
-	var backup []chinachu.Program
+	var backup []legacy.Program
 	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(backup) != 2 {
 		t.Fatalf("backup should contain original list: %#v", backup)
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -1006,7 +1006,7 @@ func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
 func TestAPIRecordedDeleteBacksUpBeforeRemoval(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	recorded := []chinachu.Program{
+	recorded := []legacy.Program{
 		{ID: "abc", Recorded: filepath.ToSlash(filepath.Join(dir, "abc.m2ts"))},
 		{ID: "def", Recorded: filepath.ToSlash(filepath.Join(dir, "def.m2ts"))},
 	}
@@ -1028,14 +1028,14 @@ func TestAPIRecordedDeleteBacksUpBeforeRemoval(t *testing.T) {
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
 	}
-	var backup []chinachu.Program
+	var backup []legacy.Program
 	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(backup) != 2 {
 		t.Fatalf("backup should contain original list: %#v", backup)
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -1051,7 +1051,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1138,7 +1138,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("watchdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: `Title <&"'> One`, Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Title: `Title <&"'> One`, Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"9","bit_rate":"2400"}}`, nil)
@@ -1181,7 +1181,7 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: "Title", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Title: "Title", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var gotInput string
@@ -1221,7 +1221,7 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var gotInput string
@@ -1262,7 +1262,7 @@ func TestAPIRecordedWatchM2TSTranscodeRangeMapsSourceRange(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var gotInput string
@@ -1298,7 +1298,7 @@ func TestAPIRecordedWatchM2TSLegacyStartOffset(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"376","bit_rate":"752"}}`, nil)
@@ -1353,7 +1353,7 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var gotInput string
@@ -1392,7 +1392,7 @@ func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"10.0"}}`, nil)
@@ -1413,7 +1413,7 @@ func TestAPIRecordedWatchXSPFProbeError(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	restoreProbe := installFakeFFprobe(t, "", fmt.Errorf("fake ffprobe error"))
@@ -1449,7 +1449,7 @@ func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var gotInput string
@@ -1486,10 +1486,10 @@ func TestAPIProgramPreview(t *testing.T) {
 	restore := installFakeFFmpeg(t, "preview-image")
 	defer restore()
 
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1521,13 +1521,13 @@ func TestAPIProgramPreviewLegacyErrors(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	missingPath := filepath.Join(dir, "missing.m2ts")
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{
 		{ID: "scrambled", Recorded: filepath.ToSlash(missingPath), Raw: map[string]json.RawMessage{"tuner": json.RawMessage(`{"isScrambling":true}`)}},
 		{ID: "gone", Recorded: filepath.ToSlash(missingPath)},
 	}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "nopid", Recorded: filepath.ToSlash(missingPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "nopid", Recorded: filepath.ToSlash(missingPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1558,7 +1558,7 @@ func TestAPIProgramPreviewFFmpegError(t *testing.T) {
 	}
 	restore := installFakeFFmpeg(t, "", 9)
 	defer restore()
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1620,7 +1620,7 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("live"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1631,7 +1631,7 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 		t.Fatalf("missing pid status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1703,8 +1703,8 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	chid := strconv.FormatInt(123, 36)
-	schedule := []chinachu.ChannelSchedule{{
-		Channel: chinachu.Channel{ID: chid, Name: "Service & One"},
+	schedule := []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{ID: chid, Name: "Service & One"},
 	}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
@@ -1750,7 +1750,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	chid := strconv.FormatInt(123, 36)
-	schedule := []chinachu.ChannelSchedule{{Channel: chinachu.Channel{ID: chid, Name: "Service"}}}
+	schedule := []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: chid, Name: "Service"}}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
@@ -1790,7 +1790,7 @@ func TestAPIChannelWatchMP4KeepsLegacyLiveBitrateArgs(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	chid := strconv.FormatInt(123, 36)
-	schedule := []chinachu.ChannelSchedule{{Channel: chinachu.Channel{ID: chid, Name: "Service"}}}
+	schedule := []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: chid, Name: "Service"}}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
@@ -1833,8 +1833,8 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	chid := strconv.FormatInt(123, 36)
-	schedule := []chinachu.ChannelSchedule{{
-		Channel: chinachu.Channel{ID: chid, Name: "Service & One"},
+	schedule := []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{ID: chid, Name: "Service & One"},
 	}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
@@ -1865,7 +1865,7 @@ func TestAPIStorage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{RecordedDir: dir})
@@ -2011,8 +2011,8 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	schedule := []chinachu.ChannelSchedule{{
-		Programs: []chinachu.Program{
+	schedule := []legacy.ChannelSchedule{{
+		Programs: []legacy.Program{
 			{ID: "aaa", Title: "Reserve"},
 			{ID: "bbb", Title: "Conflict"},
 		},
@@ -2044,9 +2044,9 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 		t.Fatalf("scheduler json should use legacy pretty JSON, got %q", res.Body.String())
 	}
 	var result struct {
-		Time      int64              `json:"time"`
-		Conflicts []chinachu.Program `json:"conflicts"`
-		Reserves  []chinachu.Program `json:"reserves"`
+		Time      int64            `json:"time"`
+		Conflicts []legacy.Program `json:"conflicts"`
+		Reserves  []legacy.Program `json:"reserves"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)

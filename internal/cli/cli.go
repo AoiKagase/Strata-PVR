@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/mirakurun"
-	"chinachu-go/internal/operator"
-	"chinachu-go/internal/scheduler"
-	"chinachu-go/internal/storage"
-	"chinachu-go/internal/system"
-	"chinachu-go/internal/wui"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/operator"
+	"strata-pvr/internal/scheduler"
+	"strata-pvr/internal/storage"
+	"strata-pvr/internal/system"
+	"strata-pvr/internal/wui"
 )
 
 type paths struct {
@@ -51,17 +51,17 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "installer":
-		fmt.Fprintln(stdout, "Chinachu-Go installer: Node.js/npm modules are not required.")
-		fmt.Fprintln(stdout, "Automatic Node-era dependency installation is intentionally not performed; build or install the chinachu-go binary directly.")
+		fmt.Fprintln(stdout, "Strata PVR installer: Node.js/npm modules are not required.")
+		fmt.Fprintln(stdout, "Automatic Node-era dependency installation is intentionally not performed; build or install the strata-pvr binary directly.")
 		return nil
 	case "updater":
-		fmt.Fprintln(stdout, "Chinachu-Go updater: automatic git/service/installer operations are intentionally not performed.")
-		fmt.Fprintln(stdout, "Update the repository and rebuild chinachu-go; Node.js/npm modules are not required.")
+		fmt.Fprintln(stdout, "Strata PVR updater: automatic git/service/installer operations are intentionally not performed.")
+		fmt.Fprintln(stdout, "Update the repository and rebuild strata-pvr; Node.js/npm modules are not required.")
 		return nil
 	case "test":
 		return testCommand(args[1:], stdout)
 	case "ircbot":
-		fmt.Fprintln(stdout, "Chinachu-Go ircbot: the experimental Node-era IRC bot is not implemented in the Go runtime.")
+		fmt.Fprintln(stdout, "Strata PVR ircbot: the experimental Node-era IRC bot is not implemented in the Go runtime.")
 		fmt.Fprintln(stdout, "Use WUI/API or build an external bot against the Go API.")
 		return nil
 	case "compat":
@@ -110,13 +110,13 @@ func testCommand(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("Usage: test <app> [options]")
 	}
-	fmt.Fprintf(stdout, "Chinachu-Go test: usr/bin/%s is not executed by the Go runtime.\n", args[0])
+	fmt.Fprintf(stdout, "Strata PVR test: usr/bin/%s is not executed by the Go runtime.\n", args[0])
 	fmt.Fprintln(stdout, "Install and run external tools explicitly; Node.js/npm modules are not required.")
 	return nil
 }
 
 type searchOptions struct {
-	rule              chinachu.Rule
+	rule              legacy.Rule
 	id                string
 	normalizationForm string
 	simple            bool
@@ -134,12 +134,12 @@ func search(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm(p.config)
-	var schedule []chinachu.ChannelSchedule
+	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
 		return err
 	}
 	now := time.Now()
-	matches := make([]chinachu.Program, 0)
+	matches := make([]legacy.Program, 0)
 	for _, channel := range schedule {
 		for _, program := range channel.Programs {
 			if searchMatches(opts, program, now) {
@@ -162,12 +162,12 @@ func programList(path string, args []string, stdout io.Writer) error {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm("config.json")
-	var programs []chinachu.Program
+	var programs []legacy.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
 		return err
 	}
 	now := time.Now()
-	matches := make([]chinachu.Program, 0, len(programs))
+	matches := make([]legacy.Program, 0, len(programs))
 	for _, program := range programs {
 		if searchMatches(opts, program, now) {
 			matches = append(matches, program)
@@ -223,11 +223,11 @@ func parseSearchArgs(args []string) (searchOptions, error) {
 	return opts, nil
 }
 
-func searchMatches(opts searchOptions, program chinachu.Program, now time.Time) bool {
+func searchMatches(opts searchOptions, program legacy.Program, now time.Time) bool {
 	if opts.id != "" {
 		return opts.id == program.ID
 	}
-	if !chinachu.ProgramMatchesRuleForCLIWithNormalization(opts.rule, program, opts.normalizationForm) {
+	if !legacy.ProgramMatchesRuleForCLIWithNormalization(opts.rule, program, opts.normalizationForm) {
 		return false
 	}
 	start := time.UnixMilli(program.Start).Local()
@@ -252,7 +252,7 @@ func loadNormalizationForm(path string) string {
 	return cfg.NormalizationForm
 }
 
-func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {
+func writeProgramSearchTable(w io.Writer, programs []legacy.Program, opts searchOptions) {
 	headers := []string{"#", "Type:CH", "Cat", "Datetime", "Dur", "Title"}
 	if !opts.simple || opts.detail {
 		headers = insertString(headers, 1, "Program ID")
@@ -290,7 +290,7 @@ func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts sear
 	writeLegacyTable(w, headers, rows, opts.simple)
 }
 
-func writeProgramListTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {
+func writeProgramListTable(w io.Writer, programs []legacy.Program, opts searchOptions) {
 	headers := []string{"#", "Type:CH", "Cat", "By", "Datetime", "Dur", "Title"}
 	if !opts.simple || opts.detail {
 		headers = insertString(headers, 1, "Program ID")
@@ -398,7 +398,7 @@ func legacyCellWidth(value string) int {
 	return len([]rune(value))
 }
 
-func reservationOwner(program chinachu.Program) string {
+func reservationOwner(program legacy.Program) string {
 	if program.IsManualReserved {
 		return "user"
 	}
@@ -429,11 +429,11 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var rules []chinachu.Rule
+	var rules []legacy.Rule
 	if err := storage.ReadJSON(p.rules, &rules, "[]"); err != nil {
 		return err
 	}
-	var target chinachu.Rule
+	var target legacy.Rule
 	if opts.hasNum {
 		if opts.num < 0 || opts.num >= len(rules) {
 			return fmt.Errorf("見つかりません")
@@ -480,7 +480,7 @@ func ruleList(path string, args []string, stdout io.Writer) error {
 		return err
 	}
 	detail := hasFlag(args, "-detail", "--detail")
-	var rules []chinachu.Rule
+	var rules []legacy.Rule
 	if err := storage.ReadJSON(path, &rules, "[]"); err != nil {
 		return err
 	}
@@ -513,7 +513,7 @@ func ruleList(path string, args []string, stdout io.Writer) error {
 	return nil
 }
 
-func ruleListValue(rule chinachu.Rule, key string, detail bool) string {
+func ruleListValue(rule legacy.Rule, key string, detail bool) string {
 	switch key {
 	case "types":
 		return ruleStringList(rule.Types, false)
@@ -569,9 +569,9 @@ type ruleOptions struct {
 	simulation bool
 }
 
-func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
+func parseRuleArgs(args []string) (ruleOptions, legacy.Rule, error) {
 	var opts ruleOptions
-	var rule chinachu.Rule
+	var rule legacy.Rule
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		value := func() (string, error) {
@@ -645,7 +645,7 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Hour == nil {
-				rule.Hour = &chinachu.RangeRule{End: 24}
+				rule.Hour = &legacy.RangeRule{End: 24}
 			}
 			rule.Hour.Start = start
 		case "-end", "--end":
@@ -658,7 +658,7 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Hour == nil {
-				rule.Hour = &chinachu.RangeRule{}
+				rule.Hour = &legacy.RangeRule{}
 			}
 			rule.Hour.End = end
 		case "-mini", "--minimum":
@@ -671,7 +671,7 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Duration == nil {
-				rule.Duration = &chinachu.DurationRule{Max: 99999999, HasMax: true}
+				rule.Duration = &legacy.DurationRule{Max: 99999999, HasMax: true}
 			}
 			rule.Duration.Min = minimum
 			rule.Duration.HasMin = true
@@ -685,7 +685,7 @@ func parseRuleArgs(args []string) (ruleOptions, chinachu.Rule, error) {
 				return opts, rule, err
 			}
 			if rule.Duration == nil {
-				rule.Duration = &chinachu.DurationRule{HasMin: true}
+				rule.Duration = &legacy.DurationRule{HasMin: true}
 			}
 			rule.Duration.Max = maximum
 			rule.Duration.HasMax = true
@@ -759,19 +759,19 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
 	oneSeg := hasFlag(rest, "--1seg", "-1seg")
-	var schedule []chinachu.ChannelSchedule
+	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
 		return err
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
 		return err
 	}
-	target := chinachu.GetProgramByID(id, schedule, nil)
+	target := legacy.GetProgramByID(id, schedule, nil)
 	if target == nil {
 		return fmt.Errorf("見つかりません")
 	}
-	if chinachu.GetProgramByID(id, nil, reserves) != nil {
+	if legacy.GetProgramByID(id, nil, reserves) != nil {
 		return fmt.Errorf("既に予約されています")
 	}
 	target.IsManualReserved = true
@@ -800,7 +800,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 		return err
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
 		return err
 	}
@@ -877,7 +877,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(p.recording, &recording, "[]"); err != nil {
 		return err
 	}
@@ -908,7 +908,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 }
 
 func markReserveSkip(path, id string) error {
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(path, &reserves, "[]"); err != nil {
 		return err
 	}
@@ -928,7 +928,7 @@ func markReserveSkip(path, id string) error {
 
 func cleanup(p paths, args []string, stdout io.Writer) error {
 	simulation := hasFlag(args, "-s", "--simulation")
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(p.recorded, &recorded, "[]"); err != nil {
 		return err
 	}
@@ -1048,6 +1048,11 @@ func copyIfMissing(src, dst string) error {
 }
 
 func serviceInitScript(name string) string {
+	chinachuDir, err := os.Getwd()
+	if err != nil {
+		chinachuDir = "."
+	}
+	chinachuDir = filepath.ToSlash(chinachuDir)
 	return fmt.Sprintf(`#!/bin/bash
 # /etc/
 
@@ -1062,12 +1067,14 @@ func serviceInitScript(name string) string {
 ### END INIT INFO
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=./chinachu-go
+STRATA_PVR_DIR=%[2]s
+DAEMON=${STRATA_PVR_DIR}/strata-pvr
 DAEMON_OPTS="service %[1]s execute"
 NAME=chinachu-%[1]s
 USER=$USER
 PIDFILE=/var/run/${NAME}.pid
 
+cd $STRATA_PVR_DIR || exit 1
 test -x $DAEMON || exit 0
 
 start () {
@@ -1138,12 +1145,28 @@ case "$1" in
 esac
 
 exit 0
-`, name)
+`, name, shellQuote(chinachuDir))
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func legacyWebRootCandidate() string {
+	legacyName := "China" + "chu"
+	return filepath.Join("..", legacyName, "web")
+}
+
+func legacyAssetName(ext string) string {
+	return "china" + "chu" + ext
 }
 
 func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|diff|backup>")
+		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup>")
 	}
 	switch args[0] {
 	case "check", "doctor":
@@ -1199,7 +1222,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	case "backup":
 		return compatBackup(stdout)
 	default:
-		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|diff|backup>")
+		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup>")
 	}
 }
 
@@ -1230,11 +1253,11 @@ func compatDiff(stdout io.Writer) error {
 		pretty bool
 		value  any
 	}{
-		{"rules.json", true, &[]chinachu.Rule{}},
-		{filepath.Join("data", "schedule.json"), false, &[]chinachu.ChannelSchedule{}},
-		{filepath.Join("data", "reserves.json"), false, &[]chinachu.Program{}},
-		{filepath.Join("data", "recording.json"), false, &[]chinachu.Program{}},
-		{filepath.Join("data", "recorded.json"), false, &[]chinachu.Program{}},
+		{"rules.json", true, &[]legacy.Rule{}},
+		{filepath.Join("data", "schedule.json"), false, &[]legacy.ChannelSchedule{}},
+		{filepath.Join("data", "reserves.json"), false, &[]legacy.Program{}},
+		{filepath.Join("data", "recording.json"), false, &[]legacy.Program{}},
+		{filepath.Join("data", "recorded.json"), false, &[]legacy.Program{}},
 	}
 	for _, check := range checks {
 		raw, err := os.ReadFile(check.path)
@@ -1270,7 +1293,7 @@ func marshalCompatDiffValue(value any, pretty bool) ([]byte, error) {
 }
 
 func compatBackup(stdout io.Writer) error {
-	dir := filepath.Join("backup", "chinachu-go-"+time.Now().Format("20060102150405"))
+	dir := filepath.Join("backup", "strata-pvr-"+time.Now().Format("20060102150405"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -1333,7 +1356,7 @@ func validateWritableDir(path string) error {
 	if err := validateDir(path); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(path, ".chinachu-go-compat-*")
+	f, err := os.CreateTemp(path, ".strata-pvr-compat-*")
 	if err != nil {
 		return err
 	}
@@ -1346,8 +1369,8 @@ func validateWritableDir(path string) error {
 }
 
 func validateWUIStaticAssets() error {
-	candidates := []string{"web", filepath.Join("..", "Chinachu", "web")}
-	requiredFiles := []string{"index.html", "chinachu.js", "chinachu.css", "init.js"}
+	candidates := []string{"web", legacyWebRootCandidate()}
+	requiredFiles := []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"}
 	requiredDirs := []string{"icons", "lib", "locales", "page"}
 	for _, candidate := range candidates {
 		info, err := os.Stat(candidate)
@@ -1390,7 +1413,7 @@ func validateMirakurun(ctx context.Context, cfg *config.Config, cfgErr error) (s
 	if err != nil {
 		return err, err, err
 	}
-	client.UserAgent = mirakurun.LegacyUserAgent("cli")
+	client.UserAgent = mirakurun.StrataUserAgent("cli")
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, servicesErr = client.Services(checkCtx)
@@ -1509,7 +1532,7 @@ func splitCSV(value string) []string {
 	return out
 }
 
-func mergeRule(dst *chinachu.Rule, src chinachu.Rule) {
+func mergeRule(dst *legacy.Rule, src legacy.Rule) {
 	if src.SID != 0 {
 		dst.SID = src.SID
 	}
@@ -1557,7 +1580,7 @@ func mergeRule(dst *chinachu.Rule, src chinachu.Rule) {
 	}
 }
 
-func cleanRuleDeletionMarkers(rule *chinachu.Rule) {
+func cleanRuleDeletionMarkers(rule *legacy.Rule) {
 	if singleNull(rule.Types) {
 		rule.Types = nil
 	}
@@ -1603,7 +1626,7 @@ func singleNull(values []string) bool {
 	return len(values) == 1 && values[0] == "null"
 }
 
-func isZeroRule(rule chinachu.Rule) bool {
+func isZeroRule(rule legacy.Rule) bool {
 	return rule.SID == 0 &&
 		len(rule.Types) == 0 &&
 		len(rule.Channels) == 0 &&
@@ -1658,7 +1681,7 @@ recorded                Show a list of recorded programs.
 cleanup                 Clean-up the recorded list.
 
 compat <check|doctor|diff|backup>
-                        Check or back up Chinachu-Go compatibility state.
+                        Check or back up Strata PVR compatibility state.
 
 ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)
 

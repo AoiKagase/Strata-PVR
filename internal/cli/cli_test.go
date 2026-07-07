@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/storage"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/storage"
 )
 
 func TestHelp(t *testing.T) {
@@ -48,6 +48,10 @@ func TestInstallerAcceptedWithoutNodeRuntime(t *testing.T) {
 }
 
 func TestServiceInitscriptIncludesRestart(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
 	if err := Run(context.Background(), []string{"service", "operator", "initscript"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
@@ -56,9 +60,11 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	for _, want := range []string{
 		"### BEGIN INIT INFO",
 		"# Provides:          chinachu-operator",
-		"DAEMON=./chinachu-go",
+		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
+		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
 		`DAEMON_OPTS="service operator execute"`,
 		"USER=$USER",
+		"cd $STRATA_PVR_DIR || exit 1",
 		"test -x $DAEMON || exit 0",
 		`PID=$(su $USER -c "exec $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 & echo \$!")`,
 		"PGID=$(ps -p $PID -o pgrp | grep -v PGRP)",
@@ -71,6 +77,13 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("initscript missing %q: %s", want, text)
 		}
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	got := shellQuote(`/opt/chi na'chu`)
+	if got != `'/opt/chi na'"'"'chu'` {
+		t.Fatalf("unexpected shell quote: %s", got)
 	}
 }
 
@@ -315,11 +328,11 @@ func TestCompatBackupCopiesExistingStateFiles(t *testing.T) {
 	if err := Run(context.Background(), []string{"compat", "backup"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "OK backup: backup"+string(os.PathSeparator)+"chinachu-go-") {
+	if !strings.Contains(out.String(), "OK backup: backup"+string(os.PathSeparator)+"strata-pvr-") {
 		t.Fatalf("backup output missing success path: %s", out.String())
 	}
 	for name, want := range files {
-		matches, err := filepath.Glob(filepath.Join("backup", "chinachu-go-*", filepath.FromSlash(name)))
+		matches, err := filepath.Glob(filepath.Join("backup", "strata-pvr-*", filepath.FromSlash(name)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -426,7 +439,7 @@ func writeCompatWebAssets(t *testing.T, root string) {
 			t.Fatal(err)
 		}
 	}
-	for _, file := range []string{"index.html", "chinachu.js", "chinachu.css", "init.js"} {
+	for _, file := range []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"} {
 		if err := os.WriteFile(filepath.Join(root, file), []byte("ok"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -505,7 +518,7 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	programs := []chinachu.Program{
+	programs := []legacy.Program{
 		{
 			ID:       "later",
 			Title:    "Late",
@@ -513,7 +526,7 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 			Start:    time.Date(2026, 1, 2, 3, 4, 0, 0, time.Local).UnixMilli(),
 			End:      time.Date(2026, 1, 2, 3, 34, 0, 0, time.Local).UnixMilli(),
 			Seconds:  1800,
-			Channel:  chinachu.Channel{Type: "GR", Channel: "27", SID: 101},
+			Channel:  legacy.Channel{Type: "GR", Channel: "27", SID: 101},
 		},
 		{
 			ID:               "earlier",
@@ -523,7 +536,7 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 			End:              time.Date(2026, 1, 1, 1, 32, 0, 0, time.Local).UnixMilli(),
 			Seconds:          1800,
 			IsManualReserved: true,
-			Channel:          chinachu.Channel{Type: "BS", Channel: "BS1", SID: 201},
+			Channel:          legacy.Channel{Type: "BS", Channel: "BS1", SID: 201},
 		},
 	}
 	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), programs, false); err != nil {
@@ -561,7 +574,7 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	recorded := []chinachu.Program{
+	recorded := []legacy.Program{
 		{ID: "exists", Recorded: filepath.ToSlash(existing)},
 		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
 	}
@@ -582,7 +595,7 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 			t.Fatalf("cleanup output missing %q: %s", want, text)
 		}
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recorded.json"), &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -612,7 +625,7 @@ func TestCleanupBacksUpRecordedListBeforeRemoval(t *testing.T) {
 	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	recorded := []chinachu.Program{
+	recorded := []legacy.Program{
 		{ID: "exists", Recorded: filepath.ToSlash(existing)},
 		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
 	}
@@ -629,14 +642,14 @@ func TestCleanupBacksUpRecordedListBeforeRemoval(t *testing.T) {
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d, backups=%#v", len(backups), backups)
 	}
-	var backup []chinachu.Program
+	var backup []legacy.Program
 	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(backup) != 2 {
 		t.Fatalf("backup should contain original list: %#v", backup)
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recorded.json"), &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -652,12 +665,12 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	rules := []chinachu.Rule{
+	rules := []legacy.Rule{
 		{
 			Types:         []string{"GR"},
 			Categories:    []string{"anime"},
 			ReserveTitles: []string{"ニュース", "映画"},
-			Hour:          &chinachu.RangeRule{Start: 1, End: 4},
+			Hour:          &legacy.RangeRule{Start: 1, End: 4},
 		},
 	}
 	if err := storage.WriteJSONAtomic("rules.json", rules, false); err != nil {
@@ -680,7 +693,7 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 	if !strings.Contains(out.String(), "ニュース, 映画") {
 		t.Fatalf("detailed rules output missing titles: %s", out.String())
 	}
-	rules = append(rules, chinachu.Rule{Types: []string{"BS"}})
+	rules = append(rules, legacy.Rule{Types: []string{"BS"}})
 	if err := storage.WriteJSONAtomic("rules.json", rules, false); err != nil {
 		t.Fatal(err)
 	}
@@ -801,7 +814,7 @@ func TestReserveAcceptsLegacyIDOption(t *testing.T) {
 	if err := Run(context.Background(), []string{"reserve", "-s", "-id", "p1", "--1seg"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -844,7 +857,7 @@ func TestReserveAcceptsFlagsBeforePositionalID(t *testing.T) {
 	if !strings.Contains(out.String(), "[simulation] reserve:") {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -873,7 +886,7 @@ func TestLegacyModeOptionDispatch(t *testing.T) {
 	if err := Run(context.Background(), []string{"-mode", "reserve", "-id", "p1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -899,7 +912,7 @@ func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	initial := []chinachu.Program{
+	initial := []legacy.Program{
 		{ID: "manual", IsManualReserved: true},
 		{ID: "auto"},
 		{ID: "skipped", IsSkip: true},
@@ -924,7 +937,7 @@ func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 			t.Fatalf("%v output missing %q: %s", tt.args, tt.want, out.String())
 		}
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -943,14 +956,14 @@ func TestReserveMutationsAcceptLegacyIDOption(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	reserves := []chinachu.Program{{ID: "auto", Title: "Auto"}}
+	reserves := []legacy.Program{{ID: "auto", Title: "Auto"}}
 	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), reserves, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := Run(context.Background(), []string{"skip", "--id", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -1096,10 +1109,10 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []chinachu.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []legacy.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []legacy.Program{{ID: "auto"}, {ID: "manual", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
@@ -1109,14 +1122,14 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	if !strings.Contains(out.String(), "stop:") || !strings.Contains(out.String(), `"abort": true`) {
 		t.Fatalf("unexpected stop output: %s", out.String())
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if !recording[0].Abort {
 		t.Fatalf("recording abort was not set: %#v", recording)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -1135,17 +1148,17 @@ func TestStopAcceptsLegacyIDOption(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	recording := []chinachu.Program{{ID: "rec", Title: "Recording"}}
+	recording := []legacy.Program{{ID: "rec", Title: "Recording"}}
 	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), recording, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "rec"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []legacy.Program{{ID: "rec"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := Run(context.Background(), []string{"stop", "--id=rec"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	var got []chinachu.Program
+	var got []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &got, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -1164,10 +1177,10 @@ func TestStopSimulationDoesNotWrite(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []chinachu.Program{{ID: "auto"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), []legacy.Program{{ID: "auto"}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []chinachu.Program{{ID: "auto"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []legacy.Program{{ID: "auto"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
@@ -1177,14 +1190,14 @@ func TestStopSimulationDoesNotWrite(t *testing.T) {
 	if !strings.Contains(out.String(), "[simulation] stop:") || !strings.Contains(out.String(), `"abort": true`) {
 		t.Fatalf("unexpected stop simulation output: %s", out.String())
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if recording[0].Abort {
 		t.Fatalf("simulation mutated recording: %#v", recording)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}

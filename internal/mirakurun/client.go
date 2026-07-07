@@ -21,11 +21,11 @@ type Client struct {
 
 const legacyVersion = "0.10.7-gamma.1"
 
-func LegacyUserAgent(component string) string {
+func StrataUserAgent(component string) string {
 	if component == "" {
-		return "Chinachu/" + legacyVersion
+		return "StrataPVR/" + legacyVersion
 	}
-	return "Chinachu/" + legacyVersion + " (" + component + ")"
+	return "StrataPVR/" + legacyVersion + " (" + component + ")"
 }
 
 func (c *Client) SetPriority(priority int) {
@@ -36,7 +36,7 @@ func New(raw string) (*Client, error) {
 	if raw == "" {
 		raw = "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/"
 	}
-	c := &Client{UserAgent: LegacyUserAgent("go")}
+	c := &Client{UserAgent: StrataUserAgent("go")}
 	if strings.HasPrefix(raw, "http+unix://") {
 		rest := strings.TrimPrefix(raw, "http+unix://")
 		host := rest

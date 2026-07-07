@@ -1,31 +1,32 @@
-# Chinachu-Go
+# Strata PVR
 
-This repository is a Go compatibility implementation targeting Chinachu gamma.
+A Chinachu-compatible PVR for Mirakurun, written in Go.
 
-The implementation is intentionally being added beside the original JavaScript
-codebase referenced from `../Chinachu`; it does not overwrite the original
-`./chinachu` wrapper automatically.
+This repository is a Go compatibility implementation targeting legacy gamma
+behavior and file formats. It is intentionally being added beside the original
+JavaScript codebase referenced from the sibling legacy repository; it does not
+overwrite the original wrapper automatically.
 
 ## Current State
 
-Phase 1/2 scaffolding is present:
+Compatibility scaffolding and major runtime pieces are present:
 
 - `MIGRATION_COMPATIBILITY.md` records the audited CLI, config, rule, data, API,
   WUI, and Mirakurun compatibility surface.
-- `cmd/chinachu-go` is the binary entrypoint.
+- `cmd/strata-pvr` is the binary entrypoint.
 - Config loading preserves unknown fields.
 - JSON state helpers write through a temp file and rename.
 - Rule matching and recorded filename formatting are partially implemented.
 - A Mirakurun client supports HTTP and `http+unix` setup.
-- `chinachu-go update` performs the first scheduler pass against Mirakurun and
+- `strata-pvr update` performs the first scheduler pass against Mirakurun and
   writes legacy JSON state.
-- `chinachu-go service operator execute` runs the first Go operator loop, starts
-  due reservations, records Mirakurun program streams, and updates legacy JSON
+- `strata-pvr service operator execute` runs the Go operator loop, starts due
+  reservations, records Mirakurun program streams, and updates legacy JSON
   state.
-- `chinachu-go service wui execute` starts a Go WUI/API server with Basic auth,
+- `strata-pvr service wui execute` starts a Go WUI/API server with Basic auth,
   static asset serving, rule/reservation mutations, recorded file access,
   recorded/recording TS watch routes, channel logo/watch proxying,
-  scheduler/storage/log endpoints, and the first compatible JSON API endpoints.
+  scheduler/storage/log endpoints, and compatible JSON API endpoints.
 - CLI command names are accepted, with reservation state and rule operations
   partially implemented.
 
@@ -35,7 +36,7 @@ Install Go 1.22 or newer, then run:
 
 ```sh
 go test ./...
-go build -o chinachu-go ./cmd/chinachu-go
+go build -o strata-pvr ./cmd/strata-pvr
 ```
 
 The final runtime must not require Node.js. Optional JS-vs-Go compatibility
@@ -43,29 +44,35 @@ oracle tests may be added later, but ordinary Go tests must pass without Node.
 
 ## Usage
 
-Run from the Chinachu working directory that contains `config.json`, `rules.json`,
-and `data/`. The Go runtime uses the existing Mirakurun backend configured by
-`mirakurunPath`; it does not replace tuner, recpt1, B-CAS, PT3, or Mirakurun
-configuration.
+Run from the existing PVR working directory that contains `config.json`,
+`rules.json`, and `data/`. Strata PVR uses the existing Mirakurun backend
+configured by `mirakurunPath`; it does not replace tuner, recpt1, B-CAS, PT3, or
+Mirakurun configuration.
 
 ```sh
-./chinachu-go update
-./chinachu-go reserves
-./chinachu-go service operator execute
-./chinachu-go service wui execute
+./strata-pvr update
+./strata-pvr reserves
+./strata-pvr service operator execute
+./strata-pvr service wui execute
 ```
 
 For init script generation, keep the original JavaScript wrapper in place and
 write the Go output to a separate file for review:
 
 ```sh
-./chinachu-go service operator initscript > chinachu-operator-go
-./chinachu-go service wui initscript > chinachu-wui-go
+./strata-pvr service operator initscript > strata-pvr-operator
+./strata-pvr service wui initscript > strata-pvr-wui
 ```
 
 Compatibility and environment checks are available with:
 
 ```sh
-./chinachu-go compat check
-./chinachu-go compat doctor
+./strata-pvr compat check
+./strata-pvr compat doctor
 ```
+
+## Frontend
+
+The current compatibility path serves the existing legacy WUI assets as-is.
+A future phase should replace the frontend with a native Strata PVR UI that
+does not require Node.js, npm, webpack, or any Node-based build step at runtime.

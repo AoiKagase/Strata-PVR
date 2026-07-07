@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/logging"
-	"chinachu-go/internal/mirakurun"
-	"chinachu-go/internal/storage"
-	"chinachu-go/internal/system"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/logging"
+	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/storage"
+	"strata-pvr/internal/system"
 )
 
 const recordStartMargin = 15 * time.Second
@@ -73,7 +73,7 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if err != nil {
 		return err
 	}
-	client.UserAgent = mirakurun.LegacyUserAgent("operator")
+	client.UserAgent = mirakurun.StrataUserAgent("operator")
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -92,7 +92,7 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{}, false); err != nil {
 		return err
 	}
 	recordedDir := cfg.RecordedDir
@@ -127,15 +127,15 @@ func removePIDFile(path string) {
 }
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		return Result{}, err
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		return Result{}, err
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
 		return Result{}, err
 	}
@@ -210,7 +210,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 	return result, nil
 }
 
-func shouldStart(program chinachu.Program, recording []chinachu.Program, now time.Time) bool {
+func shouldStart(program legacy.Program, recording []legacy.Program, now time.Time) bool {
 	if program.IsSkip || program.End <= now.UnixMilli() {
 		return false
 	}
@@ -221,11 +221,11 @@ func shouldStart(program chinachu.Program, recording []chinachu.Program, now tim
 	return !now.Before(startAt)
 }
 
-func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
+func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
 	return recordProgramWithLog(ctx, recordingPath, "", cfg, source, program)
 }
 
-func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cfg *config.Config, source StreamSource, program chinachu.Program) (chinachu.Program, error) {
+func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
 	streamID, err := strconv.ParseInt(program.ID, 36, 64)
 	if err != nil {
 		return program, fmt.Errorf("parse program id %q: %w", program.ID, err)
@@ -250,7 +250,7 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 	if program.RecordedFormat != "" {
 		format = program.RecordedFormat
 	}
-	relativeName := chinachu.FormatRecordedName(program, format)
+	relativeName := legacy.FormatRecordedName(program, format)
 	finalPath := filepath.Join(cfg.RecordedDir, filepath.FromSlash(relativeName))
 	if logPath != "" {
 		if err := logging.AppendLine(logPath, "RECORD: %s", operatorProgramLogLine(program)); err != nil {
@@ -323,8 +323,8 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 	}
 }
 
-func updateRecordingProgram(recordingPath string, program chinachu.Program) error {
-	var recording []chinachu.Program
+func updateRecordingProgram(recordingPath string, program legacy.Program) error {
+	var recording []legacy.Program
 	if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func updateRecordingProgram(recordingPath string, program chinachu.Program) erro
 	return storage.WriteJSONAtomic(recordingPath, recording, false)
 }
 
-func setProgramRawJSON(program *chinachu.Program, key string, value any) {
+func setProgramRawJSON(program *legacy.Program, key string, value any) {
 	if program.Raw == nil {
 		program.Raw = map[string]json.RawMessage{}
 	}
@@ -353,7 +353,7 @@ func setProgramRawJSON(program *chinachu.Program, key string, value any) {
 	program.Raw[key] = data
 }
 
-func operatorProgramLogLine(program chinachu.Program) string {
+func operatorProgramLogLine(program legacy.Program) string {
 	return fmt.Sprintf("#%s %s [%s] %s", program.ID, operatorLegacyISODateTime(program.Start), program.Channel.Name, program.Title)
 }
 
@@ -361,7 +361,7 @@ func operatorLegacyISODateTime(timestampMS int64) string {
 	return time.UnixMilli(timestampMS).In(time.Local).Format("2006-01-02T15:04:05-0700")
 }
 
-func programPriority(cfg *config.Config, program chinachu.Program) int {
+func programPriority(cfg *config.Config, program legacy.Program) int {
 	if program.IsConflict {
 		if cfg.ConflictedPriority != 0 {
 			return cfg.ConflictedPriority
@@ -389,7 +389,7 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 			case <-done:
 				return
 			case <-ticker.C:
-				var recording []chinachu.Program
+				var recording []legacy.Program
 				if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
 					continue
 				}
@@ -410,7 +410,7 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 	}
 }
 
-func runRecordedCommand(ctx context.Context, logPath, command string, program chinachu.Program) error {
+func runRecordedCommand(ctx context.Context, logPath, command string, program legacy.Program) error {
 	if command == "" {
 		return nil
 	}
@@ -433,7 +433,7 @@ func runRecordedCommand(ctx context.Context, logPath, command string, program ch
 	return nil
 }
 
-func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, recording, recorded []chinachu.Program) ([]chinachu.Program, error) {
+func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, recording, recorded []legacy.Program) ([]legacy.Program, error) {
 	if cfg.StorageLowSpaceThresholdMB <= 0 {
 		return recorded, nil
 	}
@@ -478,7 +478,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 	case "remove":
 		if len(recorded) > 0 {
 			removed := recorded[0]
-			recorded = append([]chinachu.Program(nil), recorded[1:]...)
+			recorded = append([]legacy.Program(nil), recorded[1:]...)
 			if removed.Recorded != "" {
 				if err := os.Remove(filepath.FromSlash(removed.Recorded)); err != nil && !os.IsNotExist(err) {
 					return recorded, err
@@ -522,7 +522,7 @@ func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, t
 		return nil
 	}
 	message := fmt.Sprintf(
-		"From: Chinachu <chinachu@localhost>\nTo: %s\nSubject: [Chinachu] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
+		"From: Strata PVR <strata-pvr@localhost>\nTo: %s\nSubject: [Strata PVR] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
 		to,
 		freeMB,
 		thresholdMB,
@@ -547,7 +547,7 @@ func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, t
 	return cmd.Wait()
 }
 
-func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {
+func removeProgram(programs []legacy.Program, id string) []legacy.Program {
 	out := programs[:0]
 	for _, program := range programs {
 		if program.ID != id {
@@ -557,8 +557,8 @@ func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {
 	return out
 }
 
-func mergeRecordedProgram(recorded []chinachu.Program, completed chinachu.Program) []chinachu.Program {
-	out := make([]chinachu.Program, 0, len(recorded)+1)
+func mergeRecordedProgram(recorded []legacy.Program, completed legacy.Program) []legacy.Program {
+	out := make([]legacy.Program, 0, len(recorded)+1)
 	replaced := false
 	for i, program := range recorded {
 		if !replaced && program.ID == completed.ID {
@@ -576,7 +576,7 @@ func mergeRecordedProgram(recorded []chinachu.Program, completed chinachu.Progra
 	return out
 }
 
-func containsProgram(programs []chinachu.Program, id string) bool {
+func containsProgram(programs []legacy.Program, id string) bool {
 	for _, program := range programs {
 		if program.ID == id {
 			return true

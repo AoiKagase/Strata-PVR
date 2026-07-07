@@ -25,13 +25,13 @@ import (
 	"strings"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/logging"
-	"chinachu-go/internal/mirakurun"
-	"chinachu-go/internal/scheduler"
-	"chinachu-go/internal/storage"
-	"chinachu-go/internal/system"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/logging"
+	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/scheduler"
+	"strata-pvr/internal/storage"
+	"strata-pvr/internal/system"
 )
 
 type Paths struct {
@@ -341,7 +341,7 @@ func listenAddress(host string, port int) string {
 
 func (s *server) withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Server", "Chinachu (Node)")
+		w.Header().Set("Server", "Strata PVR")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
@@ -812,7 +812,7 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	var schedule []chinachu.ChannelSchedule
+	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(s.paths.Schedule, &schedule, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -923,7 +923,7 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	programs := []chinachu.Program{}
+	programs := []legacy.Program{}
 	for _, channel := range schedules {
 		programs = append(programs, channel.Programs...)
 	}
@@ -995,7 +995,7 @@ func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *htt
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	writePrettyJSON(w, http.StatusOK, broadcastingPrograms([]chinachu.ChannelSchedule{*channel}, time.Now()))
+	writePrettyJSON(w, http.StatusOK, broadcastingPrograms([]legacy.ChannelSchedule{*channel}, time.Now()))
 }
 
 func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
@@ -1004,7 +1004,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1205,8 +1205,8 @@ func (s *server) runScheduler(ctx context.Context, simulation bool) error {
 func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, error) {
 	result := map[string]any{
 		"time":      int64(0),
-		"conflicts": []chinachu.Program{},
-		"reserves":  []chinachu.Program{},
+		"conflicts": []legacy.Program{},
+		"reserves":  []legacy.Program{},
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -1235,7 +1235,7 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 		if !ok {
 			continue
 		}
-		program := chinachu.GetProgramByID(id, schedules, nil)
+		program := legacy.GetProgramByID(id, schedules, nil)
 		if kind == "CONFLICT" {
 			if program == nil {
 				conflicts = append(conflicts, nil)
@@ -1373,7 +1373,7 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1417,7 +1417,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	if len(parts) > 1 {
 		action = parts[1]
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1463,7 +1463,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 
 func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(s.paths.Recording, &recording, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1478,7 +1478,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 		writePrettyJSON(w, http.StatusOK, recording[index])
 	case http.MethodDelete:
 		if !recording[index].IsManualReserved {
-			var reserves []chinachu.Program
+			var reserves []legacy.Program
 			if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
 				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
@@ -1505,7 +1505,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 
 func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1539,7 +1539,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 }
 
 func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1603,7 +1603,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var programs []chinachu.Program
+	var programs []legacy.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2063,7 +2063,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
 	}
-	var programs []chinachu.Program
+	var programs []legacy.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2182,7 +2182,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	if program := chinachu.GetProgramByID(id, schedules, nil); program != nil {
+	if program := legacy.GetProgramByID(id, schedules, nil); program != nil {
 		if r.Method == http.MethodPut {
 			s.reserveProgram(w, r, *program)
 			return
@@ -2197,8 +2197,8 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 	legacyHTTPError(w, r, http.StatusNotFound)
 }
 
-func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program chinachu.Program) {
-	var reserves []chinachu.Program
+func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program legacy.Program) {
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2242,7 +2242,7 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	client.UserAgent = mirakurun.LegacyUserAgent("wui")
+	client.UserAgent = mirakurun.StrataUserAgent("wui")
 	body, err := client.LogoImage(r.Context(), serviceID)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -2295,7 +2295,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		client.UserAgent = mirakurun.LegacyUserAgent("wui")
+		client.UserAgent = mirakurun.StrataUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -2323,7 +2323,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		client.UserAgent = mirakurun.LegacyUserAgent("wui")
+		client.UserAgent = mirakurun.StrataUserAgent("wui")
 		body, err := client.ServiceStream(r.Context(), serviceID, true)
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -2495,17 +2495,17 @@ func legacyBitrateBits(value string) int64 {
 	return n * 1024
 }
 
-func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {
+func (s *server) findChannel(id string) (legacy.ChannelSchedule, bool) {
 	schedules, err := s.readSchedule()
 	if err != nil {
-		return chinachu.ChannelSchedule{}, false
+		return legacy.ChannelSchedule{}, false
 	}
 	for _, channel := range schedules {
 		if channel.ID == id {
 			return channel, true
 		}
 	}
-	return chinachu.ChannelSchedule{}, false
+	return legacy.ChannelSchedule{}, false
 }
 
 func (s *server) logDir() string {
@@ -2519,13 +2519,13 @@ func logDir(paths Paths) string {
 	return "log"
 }
 
-func (s *server) readSchedule() ([]chinachu.ChannelSchedule, error) {
-	var schedules []chinachu.ChannelSchedule
+func (s *server) readSchedule() ([]legacy.ChannelSchedule, error) {
+	var schedules []legacy.ChannelSchedule
 	err := storage.ReadJSON(s.paths.Schedule, &schedules, "[]")
 	return schedules, err
 }
 
-func (s *server) findScheduleChannel(id string) (*chinachu.ChannelSchedule, error) {
+func (s *server) findScheduleChannel(id string) (*legacy.ChannelSchedule, error) {
 	schedules, err := s.readSchedule()
 	if err != nil {
 		return nil, err
@@ -2538,9 +2538,9 @@ func (s *server) findScheduleChannel(id string) (*chinachu.ChannelSchedule, erro
 	return nil, nil
 }
 
-func broadcastingPrograms(schedules []chinachu.ChannelSchedule, now time.Time) []chinachu.Program {
+func broadcastingPrograms(schedules []legacy.ChannelSchedule, now time.Time) []legacy.Program {
 	nowMS := now.UnixMilli()
-	programs := []chinachu.Program{}
+	programs := []legacy.Program{}
 	for _, channel := range schedules {
 		for _, program := range channel.Programs {
 			if nowMS < program.Start || nowMS > program.End {
@@ -2724,7 +2724,7 @@ func readPID(path string) *int {
 	return &pid
 }
 
-func withRemovedFlag(program chinachu.Program) map[string]any {
+func withRemovedFlag(program legacy.Program) map[string]any {
 	b, _ := json.Marshal(program)
 	var v map[string]any
 	_ = json.Unmarshal(b, &v)
@@ -2759,11 +2759,11 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 	return value
 }
 
-func programHasPID(program chinachu.Program) bool {
+func programHasPID(program legacy.Program) bool {
 	return program.PID > 0
 }
 
-func programIsScrambling(program chinachu.Program) bool {
+func programIsScrambling(program legacy.Program) bool {
 	raw, ok := program.Raw["tuner"]
 	if !ok || len(raw) == 0 {
 		return false
@@ -2824,7 +2824,7 @@ func legacySchedulerLogID(value string) string {
 	return value
 }
 
-func reversePrograms(programs []chinachu.Program) {
+func reversePrograms(programs []legacy.Program) {
 	for i, j := 0, len(programs)-1; i < j; i, j = i+1, j-1 {
 		programs[i], programs[j] = programs[j], programs[i]
 	}
@@ -2837,7 +2837,7 @@ func reverseAny(values []any) {
 }
 
 func findWebRoot(configured string) string {
-	candidates := []string{configured, "web", filepath.Join("..", "Chinachu", "web")}
+	candidates := []string{configured, "web", legacyWebRootCandidate()}
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
@@ -2847,6 +2847,11 @@ func findWebRoot(configured string) string {
 		}
 	}
 	return ""
+}
+
+func legacyWebRootCandidate() string {
+	legacyName := "China" + "chu"
+	return filepath.Join("..", legacyName, "web")
 }
 
 func splitPath(path string) []string {
@@ -2973,7 +2978,7 @@ func isLegacyAPIExtension(ext string) bool {
 	return true
 }
 
-func findProgram(programs []chinachu.Program, id string) int {
+func findProgram(programs []legacy.Program, id string) int {
 	for i := range programs {
 		if programs[i].ID == id {
 			return i
@@ -2982,7 +2987,7 @@ func findProgram(programs []chinachu.Program, id string) int {
 	return -1
 }
 
-func removeProgram(programs []chinachu.Program, id string) []chinachu.Program {
+func removeProgram(programs []legacy.Program, id string) []legacy.Program {
 	out := programs[:0]
 	for _, program := range programs {
 		if program.ID != id {

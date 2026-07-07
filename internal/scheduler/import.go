@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/mirakurun"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/mirakurun"
 )
 
 var genreTable = map[int]string{
@@ -29,12 +29,12 @@ var genreTable = map[int]string{
 	0xF: "etc",
 }
 
-func BuildSchedule(cfg *config.Config, services []mirakurun.Service, programs []mirakurun.Program) []chinachu.ChannelSchedule {
+func BuildSchedule(cfg *config.Config, services []mirakurun.Service, programs []mirakurun.Program) []legacy.ChannelSchedule {
 	services = filterAndOrderServices(cfg, append([]mirakurun.Service(nil), services...))
-	channels := make([]chinachu.ChannelSchedule, 0, len(services))
+	channels := make([]legacy.ChannelSchedule, 0, len(services))
 	for i, service := range services {
-		channel := chinachu.ChannelSchedule{
-			Channel: chinachu.Channel{
+		channel := legacy.ChannelSchedule{
+			Channel: legacy.Channel{
 				Type:        service.Channel.Type,
 				Channel:     service.Channel.Channel,
 				Name:        service.Name,
@@ -94,8 +94,8 @@ func filterAndOrderServices(cfg *config.Config, services []mirakurun.Service) []
 	return filtered
 }
 
-func convertPrograms(channel chinachu.Channel, programs []mirakurun.Program) []chinachu.Program {
-	out := []chinachu.Program{}
+func convertPrograms(channel legacy.Channel, programs []mirakurun.Program) []legacy.Program {
+	out := []legacy.Program{}
 	for _, program := range programs {
 		if program.NetworkID != channel.NID || program.ServiceID != channel.SID {
 			continue
@@ -115,7 +115,7 @@ func convertPrograms(channel chinachu.Channel, programs []mirakurun.Program) []c
 			}
 			detail = strings.TrimSpace(detail)
 		}
-		p := chinachu.Program{
+		p := legacy.Program{
 			ID:          strconv.FormatInt(program.ID, 36),
 			Category:    category,
 			Title:       stripProgramFlags(program.Name),

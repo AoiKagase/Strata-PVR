@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"chinachu-go/internal/chinachu"
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/storage"
-	"chinachu-go/internal/system"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/storage"
+	"strata-pvr/internal/system"
 )
 
 func TestMain(m *testing.M) {
@@ -58,14 +58,14 @@ func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{{ID: "stale"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "stale"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	recordedDir := filepath.Join(dir, "recorded")
 	if err := initializeRuntimeState(paths, &config.Config{RecordedDir: recordedDir}); err != nil {
 		t.Fatal(err)
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -126,15 +126,15 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:       "21i3v9",
 		Title:    "Test/Program",
 		Start:    now.Add(10 * time.Second).UnixMilli(),
 		End:      now.Add(time.Hour).UnixMilli(),
 		Category: "anime",
-		Channel:  chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		Channel:  legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
@@ -152,21 +152,21 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	if streamer.id != 123456789 || !streamer.decode {
 		t.Fatalf("unexpected stream request id=%d decode=%v", streamer.id, streamer.decode)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(reserves) != 1 || reserves[0].ID != program.ID {
 		t.Fatalf("auto reserve should remain like legacy operator: %#v", reserves)
 	}
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
 	if len(recording) != 0 {
 		t.Fatalf("recording not cleared: %#v", recording)
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -213,15 +213,15 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:               "21i3v9",
 		Title:            "Manual",
 		Start:            now.UnixMilli(),
 		End:              now.Add(time.Hour).UnixMilli(),
-		Channel:          chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		Channel:          legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
 		IsManualReserved: true,
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
@@ -232,7 +232,7 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 	if result.Completed != 1 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	var reserves []chinachu.Program
+	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
 	dir := t.TempDir()
 	recordingPath := filepath.Join(dir, "data", "recording.json")
-	if err := storage.WriteJSONAtomic(recordingPath, []chinachu.Program{}, false); err != nil {
+	if err := storage.WriteJSONAtomic(recordingPath, []legacy.Program{}, false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
@@ -260,7 +260,7 @@ func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
 		RecordingPriority:  5,
 		ConflictedPriority: 1,
 	}
-	program := chinachu.Program{ID: "1", Title: "Priority"}
+	program := legacy.Program{ID: "1", Title: "Priority"}
 	normal := &priorityStreamer{fakeStreamer: fakeStreamer{body: "normal"}}
 	if _, err := recordProgram(context.Background(), recordingPath, cfg, normal, program); err != nil {
 		t.Fatal(err)
@@ -299,7 +299,7 @@ func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	reserves := []chinachu.Program{
+	reserves := []legacy.Program{
 		{ID: "a", Start: now.Add(time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli()},
 		{ID: "b", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), IsSkip: true},
 		{ID: "c", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), IsConflict: true},
@@ -319,7 +319,7 @@ func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 	if streamer.priority != 7 {
 		t.Fatalf("conflict priority = %d", streamer.priority)
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -329,8 +329,8 @@ func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 }
 
 func TestMergeRecordedProgramMatchesLegacyDuplicateHandling(t *testing.T) {
-	completed := chinachu.Program{ID: "same", Start: 2000, Recorded: "/recorded/new.m2ts"}
-	recorded := mergeRecordedProgram([]chinachu.Program{
+	completed := legacy.Program{ID: "same", Start: 2000, Recorded: "/recorded/new.m2ts"}
+	recorded := mergeRecordedProgram([]legacy.Program{
 		{ID: "same", Start: 1000, Recorded: "/recorded/new.m2ts"},
 		{ID: "other", Recorded: "/recorded/other.m2ts"},
 	}, completed)
@@ -338,7 +338,7 @@ func TestMergeRecordedProgramMatchesLegacyDuplicateHandling(t *testing.T) {
 		t.Fatalf("same path merge mismatch: %#v", recorded)
 	}
 
-	recorded = mergeRecordedProgram([]chinachu.Program{
+	recorded = mergeRecordedProgram([]legacy.Program{
 		{ID: "same", Start: 1000, Recorded: "/recorded/old.m2ts"},
 		{ID: "other", Recorded: "/recorded/other.m2ts"},
 	}, completed)
@@ -356,14 +356,14 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:      "21i3v9",
 		Title:   "Abortable",
 		Start:   now.UnixMilli(),
 		End:     now.Add(time.Hour).UnixMilli(),
-		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
@@ -382,7 +382,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 		done <- nil
 	}()
 
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
 		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 			t.Fatal(err)
@@ -429,7 +429,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("recording did not stop after abort flag")
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -447,14 +447,14 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:      "21i3v9",
 		Title:   "SignalStop",
 		Start:   now.UnixMilli(),
 		End:     now.Add(time.Hour).UnixMilli(),
-		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -475,7 +475,7 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 		done <- nil
 	}()
 
-	var recording []chinachu.Program
+	var recording []legacy.Program
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
 		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 			t.Fatal(err)
@@ -503,7 +503,7 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if len(recording) != 0 {
 		t.Fatalf("recording state was not cleared after cancel: %#v", recording)
 	}
-	var recorded []chinachu.Program
+	var recorded []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -521,14 +521,14 @@ func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	program := chinachu.Program{
+	program := legacy.Program{
 		ID:      "21i3v9",
 		Title:   "Hooked",
 		Start:   now.UnixMilli(),
 		End:     now.Add(time.Hour).UnixMilli(),
-		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
 	output := filepath.Join(dir, "recorded-command.txt")
@@ -563,7 +563,7 @@ func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
 	if !strings.HasSuffix(filepath.ToSlash(lines[0]), "/recorded/21i3v9.m2ts") {
 		t.Fatalf("unexpected recorded command path: %s", lines[0])
 	}
-	var passed chinachu.Program
+	var passed legacy.Program
 	if err := json.Unmarshal([]byte(lines[1]), &passed); err != nil {
 		t.Fatal(err)
 	}
@@ -619,13 +619,13 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []chinachu.Program{}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{}, false); err != nil {
 		t.Fatal(err)
 	}
-	recorded := []chinachu.Program{{ID: "old", Recorded: filepath.ToSlash(oldFile)}, {ID: "new", Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "new.m2ts"))}}
+	recorded := []legacy.Program{{ID: "old", Recorded: filepath.ToSlash(oldFile)}, {ID: "new", Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "new.m2ts"))}}
 	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
 		t.Fatal(err)
 	}
@@ -644,7 +644,7 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
 		t.Fatalf("old recorded file was not removed: %v", err)
 	}
-	var remaining []chinachu.Program
+	var remaining []legacy.Program
 	if err := storage.ReadJSON(paths.Recorded, &remaining, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +658,7 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
 	}
-	var backup []chinachu.Program
+	var backup []legacy.Program
 	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
 		t.Fatal(err)
 	}
@@ -701,9 +701,9 @@ func TestLowStorageSendsNotification(t *testing.T) {
 	}
 	message := string(data)
 	for _, want := range []string{
-		"From: Chinachu <chinachu@localhost>",
+		"From: Strata PVR <strata-pvr@localhost>",
 		"To: admin@example.test",
-		"Subject: [Chinachu] ALERT: Storage Low Space!",
+		"Subject: [Strata PVR] ALERT: Storage Low Space!",
 		"Current Free Space is 42 MB.",
 		"Threshold is 100 MB.",
 	} {

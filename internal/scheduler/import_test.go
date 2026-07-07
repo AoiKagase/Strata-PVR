@@ -3,8 +3,8 @@ package scheduler
 import (
 	"testing"
 
-	"chinachu-go/internal/config"
-	"chinachu-go/internal/mirakurun"
+	"strata-pvr/internal/config"
+	"strata-pvr/internal/mirakurun"
 )
 
 func TestBuildScheduleFiltersAndOrders(t *testing.T) {
