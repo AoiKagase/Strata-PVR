@@ -415,6 +415,36 @@
     sendJSON("rules.json", "POST", rule).then(refresh).catch(showError);
   }
 
+  function addBasicRule() {
+    var title = byId("ruleTitle");
+    var type = byId("ruleType");
+    var category = byId("ruleCategory");
+    var rule = {};
+    if (title && title.value.trim()) {
+      rule.reserve_titles = [title.value.trim()];
+    }
+    if (type && type.value) {
+      rule.types = [type.value];
+    }
+    if (category && category.value.trim()) {
+      rule.categories = [category.value.trim()];
+    }
+    if (!rule.reserve_titles && !rule.types && !rule.categories) {
+      showError(new Error("Rule is empty"));
+      return;
+    }
+    setBusy("Working");
+    sendJSON("rules.json", "POST", rule).then(function () {
+      if (title) {
+        title.value = "";
+      }
+      if (category) {
+        category.value = "";
+      }
+      refresh();
+    }).catch(showError);
+  }
+
   function tailText(value, maxLines) {
     var lines = (value || "").split(/\r?\n/);
     if (lines.length > maxLines) {
@@ -511,6 +541,10 @@
     var addRuleButton = byId("addRuleButton");
     if (addRuleButton) {
       addRuleButton.addEventListener("click", addRuleFromEditor);
+    }
+    var addBasicRuleButton = byId("addBasicRuleButton");
+    if (addBasicRuleButton) {
+      addBasicRuleButton.addEventListener("click", addBasicRule);
     }
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {

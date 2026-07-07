@@ -86,6 +86,27 @@
           <button id="addRuleButton" type="button" title="Add rule">Add Rule</button>
         </div>
         <div id="ruleList" class="list empty">No rules</div>
+        <div class="rule-builder">
+          <label>
+            <span>Title</span>
+            <input id="ruleTitle" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span>Type</span>
+            <select id="ruleType">
+              <option value="">Any</option>
+              <option value="GR">GR</option>
+              <option value="BS">BS</option>
+              <option value="CS">CS</option>
+              <option value="EX">EX</option>
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <input id="ruleCategory" type="text" autocomplete="off">
+          </label>
+          <button id="addBasicRuleButton" type="button" title="Add basic rule">Add Basic Rule</button>
+        </div>
         <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="Rule JSON">{
   "types": ["GR"],
   "reserve_titles": ["title"]

@@ -86,16 +86,17 @@ status, reserves, recording, recorded, and schedule summaries. It also exposes
 basic Go API actions for reserving schedule items, skipping/unskipping reserves,
 removing manual reserves, stopping active recordings, and opening/downloading or
 deleting recorded items. It also lists auto-reservation rules, can enable,
-disable, delete, and add rules from JSON. Recorded items expose M2TS, MP4, XSPF,
-download, and delete actions, and active recordings expose a live M2TS watch
-action. The legacy WUI asset fallback remains available during compatibility
-work. Scheduler, operator, and WUI logs are visible from the dashboard as
-tail-style text panels. A read-only settings panel shows non-secret runtime
-configuration such as Mirakurun URL, recorded directory, WUI ports, storage
-policy, and normalization. The schedule panel can filter by channel, time range,
-and item count while keeping the existing `/api/schedule.json` data path.
+disable, delete, add rules from JSON, and add basic title/type/category rules
+from form fields. Recorded items expose M2TS, MP4, XSPF, download, and delete
+actions, and active recordings expose a live M2TS watch action. The legacy WUI
+asset fallback remains available during compatibility work. Scheduler, operator,
+and WUI logs are visible from the dashboard as tail-style text panels. A
+read-only settings panel shows non-secret runtime configuration such as
+Mirakurun URL, recorded directory, WUI ports, storage policy, and normalization.
+The schedule panel can filter by channel, time range, and item count while
+keeping the existing `/api/schedule.json` data path.
 
-The frontend still needs a friendlier rule form and, if desired, advanced
+The frontend still needs advanced rule editing and, if desired, advanced
 playback/transcode controls before it can replace every legacy WUI workflow. For
 personal deployments, settings editing may remain intentionally read-only because
 direct `config.json` editing is safer and easier to audit. The frontend does not

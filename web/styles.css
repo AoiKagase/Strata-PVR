@@ -251,7 +251,41 @@ button:hover {
   resize: vertical;
 }
 
+.rule-builder {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(100px, 1fr) minmax(140px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.rule-builder label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rule-builder span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+input {
+  min-height: 32px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfd;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
 .json-editor:focus,
+input:focus,
+select:focus,
 button:focus-visible {
   outline: 2px solid #14b8a6;
   outline-offset: 2px;
@@ -331,6 +365,10 @@ button:focus-visible {
   .schedule-controls select {
     flex: 1 1 140px;
     max-width: none;
+  }
+
+  .rule-builder {
+    grid-template-columns: 1fr;
   }
 
   .settings-list {
