@@ -438,6 +438,8 @@
     var category = byId("ruleCategory");
     var durationMin = byId("ruleDurationMin");
     var durationMax = byId("ruleDurationMax");
+    var hourStart = byId("ruleHourStart");
+    var hourEnd = byId("ruleHourEnd");
     var rule = {};
     if (title && title.value.trim()) {
       rule.reserve_titles = [title.value.trim()];
@@ -466,7 +468,22 @@
       }
       rule.duration = { min: Math.round(min * 60), max: Math.round(max * 60) };
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.duration) {
+    var hourStartText = hourStart ? hourStart.value.trim() : "";
+    var hourEndText = hourEnd ? hourEnd.value.trim() : "";
+    if (hourStartText || hourEndText) {
+      if (!hourStartText || !hourEndText) {
+        showError(new Error("Hour needs start and end"));
+        return;
+      }
+      var startHour = Number(hourStartText);
+      var endHour = Number(hourEndText);
+      if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || startHour < 0 || startHour > 23 || endHour < 1 || endHour > 24) {
+        showError(new Error("Hour range is invalid"));
+        return;
+      }
+      rule.hour = { start: startHour, end: endHour };
+    }
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.duration && !rule.hour) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -486,6 +503,12 @@
       }
       if (durationMax) {
         durationMax.value = "";
+      }
+      if (hourStart) {
+        hourStart.value = "";
+      }
+      if (hourEnd) {
+        hourEnd.value = "";
       }
       refresh();
     }).catch(showError);

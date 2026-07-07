@@ -117,6 +117,14 @@
             <span>Max duration</span>
             <input id="ruleDurationMax" type="number" min="0" step="1" inputmode="numeric" placeholder="min">
           </label>
+          <label>
+            <span>Start hour</span>
+            <input id="ruleHourStart" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0-23">
+          </label>
+          <label>
+            <span>End hour</span>
+            <input id="ruleHourEnd" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="1-24">
+          </label>
           <button id="addBasicRuleButton" type="button" title="Add basic rule">Add Basic Rule</button>
         </div>
         <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="Rule JSON">{
