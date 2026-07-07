@@ -1055,6 +1055,18 @@
     control.value = value === undefined || value === null ? "" : String(value);
   }
 
+  function setBooleanSelectValue(id, value) {
+    var control = byId(id);
+    if (!control) {
+      return;
+    }
+    if (value === undefined || value === null) {
+      control.value = "";
+      return;
+    }
+    control.value = value ? "true" : "false";
+  }
+
   function renderConfigForm() {
     if (state.configEditorDirty) {
       return;
@@ -1072,6 +1084,29 @@
     setControlValue("configStorageLowSpaceThresholdMB", cfg.storageLowSpaceThresholdMB);
     setControlValue("configStorageLowSpaceAction", cfg.storageLowSpaceAction);
     setControlValue("configExcludeServices", cfg.excludeServices);
+    setControlValue("configWuiUsers", cfg.wuiUsers);
+    setControlValue("configWuiAllowCountries", cfg.wuiAllowCountries);
+    setControlValue("configServiceOrder", cfg.serviceOrder);
+    setBooleanSelectValue("configWuiXFF", cfg.wuiXFF);
+    setBooleanSelectValue("configWuiMdnsAdvertisement", cfg.wuiMdnsAdvertisement);
+    setBooleanSelectValue("configVaapiEnabled", cfg.vaapiEnabled);
+    setControlValue("configVaapiDevice", cfg.vaapiDevice);
+    setControlValue("configRecordingPriority", cfg.recordingPriority);
+    setControlValue("configConflictedPriority", cfg.conflictedPriority);
+    setControlValue("configWuiTlsKeyPath", cfg.wuiTlsKeyPath);
+    setControlValue("configWuiTlsCertPath", cfg.wuiTlsCertPath);
+    setControlValue("configWuiTlsCaPath", cfg.wuiTlsCaPath);
+    setControlValue("configWuiTlsPassphrase", cfg.wuiTlsPassphrase);
+    setBooleanSelectValue("configWuiTlsRequestCert", cfg.wuiTlsRequestCert);
+    setBooleanSelectValue("configWuiTlsRejectUnauthorized", cfg.wuiTlsRejectUnauthorized);
+    setControlValue("configStorageLowSpaceNotifyTo", cfg.storageLowSpaceNotifyTo);
+    setControlValue("configStorageLowSpaceCommand", cfg.storageLowSpaceCommand);
+    setControlValue("configSchedulerStartCommand", cfg.schedulerStartCommand);
+    setControlValue("configSchedulerEndCommand", cfg.schedulerEndCommand);
+    setControlValue("configEpgStartCommand", cfg.epgStartCommand);
+    setControlValue("configEpgEndCommand", cfg.epgEndCommand);
+    setControlValue("configConflictCommand", cfg.conflictCommand);
+    setControlValue("configRecordedCommand", cfg.recordedCommand);
   }
 
   function renderSettings() {
@@ -1089,9 +1124,14 @@
       ["公開ホスト", cfg.wuiOpenHost],
       ["公開ポート", cfg.wuiOpenPort],
       ["TLS", Boolean(cfg.wuiTlsKeyPath || cfg.wuiTlsCertPath)],
+      ["WUIユーザー", cfg.wuiUsers],
+      ["許可国コード", cfg.wuiAllowCountries],
+      ["サービス順", cfg.serviceOrder],
+      ["VAAPI", cfg.vaapiEnabled],
       ["除外サービス", cfg.excludeServices],
       ["空き容量しきい値MB", cfg.storageLowSpaceThresholdMB],
       ["空き容量不足時の動作", cfg.storageLowSpaceAction],
+      ["空き容量通知先", cfg.storageLowSpaceNotifyTo],
       ["正規化", cfg.normalizationForm]
     ];
     root.innerHTML = "";
@@ -1214,6 +1254,62 @@
     return true;
   }
 
+  function setOptionalInteger(config, field, id) {
+    var value = controlString(id);
+    if (!value) {
+      delete config[field];
+      return true;
+    }
+    var number = Number(value);
+    if (!Number.isInteger(number)) {
+      showError(new Error(field + " は整数にしてください"));
+      return false;
+    }
+    config[field] = number;
+    return true;
+  }
+
+  function setOptionalBooleanSelect(config, field, id) {
+    var value = controlString(id);
+    if (!value) {
+      delete config[field];
+      return true;
+    }
+    if (value !== "true" && value !== "false") {
+      showError(new Error(field + " は有効または無効を選択してください"));
+      return false;
+    }
+    config[field] = value === "true";
+    return true;
+  }
+
+  function setOptionalStringList(config, field, id) {
+    var values = splitList(controlString(id));
+    if (values.length) {
+      config[field] = values;
+    } else {
+      delete config[field];
+    }
+  }
+
+  function setOptionalPositiveIntegerList(config, field, id, label) {
+    var values = splitList(controlString(id)).map(function (value) {
+      return Number(value);
+    });
+    if (values.some(function (value) {
+      return !Number.isInteger(value) || value <= 0;
+    })) {
+      showError(new Error(label + "はカンマ区切りの正の整数にしてください"));
+      return false;
+    }
+    if (values.length) {
+      config[field] = values;
+    } else {
+      delete config[field];
+    }
+    return true;
+  }
+
   function applyConfigFormToEditor(silent) {
     var config = readConfigEditorObject();
     var openServer = byId("configWuiOpenServer");
@@ -1254,6 +1350,45 @@
     } else {
       delete config.excludeServices;
     }
+    setOptionalStringList(config, "wuiUsers", "configWuiUsers");
+    setOptionalStringList(config, "wuiAllowCountries", "configWuiAllowCountries");
+    if (!setOptionalPositiveIntegerList(config, "serviceOrder", "configServiceOrder", "サービス順")) {
+      return null;
+    }
+    if (!setOptionalBooleanSelect(config, "wuiXFF", "configWuiXFF")) {
+      return null;
+    }
+    if (!setOptionalBooleanSelect(config, "wuiMdnsAdvertisement", "configWuiMdnsAdvertisement")) {
+      return null;
+    }
+    if (!setOptionalBooleanSelect(config, "vaapiEnabled", "configVaapiEnabled")) {
+      return null;
+    }
+    setOptionalString(config, "vaapiDevice", "configVaapiDevice");
+    if (!setOptionalInteger(config, "recordingPriority", "configRecordingPriority")) {
+      return null;
+    }
+    if (!setOptionalInteger(config, "conflictedPriority", "configConflictedPriority")) {
+      return null;
+    }
+    setOptionalString(config, "wuiTlsKeyPath", "configWuiTlsKeyPath");
+    setOptionalString(config, "wuiTlsCertPath", "configWuiTlsCertPath");
+    setOptionalString(config, "wuiTlsCaPath", "configWuiTlsCaPath");
+    setOptionalString(config, "wuiTlsPassphrase", "configWuiTlsPassphrase");
+    if (!setOptionalBooleanSelect(config, "wuiTlsRequestCert", "configWuiTlsRequestCert")) {
+      return null;
+    }
+    if (!setOptionalBooleanSelect(config, "wuiTlsRejectUnauthorized", "configWuiTlsRejectUnauthorized")) {
+      return null;
+    }
+    setOptionalString(config, "storageLowSpaceNotifyTo", "configStorageLowSpaceNotifyTo");
+    setOptionalString(config, "storageLowSpaceCommand", "configStorageLowSpaceCommand");
+    setOptionalString(config, "schedulerStartCommand", "configSchedulerStartCommand");
+    setOptionalString(config, "schedulerEndCommand", "configSchedulerEndCommand");
+    setOptionalString(config, "epgStartCommand", "configEpgStartCommand");
+    setOptionalString(config, "epgEndCommand", "configEpgEndCommand");
+    setOptionalString(config, "conflictCommand", "configConflictCommand");
+    setOptionalString(config, "recordedCommand", "configRecordedCommand");
     var editor = byId("configEditor");
     if (editor) {
       editor.value = JSON.stringify(config, null, 2);

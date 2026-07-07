@@ -153,12 +153,14 @@ asset fallback remains available during compatibility work. Scheduler, operator,
 and WUI logs are visible from the dashboard as tail-style text panels. A
 settings panel shows non-secret runtime configuration such as Mirakurun URL,
 recorded directory, WUI ports, storage policy, and normalization, and includes
-a basic settings form plus a validated raw JSON editor for `config.json`
-updates through the legacy API.
+common and detailed settings forms plus a validated raw JSON editor for
+`config.json` updates through the legacy API.
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
-Detailed native settings forms remain incomplete for less common fields; use
-the raw JSON editor or direct `config.json` edits for those fields. The legacy-compatible
-`/api/config.json` PUT endpoint remains available for old clients. The frontend
-does not require Node.js, npm, webpack, or any Node-based build step.
+Native settings forms cover WUI auth/country/service-order/proxy/mDNS/TLS,
+VAAPI, priorities, low-space notify/command settings, and hook commands. Use
+the raw JSON editor or direct `config.json` edits for secret or nested rare
+fields such as `operTweeterAuth`. The legacy-compatible `/api/config.json` PUT
+endpoint remains available for old clients. The frontend does not require
+Node.js, npm, webpack, or any Node-based build step.
