@@ -7,6 +7,8 @@
   };
   var scheduleMinutePixels = 1.15;
   var scheduleMinimumProgramMinutes = 30;
+  var programDialogReturnFocus = null;
+  var mp4DialogReturnFocus = null;
 
   var state = {
     status: null,
@@ -73,6 +75,28 @@
     if (node) {
       node.textContent = value;
     }
+  }
+
+  function rememberFocus() {
+    return document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+  }
+
+  function restoreFocus(node) {
+    if (node && document.contains(node) && typeof node.focus === "function") {
+      node.focus();
+    }
+  }
+
+  function focusFirstDialogControl(dialog) {
+    if (!dialog) {
+      return;
+    }
+    window.setTimeout(function () {
+      var control = dialog.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+      if (control && typeof control.focus === "function") {
+        control.focus();
+      }
+    }, 0);
   }
 
   function api(path) {
@@ -517,6 +541,7 @@
       } : null);
       return;
     }
+    mp4DialogReturnFocus = rememberFocus();
     pendingMP4Open = openWithQuery;
     text(byId("mp4DialogMeta"), meta || "");
     var preset = byId("mp4Preset");
@@ -525,6 +550,7 @@
       applyMP4Preset(preset.value);
     }
     dialog.showModal();
+    focusFirstDialogControl(dialog);
   }
 
   function submitMP4Dialog() {
@@ -673,6 +699,7 @@
         }
       } else if (name === "create-rule-from-program") {
         row.appendChild(actionButton("ルール作成", "この番組を元にルールフォームを開く", function () {
+          closeProgramDialog();
           fillRuleFormFromProgram(program);
         }));
       }
@@ -1163,10 +1190,13 @@
       actions.innerHTML = "";
       renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"]);
     }
+    programDialogReturnFocus = rememberFocus();
     if (dialog && dialog.showModal) {
       dialog.showModal();
+      focusFirstDialogControl(dialog);
     } else if (dialog) {
       dialog.setAttribute("open", "open");
+      focusFirstDialogControl(dialog);
     }
   }
 
@@ -2446,11 +2476,23 @@
     var mp4DialogClose = byId("mp4DialogClose");
     if (mp4DialogClose) {
       mp4DialogClose.addEventListener("click", function () {
-        pendingMP4Open = null;
         var dialog = byId("mp4Dialog");
         if (dialog) {
           dialog.close();
         }
+      });
+    }
+    var mp4Dialog = byId("mp4Dialog");
+    if (mp4Dialog) {
+      mp4Dialog.addEventListener("click", function (event) {
+        if (event.target === mp4Dialog) {
+          mp4Dialog.close();
+        }
+      });
+      mp4Dialog.addEventListener("close", function () {
+        pendingMP4Open = null;
+        restoreFocus(mp4DialogReturnFocus);
+        mp4DialogReturnFocus = null;
       });
     }
     var forceSchedulerButton = byId("forceSchedulerButton");
@@ -2513,6 +2555,19 @@
     var programDialogClose = byId("programDialogClose");
     if (programDialogClose) {
       programDialogClose.addEventListener("click", closeProgramDialog);
+    }
+    var programDialog = byId("programDialog");
+    if (programDialog) {
+      programDialog.addEventListener("click", function (event) {
+        if (event.target === programDialog) {
+          closeProgramDialog();
+        }
+      });
+      programDialog.addEventListener("close", function () {
+        state.selectedProgram = null;
+        restoreFocus(programDialogReturnFocus);
+        programDialogReturnFocus = null;
+      });
     }
     var scheduleChannel = byId("scheduleChannel");
     if (scheduleChannel) {
