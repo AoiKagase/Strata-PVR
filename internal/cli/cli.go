@@ -1090,6 +1090,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			{"data/reserves.json", validateJSONFile(filepath.Join("data", "reserves.json"), "")},
 			{"data/recording.json", validateJSONFile(filepath.Join("data", "recording.json"), "")},
 			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
+			{"WUI static assets", validateWUIStaticAssets()},
 			{"available disk space", diskErr},
 			{"Mirakurun services", servicesErr},
 			{"Mirakurun programs", programsErr},
@@ -1190,6 +1191,21 @@ func validateWritableDir(path string) error {
 		return err
 	}
 	return os.Remove(name)
+}
+
+func validateWUIStaticAssets() error {
+	candidates := []string{"web", filepath.Join("..", "Chinachu", "web")}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("web directory not found")
 }
 
 func validateDiskUsage(path string) error {

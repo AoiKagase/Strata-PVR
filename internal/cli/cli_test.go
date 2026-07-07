@@ -157,6 +157,9 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	if err := os.Mkdir("recorded", 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Mkdir("web", 0o755); err != nil {
+		t.Fatal(err)
+	}
 	files := map[string]string{
 		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
 		"rules.json":          `[]`,
@@ -164,6 +167,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"data/reserves.json":  `[]`,
 		"data/recording.json": `[]`,
 		"data/recorded.json":  `[]`,
+		"web/index.html":      `<html></html>`,
 	}
 	for name, data := range files {
 		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
@@ -185,6 +189,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"OK data/reserves.json",
 		"OK data/recording.json",
 		"OK data/recorded.json",
+		"OK WUI static assets",
 		"OK available disk space",
 		"OK Mirakurun services",
 		"OK Mirakurun programs",
