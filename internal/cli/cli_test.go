@@ -857,8 +857,12 @@ func TestReserveMutationsAcceptLegacyIDOption(t *testing.T) {
 	if len(got) != 1 || !got[0].IsSkip {
 		t.Fatalf("skip did not use legacy id option: %#v", got)
 	}
-	if err := Run(context.Background(), []string{"unskip", "-id", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"unskip", "-id", "auto"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"isSkip": true`) {
+		t.Fatalf("legacy unskip output should show pre-update target: %s", out.String())
 	}
 	got = nil
 	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {

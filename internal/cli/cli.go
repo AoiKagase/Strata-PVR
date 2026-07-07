@@ -851,8 +851,8 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 			if !reserves[i].IsSkip {
 				return fmt.Errorf("既にスキップは解除されています")
 			}
-			reserves[i].IsSkip = false
 			target := reserves[i]
+			reserves[i].IsSkip = false
 			if simulation {
 				fmt.Fprintln(stdout, "[simulation] skip:")
 				writePretty(stdout, target)
