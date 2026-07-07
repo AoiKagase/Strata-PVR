@@ -70,6 +70,10 @@ var runFFmpegStream = func(ctx context.Context, input io.Reader, args ...string)
 	return stdout, cmd.Wait, nil
 }
 
+var runFFprobeFormat = func(ctx context.Context, filePath string) ([]byte, error) {
+	return exec.CommandContext(ctx, "ffprobe", "-v", "0", "-show_format", "-of", "json", filePath).Output()
+}
+
 func Run(ctx context.Context, paths Paths) error {
 	cfg, err := config.Load(paths.Config)
 	if err != nil {
@@ -1562,6 +1566,9 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			writeXSPF(w, target, program.Title)
 		}
 	case "m2ts":
+		if !s.checkLegacyWatchStart(w, r, filePath) {
+			return
+		}
 		if !requirePID {
 			setWatchDownloadHeader(w, r, filePath, apiType)
 		}
@@ -1584,6 +1591,9 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		w.Header().Set("Content-Type", "video/MP2T")
 		http.ServeContent(w, r, filepath.Base(filePath), info.ModTime(), file)
 	case "mp4":
+		if !s.checkLegacyWatchStart(w, r, filePath) {
+			return
+		}
 		if !requirePID {
 			setWatchDownloadHeader(w, r, filePath, apiType)
 		}
@@ -1602,6 +1612,40 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	default:
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	}
+}
+
+func (s *server) checkLegacyWatchStart(w http.ResponseWriter, r *http.Request, filePath string) bool {
+	if !r.URL.Query().Has("ss") {
+		return true
+	}
+	duration, err := probeMediaDuration(r.Context(), filePath)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "error %v", err)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return false
+	}
+	start, _ := strconv.Atoi(legacyWatchStart(r.URL.Query().Get("ss")))
+	if float64(start) > duration {
+		legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+		return false
+	}
+	return true
+}
+
+func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
+	data, err := runFFprobeFormat(ctx, filePath)
+	if err != nil {
+		return 0, err
+	}
+	var value struct {
+		Format struct {
+			Duration string `json:"duration"`
+		} `json:"format"`
+	}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(value.Format.Duration, 64)
 }
 
 func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, initialBytes int64) {

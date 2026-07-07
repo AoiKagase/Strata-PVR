@@ -1166,6 +1166,8 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
 	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
 	res := httptest.NewRecorder()
@@ -1186,6 +1188,48 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	}
 	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2") {
 		t.Fatalf("ffmpeg args did not clamp legacy ss: %s", joined)
+	}
+}
+
+func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"10.0"}}`, nil)
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+		t.Fatalf("out-of-range ss status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordedWatchProbeError(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	restoreProbe := installFakeFFprobe(t, "", fmt.Errorf("fake ffprobe error"))
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=15", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusInternalServerError || res.Body.String() != "500 Internal Server Error\n" {
+		t.Fatalf("probe error status=%d body=%q", res.Code, res.Body.String())
 	}
 }
 
@@ -1359,6 +1403,18 @@ func installFakeFFmpegStream(t *testing.T, output string, gotInput *string, gotA
 		return io.NopCloser(strings.NewReader(output)), func() error { return nil }, nil
 	}
 	return func() { runFFmpegStream = old }
+}
+
+func installFakeFFprobe(t *testing.T, output string, probeErr error) func() {
+	t.Helper()
+	old := runFFprobeFormat
+	runFFprobeFormat = func(context.Context, string) ([]byte, error) {
+		if probeErr != nil {
+			return nil, probeErr
+		}
+		return []byte(output), nil
+	}
+	return func() { runFFprobeFormat = old }
 }
 
 func TestAPIRecordingWatchRequiresPID(t *testing.T) {
