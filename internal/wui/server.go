@@ -1467,6 +1467,10 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	case http.MethodGet, http.MethodHead:
 		switch apiType {
 		case "m2ts":
+			if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
+				legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
 			file, err := os.Open(path)
 			if err != nil {
 				legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -1561,6 +1565,10 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			w.Header().Set("Content-Type", "video/MP2T")
 			w.WriteHeader(http.StatusOK)
 			streamGrowingFile(w, r, filePath, 61440)
+			return
+		}
+		if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
+			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
 		file, err := os.Open(filePath)

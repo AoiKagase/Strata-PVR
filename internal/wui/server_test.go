@@ -1033,6 +1033,14 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 		t.Fatalf("content-disposition = %q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.m2ts", nil)
+	req.Header.Set("Range", "bytes=7-10")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+		t.Fatalf("file invalid range status=%d body=%q", res.Code, res.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodDelete, "/api/recorded/abc/file.json", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1081,6 +1089,14 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	}
 	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename*=UTF-8''recorded.m2ts" {
 		t.Fatalf("download content-disposition = %q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts", nil)
+	req.Header.Set("Range", "bytes=10-20")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+		t.Fatalf("watch invalid range status=%d body=%q", res.Code, res.Body.String())
 	}
 }
 
