@@ -290,7 +290,7 @@ func TestOperatorLegacyISODateTimeUsesDateformatOffset(t *testing.T) {
 	}
 }
 
-func TestRunOnceSkipsConflictAndFuturePrograms(t *testing.T) {
+func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
 	paths := Paths{
@@ -307,13 +307,24 @@ func TestRunOnceSkipsConflictAndFuturePrograms(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
-	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "x"}, now)
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts", ConflictedPriority: 7}
+	streamer := &priorityStreamer{fakeStreamer: fakeStreamer{body: "x"}}
+	result, err := RunOnce(context.Background(), paths, cfg, streamer, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Started != 0 || result.Completed != 0 || result.Failed != 0 {
+	if result.Started != 1 || result.Completed != 1 || result.Failed != 0 {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+	if streamer.priority != 7 {
+		t.Fatalf("conflict priority = %d", streamer.priority)
+	}
+	var recorded []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].ID != "c" || !recorded[0].IsConflict {
+		t.Fatalf("recorded conflict = %#v", recorded)
 	}
 }
 

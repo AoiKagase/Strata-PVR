@@ -211,7 +211,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 }
 
 func shouldStart(program chinachu.Program, recording []chinachu.Program, now time.Time) bool {
-	if program.IsSkip || program.IsConflict || program.End <= now.UnixMilli() {
+	if program.IsSkip || program.End <= now.UnixMilli() {
 		return false
 	}
 	if containsProgram(recording, program.ID) {
