@@ -119,7 +119,7 @@ basic Go API actions for reserving schedule items, skipping/unskipping reserves,
 removing manual reserves, stopping active recordings, and opening/downloading or
 deleting recorded items. It also lists auto-reservation rules, can enable,
 disable, delete, add rules from JSON, and add common title/description/type/
-category/channel/duration/hour rules from form fields. Recorded items expose M2TS, direct MP4,
+category/channel/flag/duration/hour rules from form fields. Recorded items expose M2TS, direct MP4,
 720p MP4, low-bitrate MP4, XSPF, download, and delete actions, and active
 recordings expose a live M2TS watch action. The legacy WUI
 asset fallback remains available during compatibility work. Scheduler, operator,

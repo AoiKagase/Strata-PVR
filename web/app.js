@@ -446,6 +446,8 @@
     var category = byId("ruleCategory");
     var channels = byId("ruleChannels");
     var ignoreChannels = byId("ruleIgnoreChannels");
+    var flags = byId("ruleFlags");
+    var ignoreFlags = byId("ruleIgnoreFlags");
     var durationMin = byId("ruleDurationMin");
     var durationMax = byId("ruleDurationMax");
     var hourStart = byId("ruleHourStart");
@@ -477,6 +479,14 @@
     if (ignoreChannelValues.length) {
       rule.ignore_channels = ignoreChannelValues;
     }
+    var flagValues = flags ? splitList(flags.value) : [];
+    if (flagValues.length) {
+      rule.reserve_flags = flagValues;
+    }
+    var ignoreFlagValues = ignoreFlags ? splitList(ignoreFlags.value) : [];
+    if (ignoreFlagValues.length) {
+      rule.ignore_flags = ignoreFlagValues;
+    }
     var minText = durationMin ? durationMin.value.trim() : "";
     var maxText = durationMax ? durationMax.value.trim() : "";
     if (minText || maxText) {
@@ -507,7 +517,7 @@
       }
       rule.hour = { start: startHour, end: endHour };
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.duration && !rule.hour) {
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -533,6 +543,12 @@
       }
       if (ignoreChannels) {
         ignoreChannels.value = "";
+      }
+      if (flags) {
+        flags.value = "";
+      }
+      if (ignoreFlags) {
+        ignoreFlags.value = "";
       }
       if (durationMin) {
         durationMin.value = "";
