@@ -5,7 +5,8 @@
     recording: [],
     recorded: [],
     schedule: [],
-    rules: []
+    rules: [],
+    config: {}
   };
 
   function byId(id) {
@@ -270,6 +271,52 @@
     });
   }
 
+  function settingValue(value) {
+    if (value === undefined || value === null || value === "") {
+      return "not set";
+    }
+    if (Array.isArray(value)) {
+      return value.length ? value.join(", ") : "none";
+    }
+    if (typeof value === "boolean") {
+      return value ? "enabled" : "disabled";
+    }
+    return String(value);
+  }
+
+  function renderSettings() {
+    var root = byId("settingsList");
+    if (!root) {
+      return;
+    }
+    var cfg = state.config || {};
+    var rows = [
+      ["Mirakurun", cfg.mirakurunPath || cfg.schedulerMirakurunPath],
+      ["Recorded directory", cfg.recordedDir],
+      ["Recorded format", cfg.recordedFormat],
+      ["WUI host", cfg.wuiHost],
+      ["WUI port", cfg.wuiPort],
+      ["Open host", cfg.wuiOpenHost],
+      ["Open port", cfg.wuiOpenPort],
+      ["TLS", Boolean(cfg.wuiTlsKeyPath || cfg.wuiTlsCertPath)],
+      ["Exclude services", cfg.excludeServices],
+      ["Storage low-space MB", cfg.storageLowSpaceThresholdMB],
+      ["Storage low-space action", cfg.storageLowSpaceAction],
+      ["Normalization", cfg.normalizationForm]
+    ];
+    root.innerHTML = "";
+    rows.forEach(function (row) {
+      var wrapper = document.createElement("div");
+      var key = document.createElement("dt");
+      var value = document.createElement("dd");
+      key.textContent = row[0];
+      value.textContent = settingValue(row[1]);
+      wrapper.appendChild(key);
+      wrapper.appendChild(value);
+      root.appendChild(wrapper);
+    });
+  }
+
   function addRuleFromEditor() {
     var editor = byId("ruleEditor");
     if (!editor) {
@@ -332,6 +379,7 @@
     renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch", "download", "delete-recorded"]);
     renderSchedule();
     renderRules();
+    renderSettings();
   }
 
   function setBusy(message) {
@@ -358,7 +406,8 @@
       api("recording.json"),
       api("recorded.json"),
       api("schedule.json"),
-      api("rules.json")
+      api("rules.json"),
+      api("config.json")
     ]).then(function (result) {
       state.status = result[0] || {};
       state.reserves = result[1] || [];
@@ -366,6 +415,7 @@
       state.recorded = result[3] || [];
       state.schedule = result[4] || [];
       state.rules = result[5] || [];
+      state.config = result[6] || {};
       render();
       refreshLogs();
     }).catch(showError);
