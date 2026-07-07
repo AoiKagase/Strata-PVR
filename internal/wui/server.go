@@ -499,10 +499,6 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path = trimLastExtension(path)
 	parts := splitPath(path)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if apiType == "" {
-		http.Error(w, "415 Unsupported Media Type", http.StatusUnsupportedMediaType)
-		return
-	}
 	if methods, ok := apiAllowedMethods(parts); ok && !methodAllowed(r.Method, methods) {
 		w.Header().Set("Allow", strings.Join(methods, ", "))
 		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
@@ -2158,9 +2154,6 @@ func writeCompactJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func requireAPIType(w http.ResponseWriter, apiType string, allowed ...string) bool {
-	if apiType == "" {
-		return true
-	}
 	for _, value := range allowed {
 		if apiType == value {
 			return true

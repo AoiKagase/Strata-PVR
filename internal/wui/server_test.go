@@ -240,6 +240,13 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("unknown resource status=%d body=%q", res.Code, res.Body.String())
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("unknown resource without extension status=%d body=%q", res.Code, res.Body.String())
+	}
 }
 
 func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
