@@ -1110,7 +1110,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("watchdata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: "Title & One", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Title: `Title <&"'> One`, Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -1121,7 +1121,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "Title &amp; One") || !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/recorded/abc/") {
+	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/recorded/abc/") {
 		t.Fatalf("unexpected xspf: %q", res.Body.String())
 	}
 
@@ -1768,8 +1768,8 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "Service &amp; One") {
-		t.Fatalf("xspf title was not escaped: %q", res.Body.String())
+	if !strings.Contains(res.Body.String(), "Service & One") {
+		t.Fatalf("xspf channel title should match legacy unescaped output: %q", res.Body.String())
 	}
 	if !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/channel/") {
 		t.Fatalf("xspf target missing: %q", res.Body.String())

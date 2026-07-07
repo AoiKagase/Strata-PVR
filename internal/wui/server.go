@@ -1590,7 +1590,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, id))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			writeXSPF(w, target, program.Title)
+			writeXSPF(w, target, legacyRecordedXSPFTitle(program.Title))
 		}
 	case "m2ts":
 		if !s.checkLegacyWatchStart(w, r, filePath) {
@@ -2643,9 +2643,21 @@ func writeXSPF(w io.Writer, target, title string) {
 	fmt.Fprintf(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fmt.Fprintf(w, "<playlist version=\"1\" xmlns=\"http://xspf.org/ns/0/\">\n")
 	fmt.Fprintf(w, "<trackList>\n")
-	fmt.Fprintf(w, "<track>\n<location>%s</location>\n<title>%s</title>\n</track>\n", xmlEscape(target), xmlEscape(title))
+	fmt.Fprintf(w, "<track>\n<location>%s</location>\n<title>%s</title>\n</track>\n", legacyXSPFLocation(target), title)
 	fmt.Fprintf(w, "</trackList>\n")
 	fmt.Fprintf(w, "</playlist>\n")
+}
+
+func legacyXSPFLocation(value string) string {
+	return strings.ReplaceAll(value, "&", "&amp;")
+}
+
+func legacyRecordedXSPFTitle(value string) string {
+	value = strings.ReplaceAll(value, "<", "&lt;")
+	value = strings.ReplaceAll(value, ">", "&gt;")
+	value = strings.ReplaceAll(value, "&", "&amp;")
+	value = strings.ReplaceAll(value, `"`, "&quot;")
+	return value
 }
 
 func parseSchedulerLogProgram(line string) (string, string, bool) {
@@ -2684,11 +2696,6 @@ func reverseAny(values []any) {
 	for i, j := 0, len(values)-1; i < j; i, j = i+1, j-1 {
 		values[i], values[j] = values[j], values[i]
 	}
-}
-
-func xmlEscape(value string) string {
-	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
-	return replacer.Replace(value)
 }
 
 func findWebRoot(configured string) string {

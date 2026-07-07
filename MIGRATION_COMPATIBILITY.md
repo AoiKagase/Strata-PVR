@@ -205,6 +205,8 @@ Text API note: scheduler/log `.txt` responses use the legacy `Content-Type: text
 
 Recorded file note: `/api/recorded/:id/file.m2ts` ignores request `Range` headers and returns the full file with legacy `Content-Length`/`Content-Disposition`, matching `script-recorded-program-file.vm.js`.
 
+XSPF note: recorded watch titles use the old script's replacement order (`<`, `>`, then `&`, then `"`), and channel watch titles are emitted unescaped like `script-channel-watch.vm.js`; XSPF locations only escape `&`.
+
 The old WUI serves `web/` directly with static files, range support, cache headers for icons/images, fixed extension-based content types, Host-header validation, and API dispatch under `/api/`. The Go implementation serves static files from `web/` when present and can fall back to `../Chinachu/web` during development. Static `.ico` and `.png` assets now preserve the legacy `Cache-Control: private, max-age=86400` behavior while other static assets keep `no-cache`; legacy content types for html/js/css/icons/images/video/json/xspf are set explicitly; common legacy security headers and `Server: Chinachu (Node)` are preserved for WUI compatibility; static `Last-Modified`/`If-Modified-Since` conditional requests return 304 like the old WUI; missing static files and out-of-range static Range requests return the old fixed text/plain 404/416 bodies; requests without `Host` return 400. Current status: partially compatible; Node-based frontend builds are not required.
 
 ## Mirakurun Endpoints Used
