@@ -1,2 +1,7 @@
 # Added by code-review-graph
 .code-review-graph/
+
+# Local generated artifacts
+.tokensave/
+strata-pvr
+strata-pvr.exe
