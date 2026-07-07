@@ -145,6 +145,13 @@ h3 {
   gap: 12px;
 }
 
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .schedule-controls {
   display: flex;
   flex-wrap: wrap;
@@ -179,6 +186,13 @@ button {
 
 button:hover {
   background: #115e59;
+}
+
+button:disabled {
+  border-color: var(--line);
+  background: #e8eef1;
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .list {

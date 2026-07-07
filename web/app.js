@@ -9,7 +9,8 @@
     config: {},
     scheduleChannel: "",
     scheduleWindowHours: 24,
-    scheduleLimit: 20
+    scheduleLimit: 20,
+    editingRuleIndex: null
   };
 
   function byId(id) {
@@ -355,6 +356,8 @@
         var editor = byId("ruleEditor");
         if (editor) {
           editor.value = JSON.stringify(rule, null, 2);
+          state.editingRuleIndex = index;
+          renderRuleEditorState();
           editor.focus();
         }
       }));
@@ -416,19 +419,54 @@
   }
 
   function addRuleFromEditor() {
-    var editor = byId("ruleEditor");
-    if (!editor) {
-      return;
-    }
-    var rule;
-    try {
-      rule = JSON.parse(editor.value);
-    } catch (error) {
-      showError(new Error("Rule JSON is invalid"));
+    var rule = readRuleEditor();
+    if (!rule) {
       return;
     }
     setBusy("Working");
-    sendJSON("rules.json", "POST", rule).then(refresh).catch(showError);
+    sendJSON("rules.json", "POST", rule).then(function () {
+      state.editingRuleIndex = null;
+      renderRuleEditorState();
+      refresh();
+    }).catch(showError);
+  }
+
+  function saveRuleFromEditor() {
+    if (state.editingRuleIndex === null || state.editingRuleIndex === undefined) {
+      showError(new Error("No rule is selected"));
+      return;
+    }
+    var rule = readRuleEditor();
+    if (!rule) {
+      return;
+    }
+    setBusy("Working");
+    sendJSON("rules/" + state.editingRuleIndex + ".json", "PUT", rule).then(function () {
+      state.editingRuleIndex = null;
+      renderRuleEditorState();
+      refresh();
+    }).catch(showError);
+  }
+
+  function readRuleEditor() {
+    var editor = byId("ruleEditor");
+    if (!editor) {
+      return null;
+    }
+    try {
+      return JSON.parse(editor.value);
+    } catch (error) {
+      showError(new Error("Rule JSON is invalid"));
+      return null;
+    }
+  }
+
+  function renderRuleEditorState() {
+    var saveButton = byId("saveRuleButton");
+    if (saveButton) {
+      saveButton.disabled = state.editingRuleIndex === null || state.editingRuleIndex === undefined;
+      saveButton.title = saveButton.disabled ? "Select Edit JSON on a rule first" : "Save rule #" + state.editingRuleIndex;
+    }
   }
 
   function splitList(value) {
@@ -640,6 +678,7 @@
     renderSchedule();
     renderRules();
     renderSettings();
+    renderRuleEditorState();
   }
 
   function setBusy(message) {
@@ -689,6 +728,10 @@
     var addRuleButton = byId("addRuleButton");
     if (addRuleButton) {
       addRuleButton.addEventListener("click", addRuleFromEditor);
+    }
+    var saveRuleButton = byId("saveRuleButton");
+    if (saveRuleButton) {
+      saveRuleButton.addEventListener("click", saveRuleFromEditor);
     }
     var addBasicRuleButton = byId("addBasicRuleButton");
     if (addBasicRuleButton) {
