@@ -2106,12 +2106,8 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	paths.OperatorPID = filepath.Join(dir, "operator.pid")
-	paths.SchedulerPID = filepath.Join(dir, "scheduler.pid")
 	currentPID := os.Getpid()
 	if err := os.WriteFile(paths.OperatorPID, []byte(strconv.Itoa(currentPID)+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(paths.SchedulerPID, []byte("-1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -2133,8 +2129,8 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	if status.Operator["pid"].(float64) != float64(currentPID) || status.Operator["alive"] != true {
 		t.Fatalf("unexpected operator status: %#v", status.Operator)
 	}
-	if status.Scheduler["pid"] != nil || status.Scheduler["alive"] != false {
-		t.Fatalf("unexpected status: %#v", status)
+	if status.Scheduler != nil {
+		t.Fatalf("legacy status should not expose scheduler: %#v", status.Scheduler)
 	}
 	if status.WUI["pid"] != nil || status.WUI["alive"] != false {
 		t.Fatalf("unexpected legacy wui status: %#v", status.WUI)

@@ -2494,7 +2494,6 @@ func broadcastingPrograms(schedules []chinachu.ChannelSchedule, now time.Time) [
 
 func (s *server) status() map[string]any {
 	operatorPID := readPID(s.pidPath("operator"))
-	schedulerPID := readPID(s.pidPath("scheduler"))
 	return map[string]any{
 		"connectedCount": 0,
 		"feature": map[string]any{
@@ -2508,10 +2507,6 @@ func (s *server) status() map[string]any {
 		"operator": map[string]any{
 			"alive": pidAlive(operatorPID),
 			"pid":   operatorPID,
-		},
-		"scheduler": map[string]any{
-			"alive": pidAlive(schedulerPID),
-			"pid":   schedulerPID,
 		},
 		"wui": map[string]any{
 			"alive": false,
