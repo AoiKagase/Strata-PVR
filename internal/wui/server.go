@@ -636,6 +636,10 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
 		s.handleChannelWatch(w, r, parts[1], apiType)
 	default:
+		if len(parts) > 0 && knownAPIResource(parts[0]) {
+			http.Error(w, "400 Bad Request", http.StatusBadRequest)
+			return
+		}
 		http.NotFound(w, r)
 	}
 }
@@ -2418,6 +2422,15 @@ func methodAllowed(method string, allowed []string) bool {
 		}
 	}
 	return false
+}
+
+func knownAPIResource(name string) bool {
+	switch name {
+	case "status", "scheduler", "storage", "log", "config", "rules", "schedule", "reserves", "recording", "recorded", "program", "channel":
+		return true
+	default:
+		return false
+	}
 }
 
 func apiExtension(path string) string {

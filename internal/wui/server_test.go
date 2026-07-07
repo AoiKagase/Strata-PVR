@@ -215,6 +215,26 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	}
 }
 
+func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule/foo/bar/baz.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("known resource bad path status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource/foo.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("unknown resource status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
