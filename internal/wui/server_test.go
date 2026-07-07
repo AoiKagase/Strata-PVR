@@ -2023,6 +2023,26 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	}
 }
 
+func TestParseSchedulerLogProgramUsesLegacyIDPattern(t *testing.T) {
+	tests := []struct {
+		line string
+		kind string
+		id   string
+		ok   bool
+	}{
+		{"RESERVE: abc-123, title", "RESERVE", "abc-123", true},
+		{"!CONFLICT: def456 (rule)", "CONFLICT", "def456", true},
+		{"RESERVE: ABC", "", "", false},
+		{"RESERVE: ", "", "", false},
+	}
+	for _, tt := range tests {
+		kind, id, ok := parseSchedulerLogProgram(tt.line)
+		if kind != tt.kind || id != tt.id || ok != tt.ok {
+			t.Fatalf("%q => (%q, %q, %v), want (%q, %q, %v)", tt.line, kind, id, ok, tt.kind, tt.id, tt.ok)
+		}
+	}
+}
+
 func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

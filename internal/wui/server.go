@@ -2655,13 +2655,23 @@ func parseSchedulerLogProgram(line string) (string, string, bool) {
 			continue
 		}
 		rest := line[strings.Index(line, prefix)+len(prefix):]
-		fields := strings.Fields(rest)
-		if len(fields) == 0 {
+		id := legacySchedulerLogID(rest)
+		if id == "" {
 			return "", "", false
 		}
-		return kind, fields[0], true
+		return kind, id, true
 	}
 	return "", "", false
+}
+
+func legacySchedulerLogID(value string) string {
+	for i, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			continue
+		}
+		return value[:i]
+	}
+	return value
 }
 
 func reversePrograms(programs []chinachu.Program) {
