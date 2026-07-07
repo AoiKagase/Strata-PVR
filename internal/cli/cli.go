@@ -260,7 +260,7 @@ func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts sear
 		headers = insertString(headers, indexOfString(headers, "Cat"), "SID")
 		headers = append(headers, "Description")
 	}
-	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	rows := make([][]string, 0, len(programs))
 	for i, program := range programs {
 		if opts.hasNum && i != opts.num {
 			continue
@@ -284,8 +284,9 @@ func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts sear
 			row = insertString(row, indexOfString(headers, "SID"), strconv.FormatInt(program.Channel.SID, 10))
 			row = append(row, program.Detail)
 		}
-		fmt.Fprintln(w, strings.Join(row, "\t"))
+		rows = append(rows, row)
 	}
+	writeLegacyTable(w, headers, rows, opts.simple)
 }
 
 func writeProgramListTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {
@@ -297,7 +298,7 @@ func writeProgramListTable(w io.Writer, programs []chinachu.Program, opts search
 		headers = insertString(headers, indexOfString(headers, "Cat"), "SID")
 		headers = append(headers, "Description")
 	}
-	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	rows := make([][]string, 0, len(programs))
 	for i, program := range programs {
 		if opts.hasNum && i != opts.num {
 			continue
@@ -322,8 +323,78 @@ func writeProgramListTable(w io.Writer, programs []chinachu.Program, opts search
 			row = insertString(row, indexOfString(headers, "SID"), strconv.FormatInt(program.Channel.SID, 10))
 			row = append(row, program.Detail)
 		}
-		fmt.Fprintln(w, strings.Join(row, "\t"))
+		rows = append(rows, row)
 	}
+	writeLegacyTable(w, headers, rows, opts.simple)
+}
+
+func writeLegacyTable(w io.Writer, headers []string, rows [][]string, simple bool) {
+	widths := legacyTableWidths(headers, rows)
+	writeLegacyTableRow(w, headers, widths)
+	if !simple {
+		separator := make([]string, len(headers))
+		for i, width := range widths {
+			separator[i] = strings.Repeat("-", width)
+		}
+		writeLegacyTableRow(w, separator, widths)
+	}
+	for _, row := range rows {
+		writeLegacyTableRow(w, row, widths)
+	}
+}
+
+func writeLegacyTransposedTable(w io.Writer, headers []string, row []string) {
+	rows := make([][]string, 0, len(headers))
+	for i, header := range headers {
+		value := ""
+		if i < len(row) {
+			value = row[i]
+		}
+		rows = append(rows, []string{header, value})
+	}
+	widths := legacyTableWidths([]string{"", ""}, rows)
+	for _, row := range rows {
+		writeLegacyTableRow(w, row, widths)
+	}
+}
+
+func legacyTableWidths(headers []string, rows [][]string) []int {
+	widths := make([]int, len(headers))
+	for i, header := range headers {
+		widths[i] = legacyCellWidth(header)
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			if i >= len(widths) {
+				continue
+			}
+			if width := legacyCellWidth(cell); width > widths[i] {
+				widths[i] = width
+			}
+		}
+	}
+	return widths
+}
+
+func writeLegacyTableRow(w io.Writer, row []string, widths []int) {
+	for i := range widths {
+		if i > 0 {
+			fmt.Fprint(w, "  ")
+		}
+		cell := ""
+		if i < len(row) {
+			cell = row[i]
+		}
+		fmt.Fprint(w, cell)
+		if i < len(widths)-1 {
+			fmt.Fprint(w, strings.Repeat(" ", widths[i]-legacyCellWidth(cell)))
+		}
+	}
+	fmt.Fprintln(w)
+}
+
+func legacyCellWidth(value string) int {
+	return len([]rune(value))
 }
 
 func reservationOwner(program chinachu.Program) string {
@@ -434,15 +505,10 @@ func ruleList(path string, args []string, stdout io.Writer) error {
 		return nil
 	}
 	if len(rows) == 1 {
-		for i, header := range headers {
-			fmt.Fprintf(stdout, "%s\t%s\n", header, rows[0][i])
-		}
+		writeLegacyTransposedTable(stdout, headers, rows[0])
 		return nil
 	}
-	fmt.Fprintln(stdout, strings.Join(headers, "\t"))
-	for _, row := range rows {
-		fmt.Fprintln(stdout, strings.Join(row, "\t"))
-	}
+	writeLegacyTable(stdout, headers, rows, hasFlag(args, "-simple", "--simple"))
 	return nil
 }
 
@@ -865,14 +931,14 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 	if err := storage.ReadJSON(p.recorded, &recorded, "[]"); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "action\tProgram ID\tRecorded")
+	rows := make([][]string, 0, len(recorded))
 	kept := recorded[:0]
 	removed := false
 	for _, program := range recorded {
 		if program.Recorded != "" {
 			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
 				kept = append(kept, program)
-				fmt.Fprintf(stdout, "exist\t%s\t%s\n", program.ID, program.Recorded)
+				rows = append(rows, []string{"exist", program.ID, program.Recorded})
 				continue
 			}
 		}
@@ -883,8 +949,9 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 		} else {
 			removed = true
 		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\n", action, program.ID, program.Recorded)
+		rows = append(rows, []string{action, program.ID, program.Recorded})
 	}
+	writeLegacyTable(stdout, []string{"action", "Program ID", "Recorded"}, rows, false)
 	if simulation {
 		return nil
 	}

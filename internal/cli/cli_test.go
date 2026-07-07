@@ -402,10 +402,10 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 			t.Fatalf("program list missing %q: %s", want, text)
 		}
 	}
-	if !strings.Contains(text, "0\tearlier\tBS:BS1\tnews\tuser") {
+	if !strings.Contains(text, "0  earlier") || !strings.Contains(text, "BS:BS1   news   user") {
 		t.Fatalf("manual reserve row missing or unsorted: %s", text)
 	}
-	if !strings.Contains(text, "1\tlater\tGR:27\tanime\trule") {
+	if !strings.Contains(text, "1  later") || !strings.Contains(text, "GR:27    anime  rule") {
 		t.Fatalf("auto reserve row missing: %s", text)
 	}
 }
@@ -437,9 +437,9 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	}
 	text := out.String()
 	for _, want := range []string{
-		"action\tProgram ID\tRecorded",
-		"exist\texists\t",
-		"[simulation] removed\tmissing\t",
+		"action                Program ID  Recorded",
+		"exist                 exists",
+		"[simulation] removed  missing",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("cleanup output missing %q: %s", want, text)
@@ -531,7 +531,7 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, want := range []string{"#\t0", "types\tGR", "categories\tanime", "hour\t1, 4", "reserve_titles\t[2]"} {
+	for _, want := range []string{"#                     0", "types                 GR", "categories            anime", "hour                  1, 4", "reserve_titles        [2]"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("rules output missing %q: %s", want, text)
 		}
@@ -551,7 +551,7 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 	if err := Run(context.Background(), []string{"rules"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "#\ttypes\tcategories") || !strings.Contains(out.String(), "1\tBS\t-") {
+	if !strings.Contains(out.String(), "#  types") || !strings.Contains(out.String(), "1  BS     -") {
 		t.Fatalf("multi-rule table output missing: %s", out.String())
 	}
 }
