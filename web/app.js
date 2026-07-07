@@ -30,13 +30,22 @@
     return document.getElementById(id);
   }
 
+  function normalizeHiddenChannels(values) {
+    var seen = {};
+    return (Array.isArray(values) ? values : []).filter(function (value) {
+      if (typeof value !== "string" || !value || seen[value]) {
+        return false;
+      }
+      seen[value] = true;
+      return true;
+    });
+  }
+
   function loadHiddenChannels() {
     try {
       var raw = window.localStorage ? window.localStorage.getItem(hiddenChannelsStorageKey) : "";
       var values = raw ? JSON.parse(raw) : [];
-      return Array.isArray(values) ? values.filter(function (value) {
-        return typeof value === "string" && value;
-      }) : [];
+      return normalizeHiddenChannels(values);
     } catch (error) {
       return [];
     }
@@ -45,6 +54,7 @@
   function saveHiddenChannels() {
     try {
       if (window.localStorage) {
+        state.scheduleHiddenChannels = normalizeHiddenChannels(state.scheduleHiddenChannels);
         window.localStorage.setItem(hiddenChannelsStorageKey, JSON.stringify(state.scheduleHiddenChannels));
       }
     } catch (error) {
@@ -519,6 +529,14 @@
             openURL(channelURL(channelID, "watch", "mp4"));
           }));
         }
+      } else if (name === "open-channel-programs") {
+        var programsChannelID = programChannelID(program);
+        if (programsChannelID) {
+          row.appendChild(actionButton("番組一覧", "このチャンネルの番組一覧を開く", function () {
+            closeProgramDialog();
+            openChannelPrograms(programsChannelID);
+          }));
+        }
       } else if (name === "create-rule-from-program") {
         row.appendChild(actionButton("ルール作成", "この番組を元にルールフォームを開く", function () {
           fillRuleFormFromProgram(program);
@@ -546,8 +564,14 @@
     var item = document.createElement("article");
     item.className = "program-row";
 
-    var title = document.createElement("strong");
+    var title = document.createElement("button");
+    title.type = "button";
+    title.className = "program-title-button";
     title.textContent = programTitle(program);
+    title.title = "番組詳細を開く";
+    title.addEventListener("click", function () {
+      openProgramDialog(program);
+    });
 
     var meta = document.createElement("span");
     var parts = [formatTime(program.start)];
@@ -567,8 +591,14 @@
     var item = document.createElement("article");
     item.className = "program-row";
 
-    var title = document.createElement("strong");
+    var title = document.createElement("button");
+    title.type = "button";
+    title.className = "program-title-button";
     title.textContent = programTitle(program);
+    title.title = "番組詳細を開く";
+    title.addEventListener("click", function () {
+      openProgramDialog(program);
+    });
 
     var meta = document.createElement("span");
     var channelID = programChannelID(program);
@@ -1001,7 +1031,7 @@
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
-      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-channel-mp4", "create-rule-from-program"]);
+      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"]);
     }
     if (dialog && dialog.showModal) {
       dialog.showModal();
@@ -1147,12 +1177,12 @@
     select.appendChild(empty);
     channels.forEach(function (channel) {
       var id = scheduleChannelID(channel) || scheduleChannelName(channel);
-      if (!id || state.scheduleHiddenChannels.indexOf(id) >= 0) {
+      if (!id) {
         return;
       }
       var option = document.createElement("option");
       option.value = id;
-      option.textContent = scheduleChannelName(channel) || id;
+      option.textContent = (state.scheduleHiddenChannels.indexOf(id) >= 0 ? "非表示: " : "表示中: ") + (scheduleChannelName(channel) || id);
       select.appendChild(option);
     });
     select.value = current;
@@ -1224,7 +1254,7 @@
     }
     root.className = "list";
     programs.forEach(function (program) {
-      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "create-rule-from-program"], false));
+      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "watch-channel-mp4", "create-rule-from-program"], false));
     });
   }
 
@@ -2215,6 +2245,20 @@
           saveHiddenChannels();
           renderSchedule();
         }
+      });
+    }
+    var scheduleShowChannelButton = byId("scheduleShowChannelButton");
+    if (scheduleShowChannelButton) {
+      scheduleShowChannelButton.addEventListener("click", function () {
+        var select = byId("scheduleHiddenChannel");
+        if (!select || !select.value) {
+          return;
+        }
+        state.scheduleHiddenChannels = state.scheduleHiddenChannels.filter(function (id) {
+          return id !== select.value;
+        });
+        saveHiddenChannels();
+        renderSchedule();
       });
     }
     var scheduleClearHiddenButton = byId("scheduleClearHiddenButton");

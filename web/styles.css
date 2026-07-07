@@ -359,6 +359,25 @@ button:disabled {
   font-size: 14px;
 }
 
+.program-title-button {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 750;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.program-title-button:hover {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .program-row span {
   color: var(--muted);
   font-size: 12px;
