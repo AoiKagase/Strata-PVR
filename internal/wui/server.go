@@ -499,6 +499,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path = trimLastExtension(path)
 	parts := splitPath(path)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if methods, ok := apiAllowedMethods(parts); ok && !methodAllowed(r.Method, methods) {
+		w.Header().Set("Allow", strings.Join(methods, ", "))
+		http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
 	switch {
 	case len(parts) == 1 && parts[0] == "status":
@@ -2342,6 +2347,77 @@ func splitPath(path string) []string {
 		}
 	}
 	return out
+}
+
+func apiAllowedMethods(parts []string) ([]string, bool) {
+	if len(parts) == 0 {
+		return nil, false
+	}
+	switch {
+	case len(parts) == 1 && parts[0] == "status":
+		return []string{"GET"}, true
+	case len(parts) == 1 && parts[0] == "scheduler":
+		return []string{"GET", "PUT"}, true
+	case len(parts) == 2 && parts[0] == "scheduler" && parts[1] == "force":
+		return []string{"PUT"}, true
+	case len(parts) == 1 && parts[0] == "storage":
+		return []string{"GET"}, true
+	case len(parts) == 2 && parts[0] == "log":
+		return []string{"GET"}, true
+	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
+		return []string{"GET"}, true
+	case len(parts) == 1 && parts[0] == "config":
+		return []string{"GET", "PUT"}, true
+	case len(parts) == 1 && parts[0] == "rules":
+		return []string{"GET", "POST"}, true
+	case len(parts) == 2 && parts[0] == "rules":
+		return []string{"GET", "PUT", "DELETE"}, true
+	case len(parts) == 3 && parts[0] == "rules":
+		return []string{"PUT"}, true
+	case len(parts) == 1 && parts[0] == "schedule":
+		return []string{"HEAD", "GET"}, true
+	case len(parts) == 2 && parts[0] == "schedule" && (parts[1] == "programs" || parts[1] == "broadcasting"):
+		return []string{"GET"}, true
+	case len(parts) == 2 && parts[0] == "schedule":
+		return []string{"GET"}, true
+	case len(parts) == 3 && parts[0] == "schedule" && (parts[2] == "programs" || parts[2] == "broadcasting"):
+		return []string{"GET"}, true
+	case len(parts) == 1 && parts[0] == "reserves":
+		return []string{"GET"}, true
+	case len(parts) == 2 && parts[0] == "reserves":
+		return []string{"GET", "DELETE"}, true
+	case len(parts) == 3 && parts[0] == "reserves":
+		return []string{"PUT"}, true
+	case len(parts) == 1 && parts[0] == "recording":
+		return []string{"GET"}, true
+	case len(parts) == 2 && parts[0] == "recording":
+		return []string{"GET", "DELETE"}, true
+	case len(parts) == 3 && parts[0] == "recording" && (parts[2] == "preview" || parts[2] == "watch"):
+		return []string{"GET"}, true
+	case len(parts) == 1 && parts[0] == "recorded":
+		return []string{"GET", "PUT"}, true
+	case len(parts) == 2 && parts[0] == "recorded":
+		return []string{"GET", "DELETE"}, true
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
+		return []string{"GET", "DELETE"}, true
+	case len(parts) == 3 && parts[0] == "recorded" && (parts[2] == "preview" || parts[2] == "watch"):
+		return []string{"GET"}, true
+	case len(parts) == 2 && parts[0] == "program":
+		return []string{"GET", "PUT"}, true
+	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "watch"):
+		return []string{"GET"}, true
+	default:
+		return nil, false
+	}
+}
+
+func methodAllowed(method string, allowed []string) bool {
+	for _, value := range allowed {
+		if method == value {
+			return true
+		}
+	}
+	return false
 }
 
 func apiExtension(path string) string {

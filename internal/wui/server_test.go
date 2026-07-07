@@ -180,6 +180,41 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	}
 }
 
+func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := storage.WriteJSONAtomic(paths.Schedule, []chinachu.ChannelSchedule{}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodHead, "/api/schedule.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.Len() != 0 {
+		t.Fatalf("schedule HEAD status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	for _, tc := range []struct {
+		path  string
+		allow string
+	}{
+		{"/api/status.json", "GET"},
+		{"/api/config.json", "GET, PUT"},
+		{"/api/recorded/abc/watch.m2ts", "GET"},
+	} {
+		req = httptest.NewRequest(http.MethodHead, tc.path, nil)
+		res = httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s HEAD status=%d body=%q", tc.path, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Allow"); got != tc.allow {
+			t.Fatalf("%s Allow=%q, want %q", tc.path, got, tc.allow)
+		}
+	}
+}
+
 func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
