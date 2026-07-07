@@ -129,9 +129,10 @@ Mirakurun URL, recorded directory, WUI ports, storage policy, and normalization.
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
-The frontend still needs full rule editing for every legacy field and, if
-desired, custom playback/transcode controls before it can replace every legacy
-WUI workflow. For personal deployments, settings editing is intentionally
+The frontend still needs full rule editing for less common legacy fields such as
+`sid`, `isDisabled`, `recordedFormat`, and arbitrary JSON extensions, plus
+custom playback/transcode controls if desired, before it can replace every
+legacy WUI workflow. For personal deployments, settings editing is intentionally
 read-only because direct `config.json` editing is safer and easier to audit; the
 legacy-compatible `/api/config.json` PUT endpoint remains available for old
 clients. The frontend does not require Node.js, npm, webpack, or any Node-based
