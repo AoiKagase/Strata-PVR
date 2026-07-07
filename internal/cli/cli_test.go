@@ -270,6 +270,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"CONFIG recordedDir=recorded",
 		"CONFIG wui=0.0.0.0:disabled tls=disabled open=disabled",
 		"CONFIG storageLowSpace=3000MB action=remove",
+		"WARN strata-pvr binary not found in the current directory",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("compat doctor output missing %q: %s", want, text)
@@ -330,6 +331,28 @@ func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 		if strings.Contains(text, secret) {
 			t.Fatalf("summary leaked %q: %s", secret, text)
 		}
+	}
+}
+
+func TestCompatDoctorWarningsDetectWrapperTarget(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if warnings := compatDoctorWarnings(); len(warnings) != 1 || !strings.Contains(warnings[0], "binary not found") {
+		t.Fatalf("missing binary warnings = %#v", warnings)
+	}
+	name := "strata-pvr"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(name, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if warnings := compatDoctorWarnings(); len(warnings) != 0 {
+		t.Fatalf("existing binary warnings = %#v", warnings)
 	}
 }
 

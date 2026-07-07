@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1218,6 +1219,9 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			}
 			if args[0] == "doctor" {
 				writeCompatConfigSummary(stdout, cfg)
+				for _, warning := range compatDoctorWarnings() {
+					fmt.Fprintf(stdout, "WARN %s\n", warning)
+				}
 			}
 		}
 		if failed {
@@ -1234,6 +1238,29 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	default:
 		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
 	}
+}
+
+func compatDoctorWarnings() []string {
+	candidates := []string{"strata-pvr"}
+	if runtime.GOOS == "windows" {
+		candidates = append([]string{"strata-pvr.exe"}, candidates...)
+	}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil {
+			if info.IsDir() {
+				return []string{candidate + ": wrapper target is a directory, not an executable file"}
+			}
+			if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+				return []string{candidate + ": wrapper target exists but is not executable"}
+			}
+			return nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return []string{candidate + ": cannot inspect wrapper target: " + err.Error()}
+		}
+	}
+	return []string{"strata-pvr binary not found in the current directory; generated wrappers and initscripts expect it there"}
 }
 
 func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {

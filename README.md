@@ -74,7 +74,9 @@ Compatibility and environment checks are available with:
 ```
 
 `compat doctor` includes the same checks plus a non-secret configuration
-summary for Mirakurun, recording paths, WUI listeners, and storage policy.
+summary for Mirakurun, recording paths, WUI listeners, and storage policy. It
+also warns when the local `strata-pvr` binary expected by generated wrappers and
+init scripts is not present yet.
 
 To review a safe shell wrapper that forwards existing command arguments to the
 Go binary without overwriting any file automatically:
