@@ -443,8 +443,8 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "Strata PVR"},
-		{"/app.js", "text/javascript", "function request"},
+		{"/", "text/html", "ruleEditor"},
+		{"/app.js", "text/javascript", "rules.json"},
 		{"/styles.css", "text/css", ".program-row"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)

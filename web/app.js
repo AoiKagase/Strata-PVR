@@ -4,7 +4,8 @@
     reserves: [],
     recording: [],
     recorded: [],
-    schedule: []
+    schedule: [],
+    rules: []
   };
 
   function byId(id) {
@@ -25,6 +26,22 @@
     return fetch("/api/" + path, {
       credentials: "same-origin",
       method: method || "GET"
+    }).then(function (response) {
+      if (!response.ok) {
+        throw new Error(path + " returned " + response.status);
+      }
+      return response.text().then(function (body) {
+        return body ? JSON.parse(body) : {};
+      });
+    });
+  }
+
+  function sendJSON(path, method, value) {
+    return fetch("/api/" + path, {
+      body: JSON.stringify(value),
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      method: method
     }).then(function (response) {
       if (!response.ok) {
         throw new Error(path + " returned " + response.status);
@@ -60,6 +77,26 @@
       return "";
     }
     return program.channel.name || program.channel.channel || program.channel.id || "";
+  }
+
+  function ruleSummary(rule) {
+    var parts = [];
+    if (rule.types && rule.types.length) {
+      parts.push("types " + rule.types.join(","));
+    }
+    if (rule.categories && rule.categories.length) {
+      parts.push("categories " + rule.categories.join(","));
+    }
+    if (rule.channels && rule.channels.length) {
+      parts.push("channels " + rule.channels.join(","));
+    }
+    if (rule.reserve_titles && rule.reserve_titles.length) {
+      parts.push("titles " + rule.reserve_titles.join(","));
+    }
+    if (rule.ignore_titles && rule.ignore_titles.length) {
+      parts.push("ignores " + rule.ignore_titles.join(","));
+    }
+    return parts.join(" / ") || JSON.stringify(rule);
   }
 
   function actionButton(label, title, fn) {
@@ -174,11 +211,73 @@
     renderList("scheduleList", programs, "No schedule data", 10, ["reserve"]);
   }
 
+  function renderRules() {
+    var root = byId("ruleList");
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    if (!state.rules || state.rules.length === 0) {
+      root.className = "list empty";
+      root.textContent = "No rules";
+      return;
+    }
+    root.className = "list";
+    state.rules.forEach(function (rule, index) {
+      var item = document.createElement("article");
+      item.className = "program-row";
+
+      var title = document.createElement("strong");
+      title.textContent = "#" + index + (rule.isDisabled ? " Disabled" : " Enabled");
+
+      var meta = document.createElement("span");
+      meta.textContent = ruleSummary(rule);
+
+      var row = document.createElement("div");
+      row.className = "row-actions";
+      row.appendChild(actionButton(rule.isDisabled ? "Enable" : "Disable", "Toggle rule", function () {
+        runAction("rules/" + index + "/" + (rule.isDisabled ? "enable" : "disable") + ".json", "PUT");
+      }));
+      row.appendChild(actionButton("Edit JSON", "Copy this rule into the editor", function () {
+        var editor = byId("ruleEditor");
+        if (editor) {
+          editor.value = JSON.stringify(rule, null, 2);
+          editor.focus();
+        }
+      }));
+      row.appendChild(actionButton("Delete", "Delete this rule", function () {
+        runAction("rules/" + index + ".json", "DELETE", "Delete this rule?");
+      }));
+
+      item.appendChild(title);
+      item.appendChild(meta);
+      item.appendChild(row);
+      root.appendChild(item);
+    });
+  }
+
+  function addRuleFromEditor() {
+    var editor = byId("ruleEditor");
+    if (!editor) {
+      return;
+    }
+    var rule;
+    try {
+      rule = JSON.parse(editor.value);
+    } catch (error) {
+      showError(new Error("Rule JSON is invalid"));
+      return;
+    }
+    setBusy("Working");
+    sendJSON("rules.json", "POST", rule).then(refresh).catch(showError);
+  }
+
   function render() {
     text(byId("reserveCount"), String(state.reserves.length));
     text(byId("recordingCount"), String(state.recording.length));
     text(byId("recordedCount"), String(state.recorded.length));
     text(byId("channelCount"), String(state.schedule.length));
+    text(byId("ruleCount"), String(state.rules.length));
 
     var badge = byId("statusBadge");
     if (badge) {
@@ -192,6 +291,7 @@
     renderList("reserveList", state.reserves, "No reserves", 8, ["skip", "unskip", "unreserve"]);
     renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch", "download", "delete-recorded"]);
     renderSchedule();
+    renderRules();
   }
 
   function setBusy(message) {
@@ -217,13 +317,15 @@
       api("reserves.json"),
       api("recording.json"),
       api("recorded.json"),
-      api("schedule.json")
+      api("schedule.json"),
+      api("rules.json")
     ]).then(function (result) {
       state.status = result[0] || {};
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
       state.recorded = result[3] || [];
       state.schedule = result[4] || [];
+      state.rules = result[5] || [];
       render();
     }).catch(showError);
   }
@@ -232,6 +334,10 @@
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
+    }
+    var addRuleButton = byId("addRuleButton");
+    if (addRuleButton) {
+      addRuleButton.addEventListener("click", addRuleFromEditor);
     }
     refresh();
     setInterval(refresh, 30000);
