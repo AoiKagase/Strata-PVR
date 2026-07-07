@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -193,6 +194,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	dir := t.TempDir()
 	mirakurun := newCompatMirakurun(t)
 	defer mirakurun.Close()
+	installFakeCompatCommand(t, dir, "ffmpeg")
+	installFakeCompatCommand(t, dir, "ffprobe")
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {
@@ -239,6 +242,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"OK data/recorded.json",
 		"OK WUI static assets",
 		"OK available disk space",
+		"OK ffmpeg command",
+		"OK ffprobe command",
 		"OK Mirakurun services",
 		"OK Mirakurun programs",
 		"OK Mirakurun tuners",
@@ -248,6 +253,24 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 			t.Fatalf("compat output missing %q: %s", want, text)
 		}
 	}
+}
+
+func installFakeCompatCommand(t *testing.T, dir, name string) {
+	t.Helper()
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(bin, name)
+	data := []byte("#!/bin/sh\nexit 0\n")
+	if runtime.GOOS == "windows" {
+		path += ".bat"
+		data = []byte("@echo off\r\nexit /b 0\r\n")
+	}
+	if err := os.WriteFile(path, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
@@ -397,6 +420,8 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	dir := t.TempDir()
 	mirakurun := newCompatMirakurun(t)
 	defer mirakurun.Close()
+	installFakeCompatCommand(t, dir, "ffmpeg")
+	installFakeCompatCommand(t, dir, "ffprobe")
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {

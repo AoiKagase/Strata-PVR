@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1194,6 +1195,8 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			{"data/recorded.json", validateJSONFile(filepath.Join("data", "recorded.json"), "")},
 			{"WUI static assets", validateWUIStaticAssets()},
 			{"available disk space", diskErr},
+			{"ffmpeg command", validateCommandAvailable("ffmpeg")},
+			{"ffprobe command", validateCommandAvailable("ffprobe")},
 			{"Mirakurun services", servicesErr},
 			{"Mirakurun programs", programsErr},
 			{"Mirakurun tuners", tunersErr},
@@ -1447,6 +1450,11 @@ func validateStaticAssetSet(root string, set staticAssetSet) error {
 
 func validateDiskUsage(path string) error {
 	_, err := system.GetDiskUsage(path)
+	return err
+}
+
+func validateCommandAvailable(name string) error {
+	_, err := exec.LookPath(name)
 	return err
 }
 
