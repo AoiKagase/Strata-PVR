@@ -440,6 +440,8 @@
   function addBasicRule() {
     var title = byId("ruleTitle");
     var ignoreTitle = byId("ruleIgnoreTitle");
+    var description = byId("ruleDescription");
+    var ignoreDescription = byId("ruleIgnoreDescription");
     var type = byId("ruleType");
     var category = byId("ruleCategory");
     var channels = byId("ruleChannels");
@@ -454,6 +456,12 @@
     }
     if (ignoreTitle && ignoreTitle.value.trim()) {
       rule.ignore_titles = [ignoreTitle.value.trim()];
+    }
+    if (description && description.value.trim()) {
+      rule.reserve_descriptions = [description.value.trim()];
+    }
+    if (ignoreDescription && ignoreDescription.value.trim()) {
+      rule.ignore_descriptions = [ignoreDescription.value.trim()];
     }
     if (type && type.value) {
       rule.types = [type.value];
@@ -499,7 +507,7 @@
       }
       rule.hour = { start: startHour, end: endHour };
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.duration && !rule.hour) {
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.duration && !rule.hour) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -510,6 +518,12 @@
       }
       if (ignoreTitle) {
         ignoreTitle.value = "";
+      }
+      if (description) {
+        description.value = "";
+      }
+      if (ignoreDescription) {
+        ignoreDescription.value = "";
       }
       if (category) {
         category.value = "";

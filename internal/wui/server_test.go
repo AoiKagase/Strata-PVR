@@ -443,8 +443,8 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "ruleIgnoreChannels"},
-		{"/app.js", "text/javascript", "splitList"},
+		{"/", "text/html", "ruleIgnoreDescription"},
+		{"/app.js", "text/javascript", "reserve_descriptions"},
 		{"/styles.css", "text/css", ".rule-builder"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
