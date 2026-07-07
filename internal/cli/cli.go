@@ -1184,6 +1184,11 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 				fmt.Fprintf(stdout, "OK %s\n", check.name)
 			}
 		}
+		if cfgErr == nil {
+			for _, warning := range compatWarnings(cfg) {
+				fmt.Fprintf(stdout, "WARN %s\n", warning)
+			}
+		}
 		if failed {
 			return fmt.Errorf("compat check failed")
 		}
@@ -1195,6 +1200,27 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	default:
 		return fmt.Errorf("Usage: chinachu-go compat <check|doctor|diff|backup>")
 	}
+}
+
+func compatWarnings(cfg *config.Config) []string {
+	warnings := []string{}
+	if len(cfg.WUIAllowCountries) > 0 {
+		warnings = append(warnings, "wuiAllowCountries: GeoIP country filtering is not implemented; restrict access at firewall/reverse proxy if needed")
+	}
+	if cfg.WUIMdnsAdvertisement {
+		warnings = append(warnings, "wuiMdnsAdvertisement: mDNS advertisement is intentionally not implemented")
+	}
+	if cfg.OperTweeter {
+		warnings = append(warnings, "operTweeter: Twitter notification integration is intentionally not implemented")
+	}
+	for _, path := range []string{cfg.WUITlsKeyPath, cfg.WUITlsCertPath} {
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".pfx" || ext == ".p12" {
+			warnings = append(warnings, "wui TLS PFX/P12 material is not implemented; use PEM key/cert files")
+			break
+		}
+	}
+	return warnings
 }
 
 func compatDiff(stdout io.Writer) error {

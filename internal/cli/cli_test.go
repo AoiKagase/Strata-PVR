@@ -346,6 +346,55 @@ func TestCompatBackupSkipsMissingOptionalStateFiles(t *testing.T) {
 	}
 }
 
+func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
+	dir := t.TempDir()
+	mirakurun := newCompatMirakurun(t)
+	defer mirakurun.Close()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("recorded", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("web", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeCompatWebAssets(t, "web")
+	for name, data := range map[string]string{
+		"config.json":                           `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `","wuiAllowCountries":["JP"],"wuiMdnsAdvertisement":true,"operTweeter":true,"wuiTlsKeyPath":"server.pfx"}`,
+		"rules.json":                            `[]`,
+		filepath.Join("data", "schedule.json"):  `[]`,
+		filepath.Join("data", "reserves.json"):  `[]`,
+		filepath.Join("data", "recording.json"): `[]`,
+		filepath.Join("data", "recorded.json"):  `[]`,
+	} {
+		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"WARN wuiAllowCountries",
+		"WARN wuiMdnsAdvertisement",
+		"WARN operTweeter",
+		"WARN wui TLS PFX/P12",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("compat check warning missing %q: %s", want, text)
+		}
+	}
+}
+
 func newCompatMirakurun(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
