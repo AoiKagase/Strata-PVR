@@ -431,11 +431,19 @@
     sendJSON("rules.json", "POST", rule).then(refresh).catch(showError);
   }
 
+  function splitList(value) {
+    return (value || "").split(",").map(function (part) {
+      return part.trim();
+    }).filter(Boolean);
+  }
+
   function addBasicRule() {
     var title = byId("ruleTitle");
     var ignoreTitle = byId("ruleIgnoreTitle");
     var type = byId("ruleType");
     var category = byId("ruleCategory");
+    var channels = byId("ruleChannels");
+    var ignoreChannels = byId("ruleIgnoreChannels");
     var durationMin = byId("ruleDurationMin");
     var durationMax = byId("ruleDurationMax");
     var hourStart = byId("ruleHourStart");
@@ -452,6 +460,14 @@
     }
     if (category && category.value.trim()) {
       rule.categories = [category.value.trim()];
+    }
+    var channelValues = channels ? splitList(channels.value) : [];
+    if (channelValues.length) {
+      rule.channels = channelValues;
+    }
+    var ignoreChannelValues = ignoreChannels ? splitList(ignoreChannels.value) : [];
+    if (ignoreChannelValues.length) {
+      rule.ignore_channels = ignoreChannelValues;
     }
     var minText = durationMin ? durationMin.value.trim() : "";
     var maxText = durationMax ? durationMax.value.trim() : "";
@@ -483,7 +499,7 @@
       }
       rule.hour = { start: startHour, end: endHour };
     }
-    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.duration && !rule.hour) {
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.duration && !rule.hour) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -497,6 +513,12 @@
       }
       if (category) {
         category.value = "";
+      }
+      if (channels) {
+        channels.value = "";
+      }
+      if (ignoreChannels) {
+        ignoreChannels.value = "";
       }
       if (durationMin) {
         durationMin.value = "";
