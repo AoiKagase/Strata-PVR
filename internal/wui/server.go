@@ -2027,6 +2027,9 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 		args = append(args, "-re")
 	}
 	args = append(args, "-i", "pipe:0", "-threads", "0")
+	if !live {
+		args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
+	}
 	if duration := q.Get("t"); duration != "" {
 		args = append(args, "-t", duration)
 	}
@@ -2079,6 +2082,14 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
 	}
 	return append(args, "-y", "-f", container, "pipe:1")
+}
+
+func legacyWatchStart(value string) string {
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 2 {
+		return "2"
+	}
+	return strconv.Itoa(seconds)
 }
 
 func (s *server) findChannel(id string) (chinachu.ChannelSchedule, bool) {

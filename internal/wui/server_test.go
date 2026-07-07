@@ -1142,10 +1142,47 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-t 30"} {
+	for _, want := range []string{"-f mp4", "-c:v h264", "-c:a aac", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-ss 2", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
+	}
+}
+
+func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 15") {
+		t.Fatalf("ffmpeg args missing legacy ss: %s", joined)
+	}
+
+	gotArgs = nil
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=1", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 low-ss status=%d body=%q", res.Code, res.Body.String())
+	}
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2") {
+		t.Fatalf("ffmpeg args did not clamp legacy ss: %s", joined)
 	}
 }
 
