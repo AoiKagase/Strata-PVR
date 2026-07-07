@@ -1273,13 +1273,30 @@ func validateWritableDir(path string) error {
 
 func validateWUIStaticAssets() error {
 	candidates := []string{"web", filepath.Join("..", "Chinachu", "web")}
+	requiredFiles := []string{"index.html", "chinachu.js", "chinachu.css", "init.js"}
+	requiredDirs := []string{"icons", "lib", "locales", "page"}
 	for _, candidate := range candidates {
 		info, err := os.Stat(candidate)
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err != nil {
-			return err
+		for _, file := range requiredFiles {
+			info, err := os.Stat(filepath.Join(candidate, file))
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return fmt.Errorf("%s is not a file", filepath.Join(candidate, file))
+			}
+		}
+		for _, dir := range requiredDirs {
+			info, err := os.Stat(filepath.Join(candidate, dir))
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("%s is not a directory", filepath.Join(candidate, dir))
+			}
 		}
 		return nil
 	}

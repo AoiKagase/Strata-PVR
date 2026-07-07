@@ -160,6 +160,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	if err := os.Mkdir("web", 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeCompatWebAssets(t, "web")
 	files := map[string]string{
 		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
 		"rules.json":          `[]`,
@@ -356,6 +357,42 @@ func newCompatMirakurun(t *testing.T) *httptest.Server {
 			http.NotFound(w, r)
 		}
 	}))
+}
+
+func writeCompatWebAssets(t *testing.T, root string) {
+	t.Helper()
+	for _, dir := range []string{"icons", "lib", "locales", "page"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []string{"index.html", "chinachu.js", "chinachu.css", "init.js"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte("ok"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestCompatCheckRequiresLegacyWUIAssets(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("web", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("web", "index.html"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateWUIStaticAssets(); err == nil {
+		t.Fatal("expected missing legacy WUI asset error")
+	}
+	writeCompatWebAssets(t, "web")
+	if err := validateWUIStaticAssets(); err != nil {
+		t.Fatalf("valid legacy WUI assets rejected: %v", err)
+	}
 }
 
 func TestProgramListPrintsLegacyColumns(t *testing.T) {
