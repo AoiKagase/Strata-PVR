@@ -551,6 +551,10 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path = trimLastExtension(path)
 	parts := splitPath(path)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if len(parts) > 0 && parts[0] == "index" && apiType == "html" {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
 	if methods, ok := apiAllowedMethods(parts); ok && !methodAllowed(r.Method, methods) {
 		w.Header().Set("Allow", strings.Join(methods, ", "))
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)

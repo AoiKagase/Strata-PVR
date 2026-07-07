@@ -272,6 +272,13 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 		t.Fatalf("known resource bad path body=%q", res.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/index.html", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest || res.Body.String() != "400 Bad Request\n" {
+		t.Fatalf("api index status=%d body=%q", res.Code, res.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/api/status.json", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
