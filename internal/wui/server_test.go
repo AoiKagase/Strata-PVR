@@ -426,6 +426,34 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	}
 }
 
+func TestSocketIOCompatScript(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/socket.io/socket.io.js", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("socket.io script status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/javascript" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	body := res.Body.String()
+	for _, want := range []string{"io.connect", "notify-", "status.json"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("socket.io compat script missing %q: %s", want, body)
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodHead, "/socket.io/socket.io.js", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.Len() != 0 {
+		t.Fatalf("socket.io HEAD status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")

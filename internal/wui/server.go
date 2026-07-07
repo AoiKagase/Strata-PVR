@@ -451,6 +451,14 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	if path.Clean("/"+r.URL.Path) == "/socket.io/socket.io.js" {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = io.WriteString(w, socketIOCompatScript)
+		}
+		return
+	}
 	if s.webRoot == "" {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
@@ -473,6 +481,38 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
 }
+
+const socketIOCompatScript = `(function(global){
+  function later(fn){ if (typeof fn === 'function') { setTimeout(fn, 0); } }
+  function apiRoot(path) {
+    var base = global.location && global.location.pathname ? global.location.pathname.replace(/[^\/]*$/g, '') : '/';
+    return base + 'api/' + path;
+  }
+  function fetchJSON(path, cb) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', apiRoot(path), true);
+    xhr.onreadystatechange = function(){
+      if (xhr.readyState === 4 && xhr.status >= 200 && xhr.status < 300) {
+        try { cb(JSON.parse(xhr.responseText)); } catch (e) {}
+      }
+    };
+    xhr.send(null);
+  }
+  global.io = global.io || {};
+  global.io.connect = function(){
+    return {
+      on: function(name, cb) {
+        if (name === 'connect') { later(cb); return this; }
+        if (name === 'status') { later(function(){ fetchJSON('status.json', cb); }); return this; }
+        if (name.indexOf('notify-') === 0) { later(cb); return this; }
+        return this;
+      },
+      emit: function(){ return this; },
+      disconnect: function(){}
+    };
+  };
+})(this);
+`
 
 func (s *server) staticFileInfo(urlPath string) (string, os.FileInfo, bool) {
 	clean := path.Clean("/" + urlPath)
