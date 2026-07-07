@@ -440,7 +440,7 @@ func TestSocketIOCompatScript(t *testing.T) {
 		t.Fatalf("Content-Type = %q", got)
 	}
 	body := res.Body.String()
-	for _, want := range []string{"io.connect", "notify-", "status.json", "5000", "15000"} {
+	for _, want := range []string{"io.connect", "notify-", "status.json", "5000", "15000", "clearInterval", "handlers.disconnect"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("socket.io compat script missing %q: %s", want, body)
 		}

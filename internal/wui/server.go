@@ -512,15 +512,23 @@ const socketIOCompatScript = `(function(global){
   }
   global.io = global.io || {};
   global.io.connect = function(){
+    var timers = [];
+    var handlers = {};
+    function poll(fn, ms) { var timer = repeat(fn, ms); timers.push(timer); return timer; }
     return {
       on: function(name, cb) {
+        handlers[name] = cb;
         if (name === 'connect') { later(cb); return this; }
-        if (name === 'status') { repeat(function(){ fetchJSON('status.json', cb); }, 5000); return this; }
-        if (name.indexOf('notify-') === 0) { repeat(cb, 15000); return this; }
+        if (name === 'status') { poll(function(){ fetchJSON('status.json', cb); }, 5000); return this; }
+        if (name.indexOf('notify-') === 0) { poll(cb, 15000); return this; }
         return this;
       },
       emit: function(){ return this; },
-      disconnect: function(){}
+      disconnect: function(){
+        for (var i = 0; i < timers.length; i++) { clearInterval(timers[i]); }
+        timers = [];
+        later(handlers.disconnect);
+      }
     };
   };
 })(this);
