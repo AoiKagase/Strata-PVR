@@ -246,7 +246,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Recorded filename format | partially compatible; legacy tuner, episode, named dateformat masks, `S`/`o`/`l`/`L` date tokens, and `UTC:` prefix are implemented and covered by Go tests, but unusual JavaScript `dateformat` parsing edge cases still need oracle tests. |
 | Mirakurun client | partially compatible |
 | Scheduler | partially compatible |
-| Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, `recordedCommand` execution, `data/operator.pid` lifecycle, process context cancellation on `SIGINT`/`SIGTERM`/Unix `SIGQUIT`, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and all in-flight signal side effects remain incomplete. |
+| Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, ctx/signal cancellation that closes active streams and finalizes recording/recorded state, `recordedCommand` execution, `data/operator.pid` lifecycle, process context cancellation on `SIGINT`/`SIGTERM`/Unix `SIGQUIT`, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and every in-flight signal edge case remain incomplete. |
 | WUI/API | partially compatible |
 | Installer/updater | partially compatible |
 | Logging | partially compatible |

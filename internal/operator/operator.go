@@ -241,6 +241,8 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 		return program, err
 	}
 	defer stream.Close()
+	stopContextClose := closeStreamOnContext(recordCtx, stream)
+	defer stopContextClose()
 	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, recordingPath, program.ID, cancel, stream)
 	defer stopAbortMonitor()
 
@@ -286,7 +288,7 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-	if _, err := io.Copy(tmp, stream); err != nil && !aborted.Load() {
+	if _, err := io.Copy(tmp, stream); err != nil && !aborted.Load() && recordCtx.Err() == nil {
 		tmp.Close()
 		return program, err
 	}
@@ -302,6 +304,23 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 	}
 	program.PID = 0
 	return program, nil
+}
+
+func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-ctx.Done():
+			_ = stream.Close()
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
 }
 
 func updateRecordingProgram(recordingPath string, program chinachu.Program) error {

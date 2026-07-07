@@ -438,6 +438,80 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 }
 
+func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := Paths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	program := chinachu.Program{
+		ID:      "21i3v9",
+		Title:   "SignalStop",
+		Start:   now.UnixMilli(),
+		End:     now.Add(time.Hour).UnixMilli(),
+		Channel: chinachu.Channel{Type: "GR", Channel: "27", Name: "Service"},
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []chinachu.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		result, err := RunOnce(ctx, paths, &config.Config{
+			RecordedDir:    filepath.Join(dir, "recorded"),
+			RecordedFormat: "<id>.m2ts",
+		}, &abortableStreamer{}, now)
+		if err != nil {
+			done <- err
+			return
+		}
+		if result.Started != 1 || result.Completed != 1 || result.Failed != 0 {
+			done <- os.ErrInvalid
+			return
+		}
+		done <- nil
+	}()
+
+	var recording []chinachu.Program
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+			t.Fatal(err)
+		}
+		if len(recording) == 1 && recording[0].Recorded != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(recording) != 1 || recording[0].Recorded == "" {
+		t.Fatalf("recording entry was not active before cancel: %#v", recording)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("recording did not stop after context cancellation")
+	}
+	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 0 {
+		t.Fatalf("recording state was not cleared after cancel: %#v", recording)
+	}
+	var recorded []chinachu.Program
+	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].Recorded == "" {
+		t.Fatalf("recorded entry missing after cancel: %#v", recorded)
+	}
+}
+
 func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
