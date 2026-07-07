@@ -1162,8 +1162,8 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 	if err != nil {
 		return result, false, err
 	}
-	conflicts := []chinachu.Program{}
-	reserves := []chinachu.Program{}
+	conflicts := []any{}
+	reserves := []any{}
 	lines := strings.Split(string(data), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
@@ -1175,18 +1175,23 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 			continue
 		}
 		program := chinachu.GetProgramByID(id, schedules, nil)
-		if program == nil {
-			continue
-		}
 		if kind == "CONFLICT" {
-			conflicts = append(conflicts, *program)
+			if program == nil {
+				conflicts = append(conflicts, nil)
+			} else {
+				conflicts = append(conflicts, *program)
+			}
 		}
 		if kind == "RESERVE" {
-			reserves = append(reserves, *program)
+			if program == nil {
+				reserves = append(reserves, nil)
+			} else {
+				reserves = append(reserves, *program)
+			}
 		}
 	}
-	reversePrograms(conflicts)
-	reversePrograms(reserves)
+	reverseAny(conflicts)
+	reverseAny(reserves)
 	result["time"] = info.ModTime().UnixMilli()
 	result["conflicts"] = conflicts
 	result["reserves"] = reserves
@@ -2662,6 +2667,12 @@ func parseSchedulerLogProgram(line string) (string, string, bool) {
 func reversePrograms(programs []chinachu.Program) {
 	for i, j := 0, len(programs)-1; i < j; i, j = i+1, j-1 {
 		programs[i], programs[j] = programs[j], programs[i]
+	}
+}
+
+func reverseAny(values []any) {
+	for i, j := 0, len(values)-1; i < j; i, j = i+1, j-1 {
+		values[i], values[j] = values[j], values[i]
 	}
 }
 

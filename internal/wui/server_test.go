@@ -1936,7 +1936,7 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\n!CONFLICT: bbb\n"
+	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\n!CONFLICT: bbb\nRESERVE: missing\n"
 	if err := os.WriteFile(filepath.Join(paths.LogDir, "scheduler"), []byte(logData), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1967,8 +1967,11 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Time == 0 || len(result.Reserves) != 1 || result.Reserves[0].ID != "aaa" || len(result.Conflicts) != 1 || result.Conflicts[0].ID != "bbb" {
+	if result.Time == 0 || len(result.Reserves) != 2 || result.Reserves[0].ID != "aaa" || result.Reserves[1].ID != "" || len(result.Conflicts) != 1 || result.Conflicts[0].ID != "bbb" {
 		t.Fatalf("unexpected scheduler result: %#v", result)
+	}
+	if !strings.Contains(res.Body.String(), "null") {
+		t.Fatalf("missing scheduler program should be preserved as null: %s", res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/scheduler.txt", nil)
