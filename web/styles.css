@@ -703,6 +703,26 @@ button:disabled {
   padding: 14px 16px 16px;
 }
 
+.mp4-dialog form {
+  margin: 0;
+}
+
+.mp4-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+
+.mp4-options select {
+  max-width: none;
+}
+
+.mp4-options input[readonly] {
+  background: #eef3f5;
+  color: #52636b;
+}
+
 .small-button {
   min-height: 28px;
   padding: 0 9px;
@@ -979,6 +999,10 @@ button:focus-visible {
   .media-controls input,
   .media-controls select {
     max-width: none;
+  }
+
+  .mp4-options {
+    grid-template-columns: 1fr;
   }
 
   .rule-builder {

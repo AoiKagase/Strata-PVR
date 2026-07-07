@@ -423,6 +423,123 @@
     return Object.keys(query).length ? query : null;
   }
 
+  var mp4Presets = {
+    "1080p": { s: "1920x1080", video: "4000k", audio: "192k" },
+    "720p": { s: "1280x720", video: "1800k", audio: "128k" },
+    "540p": { s: "960x540", video: "1200k", audio: "128k" },
+    "360p": { s: "640x360", video: "800k", audio: "96k" }
+  };
+
+  var pendingMP4Open = null;
+
+  function applyMP4Preset(name) {
+    var preset = mp4Presets[name];
+    var resolution = byId("mp4Resolution");
+    var videoBitrate = byId("mp4VideoBitrate");
+    var audioBitrate = byId("mp4AudioBitrate");
+    var readonly = Boolean(preset) || name === "";
+    if (preset) {
+      resolution.value = preset.s;
+      videoBitrate.value = preset.video;
+      audioBitrate.value = preset.audio;
+    } else if (name === "") {
+      resolution.value = "";
+      videoBitrate.value = "";
+      audioBitrate.value = "";
+    }
+    [resolution, videoBitrate, audioBitrate].forEach(function (input) {
+      if (input) {
+        input.readOnly = readonly;
+      }
+    });
+  }
+
+  function bitrateValue(id, label) {
+    var input = byId(id);
+    var value = input ? input.value.trim() : "";
+    if (!value) {
+      return "";
+    }
+    if (!/^[1-9][0-9]*(k|K|m|M)$/.test(value)) {
+      showError(new Error(label + "は 1800k または 2m の形式で指定してください"));
+      return false;
+    }
+    return value;
+  }
+
+  function resolutionValue(id) {
+    var input = byId(id);
+    var value = input ? input.value.trim() : "";
+    if (!value) {
+      return "";
+    }
+    if (!/^[1-9][0-9]{1,4}x[1-9][0-9]{1,4}$/.test(value)) {
+      showError(new Error("解像度は 1280x720 の形式で指定してください"));
+      return false;
+    }
+    return value;
+  }
+
+  function mp4QueryFromDialog() {
+    var resolution = resolutionValue("mp4Resolution");
+    if (resolution === false) {
+      return false;
+    }
+    var videoBitrate = bitrateValue("mp4VideoBitrate", "映像ビットレート");
+    if (videoBitrate === false) {
+      return false;
+    }
+    var audioBitrate = bitrateValue("mp4AudioBitrate", "音声ビットレート");
+    if (audioBitrate === false) {
+      return false;
+    }
+    var query = {};
+    if (resolution) {
+      query.s = resolution;
+    }
+    if (videoBitrate) {
+      query["b:v"] = videoBitrate;
+    }
+    if (audioBitrate) {
+      query["b:a"] = audioBitrate;
+    }
+    return Object.keys(query).length ? query : null;
+  }
+
+  function openMP4Dialog(meta, openWithQuery, initialPreset) {
+    var dialog = byId("mp4Dialog");
+    if (!dialog || !dialog.showModal) {
+      openWithQuery(initialPreset && mp4Presets[initialPreset] ? {
+        "s": mp4Presets[initialPreset].s,
+        "b:v": mp4Presets[initialPreset].video,
+        "b:a": mp4Presets[initialPreset].audio
+      } : null);
+      return;
+    }
+    pendingMP4Open = openWithQuery;
+    text(byId("mp4DialogMeta"), meta || "");
+    var preset = byId("mp4Preset");
+    if (preset) {
+      preset.value = initialPreset || "";
+      applyMP4Preset(preset.value);
+    }
+    dialog.showModal();
+  }
+
+  function submitMP4Dialog() {
+    var query = mp4QueryFromDialog();
+    if (query === false || !pendingMP4Open) {
+      return;
+    }
+    var dialog = byId("mp4Dialog");
+    if (dialog) {
+      dialog.close();
+    }
+    var open = pendingMP4Open;
+    pendingMP4Open = null;
+    open(query);
+  }
+
   function formatBytes(value) {
     if (typeof value !== "number" || !isFinite(value) || value < 0) {
       return "取得不可";
@@ -470,7 +587,9 @@
         }));
       } else if (name === "watch-recording-mp4") {
         row.appendChild(actionButton("MP4", "録画中のMP4変換視聴を開く", function () {
-          openURL(recordingWatchURL(program, "mp4"));
+          openMP4Dialog(program.title || program.id || "録画中", function (query) {
+            openURL(recordingWatchURL(program, "mp4", query));
+          });
         }));
       } else if (name === "playlist-recording") {
         row.appendChild(actionButton("XSPF", "録画中のプレイリストを開く", function () {
@@ -486,15 +605,21 @@
         }));
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("MP4", "MP4変換視聴を開く", function () {
-          openURL(recordedWatchURL(program, "mp4"));
+          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
+            openURL(recordedWatchURL(program, "mp4", query));
+          });
         }));
       } else if (name === "watch-mp4-720p") {
         row.appendChild(actionButton("MP4 720p", "720p MP4変換視聴を開く", function () {
-          openURL(recordedWatchURL(program, "mp4", { "s": "1280x720", "b:v": "1800k", "b:a": "128k" }));
+          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
+            openURL(recordedWatchURL(program, "mp4", query));
+          }, "720p");
         }));
       } else if (name === "watch-mp4-low") {
         row.appendChild(actionButton("MP4低画質", "低ビットレートMP4変換視聴を開く", function () {
-          openURL(recordedWatchURL(program, "mp4", { "s": "640x360", "b:v": "800k", "b:a": "96k" }));
+          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
+            openURL(recordedWatchURL(program, "mp4", query));
+          }, "360p");
         }));
       } else if (name === "watch-mp4-custom") {
         row.appendChild(actionButton("MP4指定", "再生条件付きMP4変換視聴を開く", function () {
@@ -532,7 +657,9 @@
         var channelID = programChannelID(program);
         if (channelID) {
           row.appendChild(actionButton("MP4", "この番組のチャンネルをMP4変換視聴で開く", function () {
-            openURL(channelURL(channelID, "watch", "mp4"));
+            openMP4Dialog(program.title || channelID || "チャンネル", function (query) {
+              openURL(channelURL(channelID, "watch", "mp4", query));
+            });
           }));
         }
       } else if (name === "open-channel-programs") {
@@ -2149,6 +2276,26 @@
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
+    }
+    var mp4Preset = byId("mp4Preset");
+    if (mp4Preset) {
+      mp4Preset.addEventListener("change", function () {
+        applyMP4Preset(mp4Preset.value);
+      });
+    }
+    var mp4OpenButton = byId("mp4OpenButton");
+    if (mp4OpenButton) {
+      mp4OpenButton.addEventListener("click", submitMP4Dialog);
+    }
+    var mp4DialogClose = byId("mp4DialogClose");
+    if (mp4DialogClose) {
+      mp4DialogClose.addEventListener("click", function () {
+        pendingMP4Open = null;
+        var dialog = byId("mp4Dialog");
+        if (dialog) {
+          dialog.close();
+        }
+      });
     }
     var forceSchedulerButton = byId("forceSchedulerButton");
     if (forceSchedulerButton) {

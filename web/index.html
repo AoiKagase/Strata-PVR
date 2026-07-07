@@ -567,6 +567,46 @@
     <div id="programDialogActions" class="program-dialog-actions"></div>
   </dialog>
 
+  <dialog id="mp4Dialog" class="program-dialog mp4-dialog" aria-labelledby="mp4DialogTitle">
+    <form id="mp4Form" method="dialog">
+      <div class="program-dialog-head">
+        <div>
+          <span id="mp4DialogMeta" class="program-dialog-meta"></span>
+          <h2 id="mp4DialogTitle">MP4変換視聴</h2>
+        </div>
+        <button class="small-button" type="button" id="mp4DialogClose">閉じる</button>
+      </div>
+      <div class="mp4-options">
+        <label class="control-field" for="mp4Preset">
+          <span>プリセット</span>
+          <select id="mp4Preset">
+            <option value="">元データ相当</option>
+            <option value="1080p">1080p</option>
+            <option value="720p">720p</option>
+            <option value="540p">540p</option>
+            <option value="360p">低画質</option>
+            <option value="custom">手動指定</option>
+          </select>
+        </label>
+        <label class="control-field" for="mp4Resolution">
+          <span>解像度</span>
+          <input id="mp4Resolution" type="text" inputmode="text" autocomplete="off" placeholder="1280x720">
+        </label>
+        <label class="control-field" for="mp4VideoBitrate">
+          <span>映像ビットレート</span>
+          <input id="mp4VideoBitrate" type="text" inputmode="text" autocomplete="off" placeholder="1800k">
+        </label>
+        <label class="control-field" for="mp4AudioBitrate">
+          <span>音声ビットレート</span>
+          <input id="mp4AudioBitrate" type="text" inputmode="text" autocomplete="off" placeholder="128k">
+        </label>
+      </div>
+      <div class="program-dialog-actions">
+        <button class="small-button" type="button" id="mp4OpenButton">再生</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="/app.js"></script>
 </body>
 </html>
