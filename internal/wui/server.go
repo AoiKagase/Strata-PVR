@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -1593,14 +1594,14 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			s.streamFFmpeg(w, r, file, "m2ts", false)
 			return
 		}
-		if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
-			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
 		if r.URL.Query().Has("ss") {
 			if !s.streamLegacyM2TSOffset(w, r, filePath) {
 				return
 			}
+			return
+		}
+		if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
+			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
 		file, err := os.Open(filePath)
@@ -1681,6 +1682,27 @@ func (s *server) streamLegacyM2TSOffset(w http.ResponseWriter, r *http.Request, 
 		totalSize = 0
 	}
 	w.Header().Set("Content-Type", "video/MP2T")
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		start, end, ok := parseLegacyWatchRange(rangeHeader, totalSize)
+		if !ok {
+			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+			return false
+		}
+		if start > format.Size || end > format.Size {
+			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
+			return false
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize))
+		w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		if r.Method == http.MethodHead {
+			return true
+		}
+		if err := copyFileRange(w, filePath, start, end-start+1); err != nil {
+			return false
+		}
+		return true
+	}
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Length", strconv.FormatInt(totalSize, 10))
 	w.WriteHeader(http.StatusOK)
@@ -1691,6 +1713,31 @@ func (s *server) streamLegacyM2TSOffset(w http.ResponseWriter, r *http.Request, 
 		return false
 	}
 	return true
+}
+
+func parseLegacyWatchRange(header string, totalSize int64) (int64, int64, bool) {
+	if !strings.HasPrefix(header, "bytes=") {
+		return 0, 0, false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(header, "bytes="), "-", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return 0, 0, false
+	}
+	start, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || start < 0 {
+		return 0, 0, false
+	}
+	end := totalSize - 2
+	if parts[1] != "" {
+		end, err = strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return 0, 0, false
+		}
+	}
+	if end < start {
+		return 0, 0, false
+	}
+	return start, end, true
 }
 
 func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
@@ -1806,6 +1853,22 @@ func copyFileFromOffset(w io.Writer, filePath string, offset int64) error {
 		return err
 	}
 	_, err = io.Copy(w, file)
+	return err
+}
+
+func copyFileRange(w io.Writer, filePath string, offset, length int64) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = io.CopyN(w, file, length)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
 	return err
 }
 

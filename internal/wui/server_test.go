@@ -1213,6 +1213,31 @@ func TestAPIRecordedWatchM2TSLegacyStartOffset(t *testing.T) {
 	if got := res.Body.String(); got != strings.Repeat("B", 188) {
 		t.Fatalf("unexpected offset body: %q", got)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=4", nil)
+	req.Header.Set("Range", "bytes=0-93")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent {
+		t.Fatalf("m2ts range status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Range"); got != "bytes 0-93/188" {
+		t.Fatalf("Content-Range = %q", got)
+	}
+	if got := res.Header().Get("Content-Length"); got != "94" {
+		t.Fatalf("range Content-Length = %q", got)
+	}
+	if got := res.Body.String(); got != strings.Repeat("A", 94) {
+		t.Fatalf("unexpected range body: %q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=4", nil)
+	req.Header.Set("Range", "bytes=377-400")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+		t.Fatalf("m2ts invalid legacy range status=%d body=%q", res.Code, res.Body.String())
+	}
 }
 
 func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
