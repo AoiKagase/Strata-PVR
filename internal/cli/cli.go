@@ -1370,34 +1370,58 @@ func validateWritableDir(path string) error {
 
 func validateWUIStaticAssets() error {
 	candidates := []string{"web", legacyWebRootCandidate()}
-	requiredFiles := []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"}
-	requiredDirs := []string{"icons", "lib", "locales", "page"}
+	requiredSets := []staticAssetSet{
+		{files: []string{"index.html", "app.js", "styles.css"}},
+		{
+			files: []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"},
+			dirs:  []string{"icons", "lib", "locales", "page"},
+		},
+	}
 	for _, candidate := range candidates {
 		info, err := os.Stat(candidate)
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		for _, file := range requiredFiles {
-			info, err := os.Stat(filepath.Join(candidate, file))
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return fmt.Errorf("%s is not a file", filepath.Join(candidate, file))
-			}
-		}
-		for _, dir := range requiredDirs {
-			info, err := os.Stat(filepath.Join(candidate, dir))
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				return fmt.Errorf("%s is not a directory", filepath.Join(candidate, dir))
+		var firstErr error
+		for _, set := range requiredSets {
+			if err := validateStaticAssetSet(candidate, set); err == nil {
+				return nil
+			} else if firstErr == nil {
+				firstErr = err
 			}
 		}
-		return nil
+		if firstErr != nil {
+			return firstErr
+		}
 	}
 	return fmt.Errorf("web directory not found")
+}
+
+type staticAssetSet struct {
+	files []string
+	dirs  []string
+}
+
+func validateStaticAssetSet(root string, set staticAssetSet) error {
+	for _, file := range set.files {
+		info, err := os.Stat(filepath.Join(root, file))
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return fmt.Errorf("%s is not a file", filepath.Join(root, file))
+		}
+	}
+	for _, dir := range set.dirs {
+		info, err := os.Stat(filepath.Join(root, dir))
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%s is not a directory", filepath.Join(root, dir))
+		}
+	}
+	return nil
 }
 
 func validateDiskUsage(path string) error {

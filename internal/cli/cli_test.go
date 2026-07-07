@@ -446,6 +446,15 @@ func writeCompatWebAssets(t *testing.T, root string) {
 	}
 }
 
+func writeNativeWebAssets(t *testing.T, root string) {
+	t.Helper()
+	for _, file := range []string{"index.html", "app.js", "styles.css"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte("ok"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestCompatDiffReportsStateRewriteStatus(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
@@ -486,7 +495,7 @@ func TestCompatDiffReportsStateRewriteStatus(t *testing.T) {
 	}
 }
 
-func TestCompatCheckRequiresLegacyWUIAssets(t *testing.T) {
+func TestCompatCheckAcceptsNativeOrLegacyWUIAssets(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
@@ -500,7 +509,17 @@ func TestCompatCheckRequiresLegacyWUIAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := validateWUIStaticAssets(); err == nil {
-		t.Fatal("expected missing legacy WUI asset error")
+		t.Fatal("expected missing WUI asset error")
+	}
+	writeNativeWebAssets(t, "web")
+	if err := validateWUIStaticAssets(); err != nil {
+		t.Fatalf("valid native WUI assets rejected: %v", err)
+	}
+	if err := os.Remove(filepath.Join("web", "app.js")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join("web", "styles.css")); err != nil {
+		t.Fatal(err)
 	}
 	writeCompatWebAssets(t, "web")
 	if err := validateWUIStaticAssets(); err != nil {

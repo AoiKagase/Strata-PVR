@@ -73,6 +73,11 @@ Compatibility and environment checks are available with:
 
 ## Frontend
 
-The current compatibility path serves the existing legacy WUI assets as-is.
-A future phase should replace the frontend with a native Strata PVR UI that
-does not require Node.js, npm, webpack, or any Node-based build step at runtime.
+The repository now includes an initial native Strata PVR frontend under `web/`.
+It is a dependency-free HTML/CSS/JavaScript dashboard that reads the Go API for
+status, reserves, recording, recorded, and schedule summaries. The legacy WUI
+asset fallback remains available during compatibility work.
+
+The frontend still needs more screens and controls before it can replace every
+legacy WUI workflow, but it does not require Node.js, npm, webpack, or any
+Node-based build step.

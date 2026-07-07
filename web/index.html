@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strata PVR</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Strata PVR</h1>
+      <p>A Chinachu-compatible PVR for Mirakurun, written in Go.</p>
+    </div>
+    <div id="statusBadge" class="status-badge">Loading</div>
+  </header>
+
+  <main class="workspace">
+    <section class="overview" aria-label="Overview">
+      <div class="metric">
+        <span class="metric-label">Reserves</span>
+        <strong id="reserveCount">0</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Recording</span>
+        <strong id="recordingCount">0</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Recorded</span>
+        <strong id="recordedCount">0</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Channels</span>
+        <strong id="channelCount">0</strong>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Recording</h2>
+          <button id="refreshButton" type="button" title="Refresh">Refresh</button>
+        </div>
+        <div id="recordingList" class="list empty">No active recordings</div>
+      </section>
+
+      <section class="panel">
+        <h2>Reserves</h2>
+        <div id="reserveList" class="list empty">No reserves</div>
+      </section>
+
+      <section class="panel">
+        <h2>Recently Recorded</h2>
+        <div id="recordedList" class="list empty">No recorded items</div>
+      </section>
+
+      <section class="panel">
+        <h2>Schedule</h2>
+        <div id="scheduleList" class="list empty">No schedule data</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
