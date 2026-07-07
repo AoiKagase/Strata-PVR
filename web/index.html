@@ -59,7 +59,24 @@
       </section>
 
       <section class="panel">
-        <h2>Schedule</h2>
+        <div class="panel-head">
+          <h2>Schedule</h2>
+          <div class="schedule-controls" aria-label="Schedule controls">
+            <select id="scheduleChannel" aria-label="Schedule channel">
+              <option value="">All channels</option>
+            </select>
+            <select id="scheduleWindow" aria-label="Schedule time range">
+              <option value="24">Next 24h</option>
+              <option value="72">Next 72h</option>
+              <option value="0">All upcoming</option>
+            </select>
+            <select id="scheduleLimit" aria-label="Schedule item limit">
+              <option value="20">20 items</option>
+              <option value="50">50 items</option>
+              <option value="100">100 items</option>
+            </select>
+          </div>
+        </div>
         <div id="scheduleList" class="list empty">No schedule data</div>
       </section>
 

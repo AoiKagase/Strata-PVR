@@ -90,9 +90,12 @@ disable, delete, and add rules from JSON. The legacy WUI asset fallback remains
 available during compatibility work. Scheduler, operator, and WUI logs are
 visible from the dashboard as tail-style text panels. A read-only settings panel
 shows non-secret runtime configuration such as Mirakurun URL, recorded
-directory, WUI ports, storage policy, and normalization.
+directory, WUI ports, storage policy, and normalization. The schedule panel can
+filter by channel, time range, and item count while keeping the existing
+`/api/schedule.json` data path.
 
-The frontend still needs detailed schedule navigation, settings editing, richer
-playback controls, and a friendlier rule form before it can replace every legacy
-WUI workflow, but it does not require Node.js, npm, webpack, or any Node-based
-build step.
+The frontend still needs settings editing, richer playback controls, and a
+friendlier rule form before it can replace every legacy WUI workflow. For
+personal deployments, settings editing may remain intentionally read-only
+because direct `config.json` editing is safer and easier to audit. The frontend
+does not require Node.js, npm, webpack, or any Node-based build step.

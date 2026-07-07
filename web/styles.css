@@ -145,6 +145,25 @@ h3 {
   gap: 12px;
 }
 
+.schedule-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+select {
+  min-height: 32px;
+  max-width: 180px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfd;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
 button {
   min-height: 32px;
   padding: 0 12px;
@@ -302,6 +321,16 @@ button:focus-visible {
 
   .log-grid {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-controls {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .schedule-controls select {
+    flex: 1 1 140px;
+    max-width: none;
   }
 
   .settings-list {

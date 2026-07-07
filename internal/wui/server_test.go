@@ -443,9 +443,9 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "settingsList"},
-		{"/app.js", "text/javascript", "config.json"},
-		{"/styles.css", "text/css", ".settings-list"},
+		{"/", "text/html", "scheduleChannel"},
+		{"/app.js", "text/javascript", "renderScheduleChannelOptions"},
+		{"/styles.css", "text/css", ".schedule-controls"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		res := httptest.NewRecorder()

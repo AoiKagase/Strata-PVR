@@ -6,7 +6,10 @@
     recorded: [],
     schedule: [],
     rules: [],
-    config: {}
+    config: {},
+    scheduleChannel: "",
+    scheduleWindowHours: 24,
+    scheduleLimit: 20
   };
 
   function byId(id) {
@@ -92,6 +95,26 @@
       return "";
     }
     return program.channel.name || program.channel.channel || program.channel.id || "";
+  }
+
+  function scheduleChannelID(channel) {
+    if (!channel) {
+      return "";
+    }
+    if (channel.channel && channel.channel.id) {
+      return String(channel.channel.id);
+    }
+    return String(channel.id || "");
+  }
+
+  function scheduleChannelName(channel) {
+    if (!channel) {
+      return "";
+    }
+    if (channel.channel) {
+      return channel.channel.name || channel.channel.channel || channel.channel.id || "";
+    }
+    return channel.name || channel.channel || channel.id || "";
   }
 
   function ruleSummary(rule) {
@@ -216,14 +239,61 @@
     var channels = state.schedule || [];
     var programs = [];
     channels.forEach(function (channel) {
-      (channel.programs || []).slice(0, 2).forEach(function (program) {
+      var channelID = scheduleChannelID(channel);
+      if (state.scheduleChannel && channelID !== state.scheduleChannel) {
+        return;
+      }
+      (channel.programs || []).forEach(function (program) {
+        if (!program.channel && channel.channel) {
+          program.channel = channel.channel;
+        }
         programs.push(program);
       });
+    });
+    var now = Date.now();
+    var until = state.scheduleWindowHours > 0 ? now + (state.scheduleWindowHours * 60 * 60 * 1000) : 0;
+    programs = programs.filter(function (program) {
+      if (!program || !program.start) {
+        return false;
+      }
+      if (program.end && program.end < now) {
+        return false;
+      }
+      return until === 0 || program.start <= until;
     });
     programs.sort(function (a, b) {
       return (a.start || 0) - (b.start || 0);
     });
-    renderList("scheduleList", programs, "No schedule data", 10, ["reserve"]);
+    renderScheduleChannelOptions(channels);
+    renderList("scheduleList", programs, "No schedule data", state.scheduleLimit, ["reserve"]);
+  }
+
+  function renderScheduleChannelOptions(channels) {
+    var select = byId("scheduleChannel");
+    if (!select) {
+      return;
+    }
+    var current = state.scheduleChannel;
+    select.innerHTML = "";
+    var all = document.createElement("option");
+    all.value = "";
+    all.textContent = "All channels";
+    select.appendChild(all);
+    channels.forEach(function (channel) {
+      var id = scheduleChannelID(channel);
+      if (!id) {
+        return;
+      }
+      var option = document.createElement("option");
+      option.value = id;
+      option.textContent = scheduleChannelName(channel) || id;
+      select.appendChild(option);
+    });
+    select.value = current;
+    if (select.value !== current) {
+      state.scheduleChannel = "";
+      select.value = "";
+    }
   }
 
   function renderRules() {
@@ -433,6 +503,27 @@
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {
       refreshLogsButton.addEventListener("click", refreshLogs);
+    }
+    var scheduleChannel = byId("scheduleChannel");
+    if (scheduleChannel) {
+      scheduleChannel.addEventListener("change", function () {
+        state.scheduleChannel = scheduleChannel.value;
+        renderSchedule();
+      });
+    }
+    var scheduleWindow = byId("scheduleWindow");
+    if (scheduleWindow) {
+      scheduleWindow.addEventListener("change", function () {
+        state.scheduleWindowHours = Number(scheduleWindow.value) || 0;
+        renderSchedule();
+      });
+    }
+    var scheduleLimit = byId("scheduleLimit");
+    if (scheduleLimit) {
+      scheduleLimit.addEventListener("change", function () {
+        state.scheduleLimit = Number(scheduleLimit.value) || 20;
+        renderSchedule();
+      });
     }
     refresh();
     setInterval(refresh, 30000);
