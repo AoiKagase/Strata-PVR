@@ -2014,7 +2014,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 			audioCodec = "copy"
 		}
 	}
-	if videoBitrate != "" && (audioCodec == "copy" || audioBitrate == "") {
+	if !live && videoBitrate != "" && (audioCodec == "copy" || audioBitrate == "") {
 		audioCodec = ""
 		audioBitrate = "96k"
 	}
@@ -2074,11 +2074,15 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	}
 	if videoBitrate != "" {
 		args = append(args, "-b:v", videoBitrate, "-minrate:v", videoBitrate, "-maxrate:v", videoBitrate)
-		args = append(args, "-bufsize:v", strconv.FormatInt(legacyBitrateBits(videoBitrate)*8, 10))
+		if !live {
+			args = append(args, "-bufsize:v", strconv.FormatInt(legacyBitrateBits(videoBitrate)*8, 10))
+		}
 	}
 	if audioBitrate != "" {
 		args = append(args, "-b:a", audioBitrate, "-minrate:a", audioBitrate, "-maxrate:a", audioBitrate)
-		args = append(args, "-bufsize:a", strconv.FormatInt(legacyBitrateBits(audioBitrate)*8, 10))
+		if !live {
+			args = append(args, "-bufsize:a", strconv.FormatInt(legacyBitrateBits(audioBitrate)*8, 10))
+		}
 	}
 	if videoCodec == "h264" {
 		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")

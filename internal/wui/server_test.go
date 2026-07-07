@@ -1534,6 +1534,49 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 }
 
+func TestAPIChannelWatchMP4KeepsLegacyLiveBitrateArgs(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	schedule := []chinachu.ChannelSchedule{{Channel: chinachu.Channel{ID: chid, Name: "Service"}}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/services/123/stream" {
+			_, _ = w.Write([]byte("livets"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mirakurunServer.Close()
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "livemp4", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4?b:v=1m", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-b:v 1m", "-minrate:v 1m", "-maxrate:v 1m", "-c:a aac"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("live ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+	for _, notWant := range []string{"-bufsize:v", "-b:a 96k", "-bufsize:a"} {
+		if strings.Contains(joined, notWant) {
+			t.Fatalf("live ffmpeg args should not contain %q: %s", notWant, joined)
+		}
+	}
+	if gotInput != "livets" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+}
+
 func TestAPIChannelWatchXSPF(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
