@@ -39,6 +39,43 @@ func TestFormatRecordedNameLegacyDateMasks(t *testing.T) {
 	}
 }
 
+func TestFormatRecordedNameLegacyNamedDateMasks(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 5, 6, 0, time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+	}
+	tests := []struct {
+		mask string
+		want string
+	}{
+		{"default", "Mon Jul 01 2024 23:05:06"},
+		{"shortDate", "7/1/24"},
+		{"mediumDate", "Jul 1, 2024"},
+		{"longDate", "July 1, 2024"},
+		{"fullDate", "Monday, July 1, 2024"},
+		{"shortTime", "11:05 PM"},
+		{"mediumTime", "11:05:06 PM"},
+		{"longTime", "11:05:06 PM JST"},
+		{"isoDate", "2024-07-01"},
+		{"isoTime", "23:05:06"},
+		{"isoDateTime", "2024-07-01T23:05:06"},
+		{"expiresHeader", "Mon, 01 Jul 2024 23:05:06 JST"},
+	}
+	for _, tt := range tests {
+		got := FormatRecordedName(program, "<date:"+tt.mask+">.m2ts")
+		want := tt.want + ".m2ts"
+		if got != want {
+			t.Fatalf("FormatRecordedName(%q) = %q, want %q", tt.mask, got, want)
+		}
+	}
+}
+
 func TestFormatRecordedNameLegacyUTCDateMask(t *testing.T) {
 	oldLocal := time.Local
 	time.Local = time.FixedZone("JST", 9*60*60)
