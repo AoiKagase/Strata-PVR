@@ -1281,6 +1281,9 @@ func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {
 	}
 	fmt.Fprintf(stdout, "CONFIG mirakurunPath=%s\n", cfg.EffectiveMirakurunPath())
 	fmt.Fprintf(stdout, "CONFIG recordedDir=%s\n", cfg.RecordedDir)
+	if abs, err := filepath.Abs(cfg.RecordedDir); err == nil {
+		fmt.Fprintf(stdout, "CONFIG recordedDirResolved=%s\n", abs)
+	}
 	fmt.Fprintf(stdout, "CONFIG recordedFormat=%s\n", cfg.RecordedFormat)
 	fmt.Fprintf(stdout, "CONFIG wui=%s:%s tls=%s open=%s\n", cfg.WUIHost, wuiPort, tls, openServer)
 	fmt.Fprintf(stdout, "CONFIG storageLowSpace=%dMB action=%s\n", cfg.StorageLowSpaceThresholdMB, cfg.StorageLowSpaceAction)

@@ -265,9 +265,14 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	text = out.String()
+	resolvedRecordedDir, err := filepath.Abs("recorded")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{
 		"CONFIG mirakurunPath=" + mirakurun.URL,
 		"CONFIG recordedDir=recorded",
+		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
 		"CONFIG wui=0.0.0.0:disabled tls=disabled open=disabled",
 		"CONFIG storageLowSpace=3000MB action=remove",
 		"WARN strata-pvr binary not found in the current directory",
@@ -316,9 +321,14 @@ func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 	var out bytes.Buffer
 	writeCompatConfigSummary(&out, cfg)
 	text := out.String()
+	resolvedRecordedDir, err := filepath.Abs("recorded")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{
 		"CONFIG mirakurunPath=http://mirakurun.example/",
 		"CONFIG recordedDir=recorded",
+		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
 		"CONFIG wui=127.0.0.1:20772 tls=enabled open=auto:20773",
 		"CONFIG storageLowSpace=1024MB action=stop",
 		"CONFIG normalizationForm=NFKC",
