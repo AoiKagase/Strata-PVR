@@ -719,6 +719,50 @@ func writeNativeWebAssets(t *testing.T, root string) {
 	}
 }
 
+func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
+	index, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexText := string(index)
+	appText := string(app)
+	for _, want := range []string{
+		`value="day"`,
+		`value="three-days"`,
+		`value="all"`,
+		`scheduleHiddenChannel`,
+		`channelProgramsSort`,
+	} {
+		if !strings.Contains(indexText, want) {
+			t.Fatalf("native WUI index missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`hiddenChannelsStorageKey`,
+		`"day": 24`,
+		`"three-days": 72`,
+		`"all": 0`,
+		`saveHiddenChannels`,
+		`renderScheduleGuide`,
+	} {
+		if !strings.Contains(appText, want) {
+			t.Fatalf("native WUI app missing %q", want)
+		}
+	}
+	for _, old := range []string{
+		`scheduleLimit`,
+		`表示数`,
+	} {
+		if strings.Contains(appText, old) || strings.Contains(indexText, old) {
+			t.Fatalf("native WUI static assets still contain removed schedule cap %q", old)
+		}
+	}
+}
+
 func TestCompatDiffReportsStateRewriteStatus(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
