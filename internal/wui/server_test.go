@@ -1152,6 +1152,38 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mpegtsdata", &gotInput, &gotArgs)
+	defer restore()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?t=30&b:v=1m", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "mpegtsdata" {
+		t.Fatalf("m2ts transcode status=%d body=%q", res.Code, res.Body.String())
+	}
+	if gotInput != "tsdata" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-f mpegts", "-c:v copy", "-b:v 1m", "-t 30"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("m2ts ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+}
+
 func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

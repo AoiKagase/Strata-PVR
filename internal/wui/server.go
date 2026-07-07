@@ -1578,6 +1578,21 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			streamGrowingFile(w, r, filePath, 61440)
 			return
 		}
+		if watchNeedsTranscode(r) {
+			if r.Method == http.MethodHead {
+				w.Header().Set("Content-Type", "video/MP2T")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			file, err := os.Open(filePath)
+			if err != nil {
+				legacyHTTPError(w, r, http.StatusInternalServerError)
+				return
+			}
+			defer file.Close()
+			s.streamFFmpeg(w, r, file, "m2ts", false)
+			return
+		}
 		if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
 			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
 			return
@@ -1612,6 +1627,16 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	default:
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	}
+}
+
+func watchNeedsTranscode(r *http.Request) bool {
+	q := r.URL.Query()
+	for _, key := range []string{"t", "s", "f", "c:v", "c:a", "b:v", "b:a", "ar", "r"} {
+		if q.Get(key) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *server) checkLegacyWatchStart(w http.ResponseWriter, r *http.Request, filePath string) bool {
