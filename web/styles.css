@@ -364,6 +364,30 @@ button:disabled {
   font-size: 12px;
 }
 
+.inline-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.channel-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.channel-link:hover {
+  background: transparent;
+  color: #0b5f59;
+}
+
 .schedule-list {
   display: grid;
   gap: 14px;
@@ -440,10 +464,13 @@ button:disabled {
   object-fit: contain;
 }
 
-.schedule-channel-head strong {
+.schedule-channel-head .channel-link {
   overflow: hidden;
   max-width: 100%;
+  color: var(--ink);
+  font-size: 11px;
   text-overflow: ellipsis;
+  text-decoration: none;
   white-space: nowrap;
 }
 

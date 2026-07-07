@@ -18,6 +18,9 @@
     scheduleHiddenChannels: loadHiddenChannels(),
     scheduleWindowHours: 24,
     scheduleLimit: 50,
+    channelProgramsChannel: "",
+    channelProgramsGenre: "",
+    channelProgramsSort: "start",
     editingRuleIndex: null,
     selectedProgram: null,
     configEditorDirty: false
@@ -527,6 +530,18 @@
     }
   }
 
+  function channelLink(channelID, label) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "channel-link";
+    button.textContent = label || channelID || "不明なチャンネル";
+    button.title = "このチャンネルの番組一覧を開く";
+    button.addEventListener("click", function () {
+      openChannelPrograms(channelID);
+    });
+    return button;
+  }
+
   function renderProgramRow(program, actions, showChannel) {
     var item = document.createElement("article");
     item.className = "program-row";
@@ -548,12 +563,95 @@
     return item;
   }
 
+  function renderProgramRowWithChannelLink(program, actions) {
+    var item = document.createElement("article");
+    item.className = "program-row";
+
+    var title = document.createElement("strong");
+    title.textContent = programTitle(program);
+
+    var meta = document.createElement("span");
+    var channelID = programChannelID(program);
+    var parts = [formatTime(program.start), program.category];
+    meta.textContent = parts.filter(Boolean).join(" / ");
+
+    item.appendChild(title);
+    item.appendChild(meta);
+    if (channelID || channelName(program)) {
+      var channelRow = document.createElement("div");
+      channelRow.className = "inline-channel-row";
+      channelRow.appendChild(channelLink(channelID, channelName(program) || channelID));
+      item.appendChild(channelRow);
+    }
+    renderActions(item, program, actions);
+    return item;
+  }
+
   function cloneProgram(program) {
     var item = {};
     Object.keys(program).forEach(function (key) {
       item[key] = program[key];
     });
     return item;
+  }
+
+  function programEnd(program) {
+    return program.end || (program.start + 30 * 60 * 1000);
+  }
+
+  function channelProgramGroups() {
+    var groups = [];
+    (state.schedule || []).forEach(function (channel) {
+      var channelID = scheduleChannelID(channel);
+      var groupID = channelID || scheduleChannelName(channel) || "unknown";
+      var displayName = scheduleChannelName(channel) || channelID || "不明なチャンネル";
+      var group = {
+        id: groupID,
+        name: displayName,
+        logo: Boolean(channelID && scheduleChannelHasLogo(channel)),
+        programs: []
+      };
+      (channel.programs || []).forEach(function (program) {
+        if (!program || !program.start) {
+          return;
+        }
+        var item = cloneProgram(program);
+        if (!item.channel && channel.channel) {
+          item.channel = channel.channel;
+        }
+        if (!item.channel || typeof item.channel !== "object") {
+          item.channel = { id: String(item.channel || groupID), name: displayName, type: scheduleChannelType(channel) };
+        }
+        item.channel.id = item.channel.id || groupID;
+        item.channel.name = scheduleProgramChannelName(item, displayName);
+        group.programs.push(item);
+      });
+      groups.push(group);
+    });
+    return groups;
+  }
+
+  function findChannelProgramGroup(channelID) {
+    var groups = channelProgramGroups();
+    var found = null;
+    groups.some(function (group) {
+      if (group.id === channelID) {
+        found = group;
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function openChannelPrograms(channelID) {
+    if (!channelID) {
+      return;
+    }
+    state.channelProgramsChannel = channelID;
+    state.channelProgramsGenre = "";
+    window.location.hash = "channel-programs";
+    renderChannelPrograms();
   }
 
   function renderList(id, items, emptyText, limit, actions) {
@@ -570,6 +668,40 @@
     root.className = "list";
     items.slice(0, limit || 8).forEach(function (program) {
       root.appendChild(renderProgramRow(program, actions, true));
+    });
+  }
+
+  function renderOnAirList() {
+    var root = byId("onAirList");
+    if (!root) {
+      return;
+    }
+    var now = Date.now();
+    var items = [];
+    channelProgramGroups().forEach(function (group) {
+      var current = null;
+      group.programs.some(function (program) {
+        if (program.start <= now && programEnd(program) > now) {
+          current = program;
+          return true;
+        }
+        return false;
+      });
+      if (current) {
+        items.push(current);
+      }
+    });
+    root.innerHTML = "";
+    if (!items.length) {
+      root.className = "list empty";
+      root.textContent = "現在放送中の番組はありません";
+      return;
+    }
+    root.className = "list";
+    items.sort(function (a, b) {
+      return channelName(a).localeCompare(channelName(b), "ja");
+    }).forEach(function (program) {
+      root.appendChild(renderProgramRowWithChannelLink(program, ["watch-channel-mp4"]));
     });
   }
 
@@ -712,9 +844,7 @@
         logo.loading = "lazy";
         heading.appendChild(logo);
       }
-      var name = document.createElement("strong");
-      name.textContent = group.name;
-      heading.appendChild(name);
+      heading.appendChild(channelLink(group.id, group.name));
       grid.appendChild(heading);
     });
 
@@ -1027,6 +1157,103 @@
     });
     select.value = current;
     if (select.value !== current) {
+      select.value = "";
+    }
+  }
+
+  function renderChannelPrograms() {
+    var root = byId("channelProgramsList");
+    if (!root) {
+      return;
+    }
+    var group = findChannelProgramGroup(state.channelProgramsChannel);
+    var title = byId("channelProgramsTitle");
+    var tools = byId("channelProgramsTools");
+    root.innerHTML = "";
+    if (!group) {
+      if (title) {
+        title.textContent = "チャンネル番組一覧";
+      }
+      if (tools) {
+        tools.hidden = true;
+        tools.innerHTML = "";
+      }
+      renderChannelProgramsGenreOptions([]);
+      root.className = "list empty";
+      root.textContent = "チャンネルを選択してください";
+      return;
+    }
+
+    if (title) {
+      title.textContent = group.name + " の番組一覧";
+    }
+    if (tools) {
+      tools.hidden = false;
+      tools.innerHTML = "";
+      var label = document.createElement("span");
+      label.className = "channel-tool-label";
+      label.textContent = group.name;
+      tools.appendChild(label);
+      tools.appendChild(renderChannelActions(group.id));
+    }
+
+    renderChannelProgramsGenreOptions(group.programs);
+    var programs = group.programs.filter(function (program) {
+      if (programEnd(program) < Date.now()) {
+        return false;
+      }
+      return !state.channelProgramsGenre || String(program.category || "") === state.channelProgramsGenre;
+    });
+    programs.sort(function (a, b) {
+      if (state.channelProgramsSort === "category") {
+        return String(a.category || "").localeCompare(String(b.category || ""), "ja") || (a.start || 0) - (b.start || 0);
+      }
+      if (state.channelProgramsSort === "title") {
+        return programTitle(a).localeCompare(programTitle(b), "ja") || (a.start || 0) - (b.start || 0);
+      }
+      if (state.channelProgramsSort === "duration") {
+        return (programEnd(a) - a.start) - (programEnd(b) - b.start) || (a.start || 0) - (b.start || 0);
+      }
+      return (a.start || 0) - (b.start || 0);
+    });
+
+    if (!programs.length) {
+      root.className = "list empty";
+      root.textContent = "条件に一致する番組はありません";
+      return;
+    }
+    root.className = "list";
+    programs.forEach(function (program) {
+      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "create-rule-from-program"], false));
+    });
+  }
+
+  function renderChannelProgramsGenreOptions(programs) {
+    var select = byId("channelProgramsGenre");
+    if (!select) {
+      return;
+    }
+    var current = state.channelProgramsGenre;
+    var genres = {};
+    (programs || []).forEach(function (program) {
+      if (program && program.category) {
+        genres[String(program.category)] = true;
+      }
+    });
+    select.innerHTML = "";
+    var all = document.createElement("option");
+    all.value = "";
+    all.textContent = "全ジャンル";
+    select.appendChild(all);
+    Object.keys(genres).sort().forEach(function (genre) {
+      var option = document.createElement("option");
+      option.value = genre;
+      option.textContent = genre;
+      select.appendChild(option);
+    });
+    select.value = current;
+    if (select.value !== current) {
+      state.channelProgramsGenre = "";
       select.value = "";
     }
   }
@@ -1822,7 +2049,9 @@
     renderList("reserveListPage", state.reserves, "予約はありません", 100, ["skip", "unskip", "unreserve"]);
     renderList("recordedList", state.recorded.slice().reverse(), "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
     renderList("recordedListPage", state.recorded.slice().reverse(), "録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
+    renderOnAirList();
     renderSchedule();
+    renderChannelPrograms();
     renderRules();
     renderSettings();
     renderRuleEditorState();
@@ -2009,6 +2238,21 @@
       scheduleLimit.addEventListener("change", function () {
         state.scheduleLimit = Number(scheduleLimit.value) || 50;
         renderSchedule();
+      });
+    }
+    var channelProgramsGenre = byId("channelProgramsGenre");
+    if (channelProgramsGenre) {
+      channelProgramsGenre.addEventListener("change", function () {
+        state.channelProgramsGenre = channelProgramsGenre.value;
+        renderChannelPrograms();
+      });
+    }
+    var channelProgramsSort = byId("channelProgramsSort");
+    if (channelProgramsSort) {
+      channelProgramsSort.value = state.channelProgramsSort;
+      channelProgramsSort.addEventListener("change", function () {
+        state.channelProgramsSort = channelProgramsSort.value || "start";
+        renderChannelPrograms();
       });
     }
     refresh();

@@ -91,6 +91,10 @@
           <div id="recordingList" class="list empty">録画中の番組はありません</div>
         </section>
         <section class="panel">
+          <h3>放送中</h3>
+          <div id="onAirList" class="list empty">現在放送中の番組はありません</div>
+        </section>
+        <section class="panel">
           <h3>予約</h3>
           <div id="reserveList" class="list empty">予約はありません</div>
         </section>
@@ -154,6 +158,34 @@
       </div>
       <div id="scheduleChannelTools" class="channel-tools" hidden></div>
       <div id="scheduleList" class="list empty">番組表データがありません</div>
+    </section>
+
+    <section class="view" data-view="channel-programs" hidden>
+      <div class="view-head">
+        <div>
+          <h2 id="channelProgramsTitle">チャンネル番組一覧</h2>
+          <p>選択したチャンネル内の番組を確認し、手動予約やルール作成に進めます。</p>
+        </div>
+        <div class="schedule-controls" aria-label="Channel program controls">
+          <label class="control-field" for="channelProgramsGenre">
+            <span>ジャンル</span>
+            <select id="channelProgramsGenre">
+              <option value="">全ジャンル</option>
+            </select>
+          </label>
+          <label class="control-field" for="channelProgramsSort">
+            <span>並び順</span>
+            <select id="channelProgramsSort">
+              <option value="start">開始時刻</option>
+              <option value="category">ジャンル</option>
+              <option value="title">タイトル</option>
+              <option value="duration">長さ</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="channelProgramsTools" class="channel-tools" hidden></div>
+      <div id="channelProgramsList" class="list empty">チャンネルを選択してください</div>
     </section>
 
     <section class="view" data-view="reserves" hidden>

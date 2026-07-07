@@ -158,8 +158,11 @@ common and detailed settings forms plus a validated raw JSON editor for
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path. Program detail dialogs can
 open the selected program's channel MP4 stream and prefill the rule form from
-the selected schedule program. Hidden-channel filters are remembered locally in
-the browser.
+the selected schedule program. The dashboard also shows each registered
+channel's currently airing program with MP4 watch actions, and channel names on
+the dashboard and schedule guide open a channel-specific program list with
+genre filtering, sorting, manual reservation, and rule-creation actions.
+Hidden-channel filters are remembered locally in the browser.
 
 Native settings forms cover WUI auth/country/service-order/proxy/mDNS/TLS,
 VAAPI, priorities, low-space notify/command settings, and hook commands. Use
