@@ -161,7 +161,10 @@
 
   function recordedWatchURL(program, ext, query) {
     var url = "/api/recorded/" + encodeURIComponent(program.id) + "/watch." + ext;
-    return query ? url + "?" + query : url;
+    if (!query) {
+      return url;
+    }
+    return url + "?" + new URLSearchParams(query).toString();
   }
 
   function renderActions(item, program, actions) {
@@ -205,11 +208,11 @@
         }));
       } else if (name === "watch-mp4-720p") {
         row.appendChild(actionButton("MP4 720p", "Open 720p MP4 transcode", function () {
-          window.location.href = recordedWatchURL(program, "mp4", "s=1280x720&b%3Av=1800k&b%3Aa=128k");
+          window.location.href = recordedWatchURL(program, "mp4", { "s": "1280x720", "b:v": "1800k", "b:a": "128k" });
         }));
       } else if (name === "watch-mp4-low") {
         row.appendChild(actionButton("MP4 Low", "Open low bitrate MP4 transcode", function () {
-          window.location.href = recordedWatchURL(program, "mp4", "s=640x360&b%3Av=800k&b%3Aa=96k");
+          window.location.href = recordedWatchURL(program, "mp4", { "s": "640x360", "b:v": "800k", "b:a": "96k" });
         }));
       } else if (name === "playlist") {
         row.appendChild(actionButton("XSPF", "Open XSPF playlist", function () {
