@@ -52,6 +52,20 @@
     });
   }
 
+  function apiText(path) {
+    return fetch("/api/" + path, {
+      credentials: "same-origin"
+    }).then(function (response) {
+      if (response.status === 204) {
+        return "";
+      }
+      if (!response.ok) {
+        throw new Error(path + " returned " + response.status);
+      }
+      return response.text();
+    });
+  }
+
   function formatTime(value) {
     if (!value) {
       return "";
@@ -272,6 +286,32 @@
     sendJSON("rules.json", "POST", rule).then(refresh).catch(showError);
   }
 
+  function tailText(value, maxLines) {
+    var lines = (value || "").split(/\r?\n/);
+    if (lines.length > maxLines) {
+      lines = lines.slice(lines.length - maxLines);
+    }
+    return lines.join("\n").trim() || "No log data";
+  }
+
+  function setLog(id, value) {
+    text(byId(id), tailText(value, 80));
+  }
+
+  function refreshLogs() {
+    setBusy("Loading logs");
+    Promise.all([
+      apiText("log/scheduler.txt"),
+      apiText("log/operator.txt"),
+      apiText("log/wui.txt")
+    ]).then(function (result) {
+      setLog("schedulerLog", result[0]);
+      setLog("operatorLog", result[1]);
+      setLog("wuiLog", result[2]);
+      render();
+    }).catch(showError);
+  }
+
   function render() {
     text(byId("reserveCount"), String(state.reserves.length));
     text(byId("recordingCount"), String(state.recording.length));
@@ -327,6 +367,7 @@
       state.schedule = result[4] || [];
       state.rules = result[5] || [];
       render();
+      refreshLogs();
     }).catch(showError);
   }
 
@@ -338,6 +379,10 @@
     var addRuleButton = byId("addRuleButton");
     if (addRuleButton) {
       addRuleButton.addEventListener("click", addRuleFromEditor);
+    }
+    var refreshLogsButton = byId("refreshLogsButton");
+    if (refreshLogsButton) {
+      refreshLogsButton.addEventListener("click", refreshLogs);
     }
     refresh();
     setInterval(refresh, 30000);

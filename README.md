@@ -87,9 +87,10 @@ basic Go API actions for reserving schedule items, skipping/unskipping reserves,
 removing manual reserves, stopping active recordings, and opening/downloading or
 deleting recorded items. It also lists auto-reservation rules, can enable,
 disable, delete, and add rules from JSON. The legacy WUI asset fallback remains
-available during compatibility work.
+available during compatibility work. Scheduler, operator, and WUI logs are
+visible from the dashboard as tail-style text panels.
 
-The frontend still needs detailed schedule navigation, log views, settings,
-richer playback controls, and a friendlier rule form before it can replace every
-legacy WUI workflow, but it does not require Node.js, npm, webpack, or any
-Node-based build step.
+The frontend still needs detailed schedule navigation, settings, richer playback
+controls, and a friendlier rule form before it can replace every legacy WUI
+workflow, but it does not require Node.js, npm, webpack, or any Node-based build
+step.
