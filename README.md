@@ -83,8 +83,9 @@ Compatibility and environment checks are available with:
 summary for Mirakurun, configured and resolved recording paths, WUI listeners,
 and storage policy. It also prints state-file counts for schedule channels,
 reserves, active recordings, and recorded entries, warns when active recordings
-are present, and warns when the local `strata-pvr` binary expected by generated
-wrappers and init scripts is not present yet.
+are present, prints conservative next-step commands, and warns when the local
+`strata-pvr` binary expected by generated wrappers and init scripts is not
+present yet.
 
 To review a safe shell wrapper that forwards existing command arguments to the
 Go binary without overwriting any file automatically:

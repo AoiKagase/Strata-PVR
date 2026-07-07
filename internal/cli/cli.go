@@ -1220,6 +1220,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			if args[0] == "doctor" {
 				writeCompatConfigSummary(stdout, cfg)
 				writeCompatStateSummary(stdout)
+				writeCompatNextSteps(stdout)
 				for _, warning := range compatStateWarnings() {
 					fmt.Fprintf(stdout, "WARN %s\n", warning)
 				}
@@ -1328,6 +1329,16 @@ func compatStateWarnings() []string {
 		return nil
 	}
 	return []string{fmt.Sprintf("active recordings detected: %d; avoid migration, wrapper replacement, or service changes until recording finishes", recording)}
+}
+
+func writeCompatNextSteps(stdout io.Writer) {
+	for _, step := range []string{
+		"compat backup",
+		"update -s",
+		"reserves",
+	} {
+		fmt.Fprintf(stdout, "NEXT strata-pvr %s\n", step)
+	}
 }
 
 func compatWrapperScript() string {
