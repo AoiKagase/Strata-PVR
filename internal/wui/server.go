@@ -2514,7 +2514,10 @@ func apiExtension(path string) string {
 	slash := strings.LastIndex(path, "/")
 	dot := strings.LastIndex(path, ".")
 	if dot > slash {
-		return path[dot+1:]
+		ext := path[dot+1:]
+		if isLegacyAPIExtension(ext) {
+			return ext
+		}
 	}
 	return ""
 }
@@ -2522,10 +2525,22 @@ func apiExtension(path string) string {
 func trimLastExtension(path string) string {
 	slash := strings.LastIndex(path, "/")
 	dot := strings.LastIndex(path, ".")
-	if dot > slash {
+	if dot > slash && isLegacyAPIExtension(path[dot+1:]) {
 		return path[:dot]
 	}
 	return path
+}
+
+func isLegacyAPIExtension(ext string) bool {
+	if ext == "" {
+		return false
+	}
+	for _, r := range ext {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func findProgram(programs []chinachu.Program, id string) int {

@@ -185,6 +185,13 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		t.Fatalf("schedule.txt HEAD status=%d body=%q", res.Code, res.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/status.JSON", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound || res.Body.String() != "404 Not Found\n" {
+		t.Fatalf("uppercase extension status=%d body=%q", res.Code, res.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.json", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
