@@ -168,6 +168,49 @@
     return url + "?" + new URLSearchParams(query).toString();
   }
 
+  function playbackNumber(id, label) {
+    var input = byId(id);
+    var value = input ? input.value.trim() : "";
+    if (!value) {
+      return null;
+    }
+    var number = Number(value);
+    if (!Number.isInteger(number) || number < 0) {
+      showError(new Error(label + " is invalid"));
+      return false;
+    }
+    return number;
+  }
+
+  function playbackQuery(includeQuality) {
+    var start = playbackNumber("playbackStart", "Playback start");
+    if (start === false) {
+      return false;
+    }
+    var duration = playbackNumber("playbackDuration", "Playback duration");
+    if (duration === false) {
+      return false;
+    }
+    var query = {};
+    if (start !== null) {
+      query.ss = String(start * 60);
+    }
+    if (duration !== null && duration > 0) {
+      query.t = String(duration * 60);
+    }
+    var quality = byId("playbackQuality");
+    if (includeQuality && quality && quality.value === "720p") {
+      query.s = "1280x720";
+      query["b:v"] = "1800k";
+      query["b:a"] = "128k";
+    } else if (includeQuality && quality && quality.value === "low") {
+      query.s = "640x360";
+      query["b:v"] = "800k";
+      query["b:a"] = "96k";
+    }
+    return Object.keys(query).length ? query : null;
+  }
+
   function renderActions(item, program, actions) {
     if (!actions || actions.length === 0) {
       return;
@@ -214,6 +257,22 @@
       } else if (name === "watch-mp4-low") {
         row.appendChild(actionButton("MP4 Low", "Open low bitrate MP4 transcode", function () {
           window.location.href = recordedWatchURL(program, "mp4", { "s": "640x360", "b:v": "800k", "b:a": "96k" });
+        }));
+      } else if (name === "watch-mp4-custom") {
+        row.appendChild(actionButton("Custom MP4", "Open MP4 with playback controls", function () {
+          var query = playbackQuery(true);
+          if (query === false) {
+            return;
+          }
+          window.location.href = recordedWatchURL(program, "mp4", query);
+        }));
+      } else if (name === "watch-m2ts-offset") {
+        row.appendChild(actionButton("M2TS Offset", "Open M2TS with start/length controls", function () {
+          var query = playbackQuery(false);
+          if (query === false) {
+            return;
+          }
+          window.location.href = recordedWatchURL(program, "m2ts", query);
         }));
       } else if (name === "playlist") {
         row.appendChild(actionButton("XSPF", "Open XSPF playlist", function () {
@@ -702,7 +761,7 @@
 
     renderList("recordingList", state.recording, "No active recordings", 8, ["watch-recording", "stop"]);
     renderList("reserveList", state.reserves, "No reserves", 8, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "playlist", "download", "delete-recorded"]);
+    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "delete-recorded"]);
     renderSchedule();
     renderRules();
     renderSettings();

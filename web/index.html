@@ -54,7 +54,18 @@
       </section>
 
       <section class="panel">
-        <h2>Recently Recorded</h2>
+        <div class="panel-head">
+          <h2>Recently Recorded</h2>
+          <div class="media-controls" aria-label="Playback controls">
+            <input id="playbackStart" type="number" min="0" step="1" inputmode="numeric" placeholder="start min" aria-label="Playback start minutes">
+            <input id="playbackDuration" type="number" min="0" step="1" inputmode="numeric" placeholder="length min" aria-label="Playback duration minutes">
+            <select id="playbackQuality" aria-label="Playback quality">
+              <option value="">Source</option>
+              <option value="720p">720p</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
         <div id="recordedList" class="list empty">No recorded items</div>
       </section>
 

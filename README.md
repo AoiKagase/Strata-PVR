@@ -123,8 +123,8 @@ disable, delete, add rules from JSON, and add common title/description/type/
 SID/category/channel/flag/duration/hour/recorded-format rules from form fields.
 The rule form also accepts an extra JSON object for less common fields, and
 existing rules can be copied into a JSON editor and saved back in place.
-Recorded items expose M2TS, direct MP4,
-720p MP4, low-bitrate MP4, XSPF, download, and delete actions, and active
+Recorded items expose M2TS, direct MP4, 720p MP4, low-bitrate MP4, custom
+start/length/quality playback, XSPF, download, and delete actions, and active
 recordings expose a live M2TS watch action. The legacy WUI
 asset fallback remains available during compatibility work. Scheduler, operator,
 and WUI logs are visible from the dashboard as tail-style text panels. A
@@ -133,9 +133,7 @@ Mirakurun URL, recorded directory, WUI ports, storage policy, and normalization.
 The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
-The frontend still needs custom playback/transcode controls if desired before it
-can replace every legacy WUI workflow. For personal deployments, settings
-editing is intentionally
+For personal deployments, settings editing is intentionally
 read-only because direct `config.json` editing is safer and easier to audit; the
 legacy-compatible `/api/config.json` PUT endpoint remains available for old
 clients. The frontend does not require Node.js, npm, webpack, or any Node-based
