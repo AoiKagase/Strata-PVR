@@ -1216,6 +1216,9 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 			for _, warning := range compatWarnings(cfg) {
 				fmt.Fprintf(stdout, "WARN %s\n", warning)
 			}
+			if args[0] == "doctor" {
+				writeCompatConfigSummary(stdout, cfg)
+			}
 		}
 		if failed {
 			return fmt.Errorf("compat check failed")
@@ -1230,6 +1233,32 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 		return nil
 	default:
 		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
+	}
+}
+
+func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {
+	wuiPort := "disabled"
+	if cfg.WUIPort != nil {
+		wuiPort = strconv.Itoa(*cfg.WUIPort)
+	}
+	openServer := "disabled"
+	if cfg.WUIOpenServer {
+		openServer = fmt.Sprintf("%s:%d", cfg.WUIOpenHost, cfg.WUIOpenPort)
+		if cfg.WUIOpenHost == "" {
+			openServer = fmt.Sprintf("auto:%d", cfg.WUIOpenPort)
+		}
+	}
+	tls := "disabled"
+	if cfg.WUITlsKeyPath != "" || cfg.WUITlsCertPath != "" {
+		tls = "enabled"
+	}
+	fmt.Fprintf(stdout, "CONFIG mirakurunPath=%s\n", cfg.EffectiveMirakurunPath())
+	fmt.Fprintf(stdout, "CONFIG recordedDir=%s\n", cfg.RecordedDir)
+	fmt.Fprintf(stdout, "CONFIG recordedFormat=%s\n", cfg.RecordedFormat)
+	fmt.Fprintf(stdout, "CONFIG wui=%s:%s tls=%s open=%s\n", cfg.WUIHost, wuiPort, tls, openServer)
+	fmt.Fprintf(stdout, "CONFIG storageLowSpace=%dMB action=%s\n", cfg.StorageLowSpaceThresholdMB, cfg.StorageLowSpaceAction)
+	if cfg.NormalizationForm != "" {
+		fmt.Fprintf(stdout, "CONFIG normalizationForm=%s\n", cfg.NormalizationForm)
 	}
 }
 

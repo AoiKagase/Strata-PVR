@@ -73,6 +73,9 @@ Compatibility and environment checks are available with:
 ./strata-pvr compat doctor
 ```
 
+`compat doctor` includes the same checks plus a non-secret configuration
+summary for Mirakurun, recording paths, WUI listeners, and storage policy.
+
 To review a safe shell wrapper that forwards existing command arguments to the
 Go binary without overwriting any file automatically:
 

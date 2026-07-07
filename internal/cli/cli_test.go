@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"strata-pvr/internal/config"
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/storage"
 )
@@ -258,6 +259,22 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 			t.Fatalf("compat output missing %q: %s", want, text)
 		}
 	}
+
+	out.Reset()
+	if err := Run(context.Background(), []string{"compat", "doctor"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text = out.String()
+	for _, want := range []string{
+		"CONFIG mirakurunPath=" + mirakurun.URL,
+		"CONFIG recordedDir=recorded",
+		"CONFIG wui=0.0.0.0:disabled tls=disabled open=disabled",
+		"CONFIG storageLowSpace=3000MB action=remove",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("compat doctor output missing %q: %s", want, text)
+		}
+	}
 }
 
 func installFakeCompatCommand(t *testing.T, dir, name string) {
@@ -276,6 +293,44 @@ func installFakeCompatCommand(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
+	port := 20772
+	cfg := &config.Config{
+		MirakurunPath:              "http://mirakurun.example/",
+		RecordedDir:                "recorded",
+		RecordedFormat:             "<title>.m2ts",
+		WUIHost:                    "127.0.0.1",
+		WUIPort:                    &port,
+		WUIOpenServer:              true,
+		WUIOpenPort:                20773,
+		WUITlsKeyPath:              "key.pem",
+		WUITlsPassphrase:           "secret-passphrase",
+		WUIUsers:                   []string{"user:secret"},
+		StorageLowSpaceThresholdMB: 1024,
+		StorageLowSpaceAction:      "stop",
+		NormalizationForm:          "NFKC",
+	}
+	var out bytes.Buffer
+	writeCompatConfigSummary(&out, cfg)
+	text := out.String()
+	for _, want := range []string{
+		"CONFIG mirakurunPath=http://mirakurun.example/",
+		"CONFIG recordedDir=recorded",
+		"CONFIG wui=127.0.0.1:20772 tls=enabled open=auto:20773",
+		"CONFIG storageLowSpace=1024MB action=stop",
+		"CONFIG normalizationForm=NFKC",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("summary missing %q: %s", want, text)
+		}
+	}
+	for _, secret := range []string{"secret-passphrase", "user:secret"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("summary leaked %q: %s", secret, text)
+		}
+	}
 }
 
 func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
