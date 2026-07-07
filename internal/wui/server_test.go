@@ -443,8 +443,8 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "addBasicRuleButton"},
-		{"/app.js", "text/javascript", "addBasicRule"},
+		{"/", "text/html", "ruleDurationMin"},
+		{"/app.js", "text/javascript", "Duration needs min and max"},
 		{"/styles.css", "text/css", ".rule-builder"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)

@@ -417,11 +417,17 @@
 
   function addBasicRule() {
     var title = byId("ruleTitle");
+    var ignoreTitle = byId("ruleIgnoreTitle");
     var type = byId("ruleType");
     var category = byId("ruleCategory");
+    var durationMin = byId("ruleDurationMin");
+    var durationMax = byId("ruleDurationMax");
     var rule = {};
     if (title && title.value.trim()) {
       rule.reserve_titles = [title.value.trim()];
+    }
+    if (ignoreTitle && ignoreTitle.value.trim()) {
+      rule.ignore_titles = [ignoreTitle.value.trim()];
     }
     if (type && type.value) {
       rule.types = [type.value];
@@ -429,7 +435,22 @@
     if (category && category.value.trim()) {
       rule.categories = [category.value.trim()];
     }
-    if (!rule.reserve_titles && !rule.types && !rule.categories) {
+    var minText = durationMin ? durationMin.value.trim() : "";
+    var maxText = durationMax ? durationMax.value.trim() : "";
+    if (minText || maxText) {
+      if (!minText || !maxText) {
+        showError(new Error("Duration needs min and max"));
+        return;
+      }
+      var min = Number(minText);
+      var max = Number(maxText);
+      if (!isFinite(min) || !isFinite(max) || min < 0 || max < 0 || min > max) {
+        showError(new Error("Duration range is invalid"));
+        return;
+      }
+      rule.duration = { min: Math.round(min * 60), max: Math.round(max * 60) };
+    }
+    if (!rule.reserve_titles && !rule.ignore_titles && !rule.types && !rule.categories && !rule.duration) {
       showError(new Error("Rule is empty"));
       return;
     }
@@ -438,8 +459,17 @@
       if (title) {
         title.value = "";
       }
+      if (ignoreTitle) {
+        ignoreTitle.value = "";
+      }
       if (category) {
         category.value = "";
+      }
+      if (durationMin) {
+        durationMin.value = "";
+      }
+      if (durationMax) {
+        durationMax.value = "";
       }
       refresh();
     }).catch(showError);

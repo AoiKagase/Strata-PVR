@@ -92,6 +92,10 @@
             <input id="ruleTitle" type="text" autocomplete="off">
           </label>
           <label>
+            <span>Ignore title</span>
+            <input id="ruleIgnoreTitle" type="text" autocomplete="off">
+          </label>
+          <label>
             <span>Type</span>
             <select id="ruleType">
               <option value="">Any</option>
@@ -104,6 +108,14 @@
           <label>
             <span>Category</span>
             <input id="ruleCategory" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span>Min duration</span>
+            <input id="ruleDurationMin" type="number" min="0" step="1" inputmode="numeric" placeholder="min">
+          </label>
+          <label>
+            <span>Max duration</span>
+            <input id="ruleDurationMax" type="number" min="0" step="1" inputmode="numeric" placeholder="min">
           </label>
           <button id="addBasicRuleButton" type="button" title="Add basic rule">Add Basic Rule</button>
         </div>
