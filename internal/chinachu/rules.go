@@ -30,14 +30,26 @@ func programMatchesRule(rule Rule, program Program, title string, cli bool) bool
 	}
 	if len(rule.Channels) > 0 {
 		id := program.Channel.Type + "_" + strconv.FormatInt(program.Channel.SID, 10)
-		if !contains(rule.Channels, program.Channel.ID) && !contains(rule.Channels, program.Channel.Channel) && !contains(rule.Channels, id) {
-			return false
+		if cli {
+			if !contains(rule.Channels, program.Channel.Channel) {
+				return false
+			}
+		} else {
+			if !contains(rule.Channels, program.Channel.ID) && !contains(rule.Channels, program.Channel.Channel) && !contains(rule.Channels, id) {
+				return false
+			}
 		}
 	}
 	if len(rule.IgnoreChannels) > 0 {
 		id := program.Channel.Type + "_" + strconv.FormatInt(program.Channel.SID, 10)
-		if contains(rule.IgnoreChannels, program.Channel.ID) || contains(rule.IgnoreChannels, program.Channel.Channel) || contains(rule.IgnoreChannels, id) {
-			return false
+		if cli {
+			if contains(rule.IgnoreChannels, program.Channel.Channel) {
+				return false
+			}
+		} else {
+			if contains(rule.IgnoreChannels, program.Channel.ID) || contains(rule.IgnoreChannels, program.Channel.Channel) || contains(rule.IgnoreChannels, id) {
+				return false
+			}
 		}
 	}
 	if rule.Category != "" && rule.Category != program.Category {

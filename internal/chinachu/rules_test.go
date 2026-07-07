@@ -109,6 +109,20 @@ func TestProgramMatchesRuleChannelForms(t *testing.T) {
 			t.Fatalf("expected channel %s to match", channel)
 		}
 	}
+	if !ProgramMatchesRuleForCLI(Rule{Channels: []string{"CS16"}, ReserveTitles: []string{"笑点"}}, program) {
+		t.Fatal("CLI channel should match program.channel.channel")
+	}
+	for _, channel := range []string{"x1", "CS_333"} {
+		if ProgramMatchesRuleForCLI(Rule{Channels: []string{channel}, ReserveTitles: []string{"笑点"}}, program) {
+			t.Fatalf("CLI channel %s should not match legacy app-cli.js filtering", channel)
+		}
+	}
+	if ProgramMatchesRuleForCLI(Rule{IgnoreChannels: []string{"CS16"}, ReserveTitles: []string{"笑点"}}, program) {
+		t.Fatal("CLI ignore_channels should reject program.channel.channel")
+	}
+	if !ProgramMatchesRuleForCLI(Rule{IgnoreChannels: []string{"x1"}, ReserveTitles: []string{"笑点"}}, program) {
+		t.Fatal("CLI ignore_channels should not reject channel id")
+	}
 }
 
 func TestProgramJSONPreservesUnknownFields(t *testing.T) {
