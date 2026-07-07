@@ -498,40 +498,96 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 const socketIOCompatScript = `(function(global){
-  function later(fn){ if (typeof fn === 'function') { setTimeout(fn, 0); } }
-  function repeat(fn, ms){ later(fn); return setInterval(fn, ms); }
+  function later(fn, arg){ if (typeof fn === 'function') { setTimeout(function(){ fn(arg); }, 0); } }
   function apiRoot(path) {
     var base = global.location && global.location.pathname ? global.location.pathname.replace(/[^\/]*$/g, '') : '/';
     return base + 'api/' + path;
   }
-  function fetchJSON(path, cb) {
+  function fetchText(path, cb) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', apiRoot(path), true);
     xhr.onreadystatechange = function(){
-      if (xhr.readyState === 4 && xhr.status >= 200 && xhr.status < 300) {
-        try { cb(JSON.parse(xhr.responseText)); } catch (e) {}
-      }
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status >= 200 && xhr.status < 300) { cb(null, xhr.responseText || ''); return; }
+      cb(new Error(path + ' returned ' + xhr.status), '');
     };
     xhr.send(null);
+  }
+  function parseJSON(body) {
+    try { return JSON.parse(body); } catch (e) { return null; }
+  }
+  function resourceForEvent(name) {
+    return {
+      'notify-status': 'status.json',
+      'notify-schedule': 'schedule.json',
+      'notify-reserves': 'reserves.json',
+      'notify-recording': 'recording.json',
+      'notify-recorded': 'recorded.json',
+      'notify-rules': 'rules.json',
+      'notify-config': 'config.json',
+      'notify-storage': 'storage.json'
+    }[name] || null;
   }
   global.io = global.io || {};
   global.io.connect = function(){
     var timers = [];
     var handlers = {};
-    function poll(fn, ms) { var timer = repeat(fn, ms); timers.push(timer); return timer; }
+    var snapshots = {};
+    var connected = true;
+    function poll(fn, ms) {
+      fn();
+      var timer = setInterval(fn, ms);
+      timers.push(timer);
+      return timer;
+    }
+    function fire(name, payload) {
+      var list = handlers[name] || [];
+      for (var i = 0; i < list.length; i++) { later(list[i], payload); }
+    }
+    function pollResource(name, path, ms, always) {
+      poll(function(){
+        if (!connected) { return; }
+        fetchText(path, function(err, body){
+          if (err) { fire('error', err); return; }
+          if (always || snapshots[name] !== body) {
+            snapshots[name] = body;
+            fire(name, parseJSON(body));
+          }
+        });
+      }, ms);
+    }
     return {
       on: function(name, cb) {
-        handlers[name] = cb;
+        if (!handlers[name]) { handlers[name] = []; }
+        handlers[name].push(cb);
         if (name === 'connect') { later(cb); return this; }
-        if (name === 'status') { poll(function(){ fetchJSON('status.json', cb); }, 5000); return this; }
-        if (name.indexOf('notify-') === 0) { poll(cb, 15000); return this; }
+        if (name === 'status') { pollResource('status', 'status.json', 5000, true); return this; }
+        if (name.indexOf('notify-') === 0) {
+          pollResource(name, resourceForEvent(name) || 'status.json', 5000, false);
+          return this;
+        }
+        return this;
+      },
+      once: function(name, cb) {
+        var socket = this;
+        function wrapped(payload) {
+          socket.off(name, wrapped);
+          cb(payload);
+        }
+        return this.on(name, wrapped);
+      },
+      off: function(name, cb) {
+        if (!handlers[name]) { return this; }
+        if (!cb) { handlers[name] = []; return this; }
+        handlers[name] = handlers[name].filter(function(fn){ return fn !== cb; });
         return this;
       },
       emit: function(){ return this; },
       disconnect: function(){
+        connected = false;
         for (var i = 0; i < timers.length; i++) { clearInterval(timers[i]); }
         timers = [];
-        later(handlers.disconnect);
+        fire('disconnect');
       }
     };
   };
