@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -1611,9 +1612,8 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			return
 		}
 		if watchNeedsTranscode(r) {
-			if r.Method == http.MethodHead {
-				w.Header().Set("Content-Type", "video/MP2T")
-				w.WriteHeader(http.StatusOK)
+			plan, ok := s.prepareLegacyM2TSWatch(w, r, filePath)
+			if !ok {
 				return
 			}
 			file, err := os.Open(filePath)
@@ -1622,7 +1622,19 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 				return
 			}
 			defer file.Close()
-			s.streamFFmpeg(w, r, file, "m2ts", false)
+			if r.Method == http.MethodHead {
+				return
+			}
+			input := io.Reader(file)
+			if plan.HasSourceEnd {
+				input = io.NewSectionReader(file, plan.SourceStart, plan.SourceEnd-plan.SourceStart+1)
+			} else if plan.SourceStart > 0 {
+				if _, err := file.Seek(plan.SourceStart, io.SeekStart); err != nil {
+					legacyHTTPError(w, r, http.StatusInternalServerError)
+					return
+				}
+			}
+			s.streamFFmpegWithStatus(w, r, input, "m2ts", false, plan.Status)
 			return
 		}
 		if r.URL.Query().Has("ss") {
@@ -1711,54 +1723,101 @@ func (s *server) checkLegacyRecordedWatchProbe(w http.ResponseWriter, r *http.Re
 }
 
 func (s *server) streamLegacyM2TSOffset(w http.ResponseWriter, r *http.Request, filePath string) bool {
+	plan, ok := s.prepareLegacyM2TSWatch(w, r, filePath)
+	if !ok {
+		return false
+	}
+	if r.Method == http.MethodHead {
+		return true
+	}
+	length := int64(-1)
+	if plan.HasSourceEnd {
+		length = plan.SourceEnd - plan.SourceStart + 1
+	}
+	if length >= 0 {
+		if err := copyFileRange(w, filePath, plan.SourceStart, length); err != nil {
+			return false
+		}
+		return true
+	}
+	if err := copyFileFromOffset(w, filePath, plan.SourceStart); err != nil {
+		return false
+	}
+	return true
+}
+
+type legacyM2TSWatchPlan struct {
+	Status       int
+	SourceStart  int64
+	SourceEnd    int64
+	HasSourceEnd bool
+}
+
+func (s *server) prepareLegacyM2TSWatch(w http.ResponseWriter, r *http.Request, filePath string) (legacyM2TSWatchPlan, bool) {
 	format, err := probeMediaFormat(r.Context(), filePath)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "error %v", err)
 		legacyHTTPError(w, r, http.StatusInternalServerError)
-		return false
+		return legacyM2TSWatchPlan{}, false
 	}
 	startSeconds, _ := strconv.Atoi(legacyWatchStart(r.URL.Query().Get("ss")))
+	bitrate := format.BitRate
+	if videoBitrate := legacyBitrateBits(r.URL.Query().Get("b:v")); videoBitrate != 0 {
+		audioBitrate := legacyBitrateBits(r.URL.Query().Get("b:a"))
+		if audioBitrate == 0 {
+			audioBitrate = legacyBitrateBits("96k")
+		}
+		bitrate = videoBitrate + audioBitrate
+	}
+	if bitrate == 0 {
+		bitrate = format.BitRate
+	}
+	totalSize := format.Size
+	if bitrate != format.BitRate && format.Duration > 0 {
+		totalSize = int64(float64(bitrate) / 8 * format.Duration)
+	}
+	if duration := r.URL.Query().Get("t"); duration != "" && format.Duration > 0 {
+		if durationSeconds, err := strconv.Atoi(duration); err == nil {
+			totalSize = int64(float64(totalSize) / format.Duration * float64(durationSeconds))
+		}
+	} else {
+		totalSize -= int64(bitrate/8) * int64(startSeconds-2)
+	}
+	if totalSize < 0 {
+		totalSize = 0
+	}
 	offset := int64(format.BitRate/8) * int64(startSeconds-2)
 	offset -= offset % 188
 	if offset < 0 {
 		offset = 0
 	}
-	totalSize := format.Size - offset
-	if totalSize < 0 {
-		totalSize = 0
-	}
+	plan := legacyM2TSWatchPlan{Status: http.StatusOK, SourceStart: offset}
 	w.Header().Set("Content-Type", "video/MP2T")
 	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
 		start, end, ok := parseLegacyWatchRange(rangeHeader, totalSize)
 		if !ok {
 			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
-			return false
+			return legacyM2TSWatchPlan{}, false
 		}
-		if start > format.Size || end > format.Size {
+		sourceStart := int64(math.Round(float64(start) / float64(bitrate) * float64(format.BitRate)))
+		sourceEnd := int64(math.Round(float64(end) / float64(bitrate) * float64(format.BitRate)))
+		if sourceStart > format.Size || sourceEnd > format.Size {
 			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
-			return false
+			return legacyM2TSWatchPlan{}, false
 		}
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize))
 		w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
 		w.WriteHeader(http.StatusPartialContent)
-		if r.Method == http.MethodHead {
-			return true
-		}
-		if err := copyFileRange(w, filePath, start, end-start+1); err != nil {
-			return false
-		}
-		return true
+		plan.Status = http.StatusPartialContent
+		plan.SourceStart = sourceStart
+		plan.SourceEnd = sourceEnd
+		plan.HasSourceEnd = true
+		return plan, true
 	}
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Length", strconv.FormatInt(totalSize, 10))
 	w.WriteHeader(http.StatusOK)
-	if r.Method == http.MethodHead {
-		return true
-	}
-	if err := copyFileFromOffset(w, filePath, offset); err != nil {
-		return false
-	}
-	return true
+	return plan, true
 }
 
 func parseLegacyWatchRange(header string, totalSize int64) (int64, int64, bool) {
@@ -2218,6 +2277,10 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 }
 
 func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool) {
+	s.streamFFmpegWithStatus(w, r, input, format, live, http.StatusOK)
+}
+
+func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
 	args := watchFFmpegArgs(r, s.cfg, format, live)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
 	if err != nil {
@@ -2233,7 +2296,7 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 	default:
 		w.Header().Set("Content-Type", "video/MP2T")
 	}
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	_, _ = io.Copy(w, output)
 	if err := wait(); err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)

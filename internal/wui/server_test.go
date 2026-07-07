@@ -1200,7 +1200,7 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "mpegtsdata", &gotInput, &gotArgs)
 	defer restore()
-	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"6","bit_rate":"1600"}}`, nil)
 	defer restoreProbe()
 	handler := NewHandler(paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?t=30&b:v=1m", nil)
@@ -1217,6 +1217,48 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("m2ts ffmpeg args missing %q: %s", want, joined)
 		}
+	}
+	if got := res.Header().Get("Accept-Ranges"); got != "bytes" {
+		t.Fatalf("Accept-Ranges = %q", got)
+	}
+	if got := res.Header().Get("Content-Length"); got != "4300800" {
+		t.Fatalf("Content-Length = %q", got)
+	}
+}
+
+func TestAPIRecordedWatchM2TSTranscodeRangeMapsSourceRange(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	body := strings.Repeat("0123456789", 100)
+	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []chinachu.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "mpegtsdata", &gotInput, &gotArgs)
+	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"10.0","size":"1000","bit_rate":"1000"}}`, nil)
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?b:v=1k&b:a=1k", nil)
+	req.Header.Set("Range", "bytes=0-99")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Body.String() != "mpegtsdata" {
+		t.Fatalf("m2ts transcode range status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Range"); got != "bytes 0-99/2560" {
+		t.Fatalf("Content-Range = %q", got)
+	}
+	if got := res.Header().Get("Content-Length"); got != "100" {
+		t.Fatalf("Content-Length = %q", got)
+	}
+	if gotInput != body[:49] {
+		t.Fatalf("ffmpeg ranged input length=%d input=%q", len(gotInput), gotInput)
 	}
 }
 
