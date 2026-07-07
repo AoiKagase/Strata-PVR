@@ -1382,7 +1382,7 @@ func compatWarnings(cfg *config.Config) []string {
 		warnings = append(warnings, "wuiMdnsAdvertisement: mDNS advertisement is intentionally not implemented")
 	}
 	if cfg.OperTweeter {
-		warnings = append(warnings, "operTweeter: Twitter notification integration is intentionally not implemented")
+		warnings = append(warnings, "operTweeter: Twitter notification integration is retired because the legacy Twitter API is unavailable")
 	}
 	for _, path := range []string{cfg.WUITlsKeyPath, cfg.WUITlsCertPath} {
 		ext := strings.ToLower(filepath.Ext(path))

@@ -168,6 +168,14 @@ h3 {
   padding: 22px clamp(14px, 3vw, 40px) 40px;
 }
 
+.view-schedule .workspace {
+  width: 100%;
+}
+
+.view-schedule .overview {
+  display: none;
+}
+
 .view[hidden] {
   display: none;
 }
@@ -433,7 +441,7 @@ button:disabled {
 
 .schedule-guide-scroll {
   overflow: auto;
-  max-height: calc(100vh - 190px);
+  height: clamp(460px, calc(100vh - 170px), 900px);
   border: 1px solid #aebfc7;
   border-radius: 8px;
   background: #dce6eb;
@@ -519,7 +527,7 @@ button:disabled {
   min-width: 0;
   border-right: 1px solid #d8e0e4;
   background:
-    linear-gradient(to bottom, rgba(216, 224, 228, 0.9) 1px, transparent 1px) 0 0 / 100% 43.2px,
+    linear-gradient(to bottom, rgba(216, 224, 228, 0.9) 1px, transparent 1px) 0 0 / 100% 69px,
     #ffffff;
 }
 

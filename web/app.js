@@ -1,5 +1,12 @@
 (function () {
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
+  var scheduleWindowHoursByMode = {
+    "day": 24,
+    "three-days": 72,
+    "all": 0
+  };
+  var scheduleMinutePixels = 1.15;
+  var scheduleMinimumProgramMinutes = 30;
 
   var state = {
     status: null,
@@ -16,8 +23,7 @@
     scheduleDay: "",
     scheduleGenre: "",
     scheduleHiddenChannels: loadHiddenChannels(),
-    scheduleWindowHours: 24,
-    scheduleLimit: 50,
+    scheduleWindowMode: "day",
     channelProgramsChannel: "",
     channelProgramsGenre: "",
     channelProgramsSort: "start",
@@ -626,7 +632,14 @@
   }
 
   function programEnd(program) {
-    return program.end || (program.start + 30 * 60 * 1000);
+    return program.end || (program.start + scheduleMinimumProgramMinutes * 60 * 1000);
+  }
+
+  function scheduleWindowHours() {
+    if (Object.prototype.hasOwnProperty.call(scheduleWindowHoursByMode, state.scheduleWindowMode)) {
+      return scheduleWindowHoursByMode[state.scheduleWindowMode];
+    }
+    return scheduleWindowHoursByMode.day;
   }
 
   function channelProgramGroups() {
@@ -741,14 +754,12 @@
       return;
     }
     var channels = state.schedule || [];
-    var candidates = [];
     var channelOrder = [];
     var channelMeta = {};
     var channelGroups = [];
-    var groupsByID = {};
-    var limit = state.scheduleLimit || 20;
     var now = Date.now();
-    var until = state.scheduleWindowHours > 0 ? now + (state.scheduleWindowHours * 60 * 60 * 1000) : 0;
+    var hours = scheduleWindowHours();
+    var until = hours > 0 ? now + (hours * 60 * 60 * 1000) : 0;
 
     channels.forEach(function (channel) {
       var channelID = scheduleChannelID(channel);
@@ -794,24 +805,15 @@
         if (item.channel) {
           item.channel.name = scheduleProgramChannelName(item, displayName);
         }
-        candidates.push({
-          channelID: groupID,
-          program: item
-        });
+        channelMeta[groupID].programs.push(item);
       });
     });
-    candidates.sort(function (a, b) {
-      return (a.program.start || 0) - (b.program.start || 0);
-    });
-    candidates.slice(0, limit).forEach(function (item) {
-      if (!groupsByID[item.channelID]) {
-        groupsByID[item.channelID] = channelMeta[item.channelID];
-      }
-      groupsByID[item.channelID].programs.push(item.program);
-    });
     channelOrder.forEach(function (id) {
-      if (groupsByID[id] && groupsByID[id].programs.length) {
-        channelGroups.push(groupsByID[id]);
+      if (channelMeta[id] && channelMeta[id].programs.length) {
+        channelMeta[id].programs.sort(function (a, b) {
+          return (a.start || 0) - (b.start || 0);
+        });
+        channelGroups.push(channelMeta[id]);
       }
     });
     renderScheduleChannelOptions(channels);
@@ -829,14 +831,14 @@
   function renderScheduleGuide(root, channelGroups) {
     var firstStart = null;
     var lastEnd = null;
-    var minuteHeight = 0.72;
+    var minuteHeight = scheduleMinutePixels;
 
     channelGroups.forEach(function (group) {
       group.programs.forEach(function (program) {
         if (firstStart === null || program.start < firstStart) {
           firstStart = program.start;
         }
-        var end = program.end || (program.start + 30 * 60 * 1000);
+        var end = programEnd(program);
         if (lastEnd === null || end > lastEnd) {
           lastEnd = end;
         }
@@ -845,7 +847,7 @@
     firstStart = Math.floor(firstStart / 3600000) * 3600000;
     lastEnd = Math.ceil(lastEnd / 3600000) * 3600000;
     var totalMinutes = Math.max(60, Math.round((lastEnd - firstStart) / 60000));
-    var guideHeight = Math.max(180, Math.round(totalMinutes * minuteHeight));
+    var guideHeight = Math.max(360, Math.round(totalMinutes * minuteHeight));
 
     root.className = "schedule-guide";
     var scroll = document.createElement("div");
@@ -982,7 +984,7 @@
   function renderScheduleCard(program, timelineStart, minuteHeight) {
     var card = document.createElement("article");
     card.className = "schedule-card" + categoryClass(program.category);
-    var end = program.end || (program.start + 30 * 60 * 1000);
+    var end = programEnd(program);
     var top = Math.max(0, Math.round(((program.start - timelineStart) / 60000) * minuteHeight));
     var height = Math.max(24, Math.round(((end - program.start) / 60000) * minuteHeight));
     card.style.top = top + "px";
@@ -1024,7 +1026,7 @@
     var meta = byId("programDialogMeta");
     var description = byId("programDialogDescription");
     var actions = byId("programDialogActions");
-    var end = program.end || (program.start + 30 * 60 * 1000);
+    var end = programEnd(program);
     state.selectedProgram = program;
     text(title, programTitle(program));
     text(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), program.category, formatDuration(program.start, end)].filter(Boolean).join(" / "));
@@ -2271,16 +2273,9 @@
     }
     var scheduleWindow = byId("scheduleWindow");
     if (scheduleWindow) {
+      scheduleWindow.value = state.scheduleWindowMode;
       scheduleWindow.addEventListener("change", function () {
-        state.scheduleWindowHours = Number(scheduleWindow.value) || 0;
-        renderSchedule();
-      });
-    }
-    var scheduleLimit = byId("scheduleLimit");
-    if (scheduleLimit) {
-      scheduleLimit.value = String(state.scheduleLimit);
-      scheduleLimit.addEventListener("change", function () {
-        state.scheduleLimit = Number(scheduleLimit.value) || 50;
+        state.scheduleWindowMode = scheduleWindow.value || "day";
         renderSchedule();
       });
     }

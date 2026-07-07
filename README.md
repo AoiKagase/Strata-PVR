@@ -155,7 +155,7 @@ settings panel shows non-secret runtime configuration such as Mirakurun URL,
 recorded directory, WUI ports, storage policy, and normalization, and includes
 common and detailed settings forms plus a validated raw JSON editor for
 `config.json` updates through the legacy API.
-The schedule panel can filter by channel, time range, and item count while
+The schedule panel can filter by channel and time range while
 keeping the existing `/api/schedule.json` data path. Program detail dialogs can
 open the selected program's channel MP4 stream, jump to the channel program
 list, and prefill the rule form from the selected schedule program. The
@@ -167,8 +167,10 @@ rule-creation actions. Hidden-channel filters are remembered locally in the
 browser and can be restored per channel or all at once.
 
 Native settings forms cover WUI auth/country/service-order/proxy/mDNS/TLS,
-VAAPI, priorities, low-space notify/command settings, and hook commands. Use
-the raw JSON editor or direct `config.json` edits for secret or nested rare
-fields such as `operTweeterAuth`. The legacy-compatible `/api/config.json` PUT
-endpoint remains available for old clients. The frontend does not require
+VAAPI, priorities, low-space notify/command settings, and hook commands. The
+old Tweeter/Twitter notification fields are preserved only for config
+compatibility and are treated as retired because the legacy Twitter API is no
+longer available. Use the raw JSON editor or direct `config.json` edits for
+other secret or nested rare fields. The legacy-compatible `/api/config.json`
+PUT endpoint remains available for old clients. The frontend does not require
 Node.js, npm, webpack, or any Node-based build step.
