@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1,
+    "serviceId": 101,
+    "networkId": 1,
+    "name": "Fixture GR",
+    "hasLogoData": true,
+    "channel": {
+      "type": "GR",
+      "channel": "27"
+    }
+  }
+]

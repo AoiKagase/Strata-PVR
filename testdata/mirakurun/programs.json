@@ -1,0 +1,19 @@
+[
+  {
+    "id": 10,
+    "networkId": 1,
+    "serviceId": 101,
+    "name": "Fixture Anime",
+    "description": "Fixture episode",
+    "startAt": 1720011600000,
+    "duration": 3600000,
+    "genres": [
+      {
+        "lv1": 7
+      }
+    ],
+    "extended": {
+      "episode": "1"
+    }
+  }
+]

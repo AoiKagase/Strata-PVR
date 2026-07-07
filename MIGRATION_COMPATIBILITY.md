@@ -229,6 +229,14 @@ The JS Mirakurun client calls:
 
 Current Go client status: partially compatible for HTTP, `http+unix`, and legacy `http://unix:` URL setup plus services/programs/tuners, program stream, service stream, service logo requests, Strata PVR User-Agent values for scheduler/operator/WUI requests, and `X-Mirakurun-Priority`. The User-Agent product token intentionally uses the new project name instead of the legacy product name.
 
+Mirakurun scheduler fixtures now live under `testdata/mirakurun/`:
+
+- `services.json`
+- `programs.json`
+- `tuners.json`
+
+They are used by scheduler tests to exercise schedule import and reservation generation without requiring a live Mirakurun instance.
+
 ## Side Effects
 
 - Wrapper creates `config.json` and `rules.json` from samples during `service ... execute` if missing.
@@ -271,4 +279,4 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Installer/updater | intentionally changed; commands are accepted and provide Go-runtime guidance, but Node-era dependency installation, git automation, and service mutation are not performed. |
 | Logging | partially compatible |
 | Compat doctor/check/diff/backup/wrapper | implemented; validates required JSON state files, `data/`, writable `recordedDir`, native Strata PVR or legacy WUI static entry files, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, warns about intentionally omitted personal-use-overkill integrations, reports dry-run JSON rewrite differences for compatible state files, can back up current JSON state files under `backup/strata-pvr-*`, and can print a safe shell wrapper for manual review/install. |
-| Tests | partially compatible |
+| Tests | partially compatible; Go unit/integration tests cover config parsing, rule matching, recorded filename formatting, JSON state helpers, CLI behavior, scheduler decisions, operator state transitions, mock Mirakurun client behavior, WUI/API routes, static asset serving, and scheduler import from `testdata/mirakurun` fixtures. Optional JavaScript oracle tests remain future work and are not required for normal `go test ./...`. |

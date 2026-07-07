@@ -41,6 +41,8 @@ go build -o strata-pvr ./cmd/strata-pvr
 
 The final runtime must not require Node.js. Optional JS-vs-Go compatibility
 oracle tests may be added later, but ordinary Go tests must pass without Node.
+Mirakurun scheduler fixtures are kept under `testdata/mirakurun/` for Go tests
+that should not depend on a live Mirakurun instance.
 
 ## Usage
 

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -52,6 +53,19 @@ func (f fakeSource) Programs(context.Context) ([]mirakurun.Program, error) {
 }
 func (f fakeSource) Tuners(context.Context) ([]mirakurun.Tuner, error) {
 	return f.tuners, f.tunersErr
+}
+
+func loadFixture[T any](t *testing.T, path string) T {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value T
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	return value
 }
 
 func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
@@ -168,6 +182,50 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), `TUNERS: {"GR":1}`) {
 		t.Fatalf("scheduler log missing legacy tuner type counts: %s", string(logData))
+	}
+}
+
+func TestRunWithSourceUsesMirakurunFixtures(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{
+		Rules:    filepath.Join(dir, "rules.json"),
+		Schedule: filepath.Join(dir, "data", "schedule.json"),
+		Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.Mkdir(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte(`[{"reserve_titles":["Fixture Anime"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2024, 7, 3, 20, 0, 0, 0, time.Local)
+	programs := loadFixture[[]mirakurun.Program](t, filepath.Join("mirakurun", "programs.json"))
+	programs[0].StartAt = now.Add(time.Hour).UnixMilli()
+	src := fakeSource{
+		services: loadFixture[[]mirakurun.Service](t, filepath.Join("mirakurun", "services.json")),
+		programs: programs,
+		tuners:   loadFixture[[]mirakurun.Tuner](t, filepath.Join("mirakurun", "tuners.json")),
+	}
+
+	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Matches != 1 || result.Reserves != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	var reserves []legacy.Program
+	if data, err := os.ReadFile(paths.Reserves); err != nil {
+		t.Fatal(err)
+	} else if err := json.Unmarshal(data, &reserves); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].Title != "Fixture Anime" || reserves[0].Channel.Name != "Fixture GR" {
+		t.Fatalf("unexpected reserves from fixtures: %#v", reserves)
 	}
 }
 
