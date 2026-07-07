@@ -222,6 +222,9 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("log txt status = %d body=%s", res.Code, res.Body.String())
 	}
+	if got := res.Header().Get("Content-Type"); got != "text/plain" {
+		t.Fatalf("log txt content-type = %q", got)
+	}
 }
 
 func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
@@ -1979,6 +1982,9 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != logData {
 		t.Fatalf("scheduler txt status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "text/plain" {
+		t.Fatalf("scheduler txt content-type=%q", got)
 	}
 
 	req = httptest.NewRequest(http.MethodPut, "/api/scheduler.json", nil)

@@ -999,7 +999,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
 			_, _ = w.Write(data)
@@ -1055,7 +1055,7 @@ func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, 
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
 		return
