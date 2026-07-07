@@ -355,7 +355,7 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		decoded, err := base64.StdEncoding.DecodeString(auth)
 		if err != nil || !stringIn(s.cfg.WUIUsers, string(decoded)) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Authentication."`)
-			http.Error(w, "401 Authorization Required", http.StatusUnauthorized)
+			legacyHTTPError(w, r, http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)

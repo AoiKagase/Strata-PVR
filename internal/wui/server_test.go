@@ -1757,6 +1757,16 @@ func TestAPIAuth(t *testing.T) {
 	if got := res.Header().Get("WWW-Authenticate"); got != `Basic realm="Authentication."` {
 		t.Fatalf("WWW-Authenticate = %q", got)
 	}
+	if res.Body.String() != "401 Unauthorized\n" {
+		t.Fatalf("unauthorized body = %q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodHead, "/api/schedule.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized || res.Body.Len() != 0 {
+		t.Fatalf("HEAD without auth status=%d body=%q", res.Code, res.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:pass")))
