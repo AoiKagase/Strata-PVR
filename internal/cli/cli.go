@@ -1364,6 +1364,12 @@ func compatWarnings(cfg *config.Config) []string {
 	warnings := []string{
 		"native settings editing: the Go dashboard is intentionally read-only; edit config.json directly or use the legacy-compatible /api/config.json PUT endpoint with care",
 	}
+	for _, user := range cfg.WUIUsers {
+		if user == "strata:yoshikawa" || user == "chinachu:yoshikawa" {
+			warnings = append(warnings, "wuiUsers: sample WUI credential is configured; change it before exposing the authenticated listener")
+			break
+		}
+	}
 	if len(cfg.WUIAllowCountries) > 0 {
 		warnings = append(warnings, "wuiAllowCountries: GeoIP country filtering is not implemented; restrict access at firewall/reverse proxy if needed")
 	}

@@ -645,7 +645,7 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	}
 	writeCompatWebAssets(t, "web")
 	for name, data := range map[string]string{
-		"config.json":                           `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `","wuiAllowCountries":["JP"],"wuiMdnsAdvertisement":true,"operTweeter":true,"wuiTlsKeyPath":"server.pfx"}`,
+		"config.json":                           `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `","wuiUsers":["strata:yoshikawa"],"wuiAllowCountries":["JP"],"wuiMdnsAdvertisement":true,"operTweeter":true,"wuiTlsKeyPath":"server.pfx"}`,
 		"rules.json":                            `[]`,
 		filepath.Join("data", "schedule.json"):  `[]`,
 		filepath.Join("data", "reserves.json"):  `[]`,
@@ -664,6 +664,7 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	text := out.String()
 	for _, want := range []string{
 		"WARN native settings editing",
+		"WARN wuiUsers",
 		"WARN wuiAllowCountries",
 		"WARN wuiMdnsAdvertisement",
 		"WARN operTweeter",
