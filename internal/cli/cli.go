@@ -52,6 +52,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "installer":
 		fmt.Fprintln(stdout, "Chinachu-Go installer: Node.js/npm modules are not required.")
+		fmt.Fprintln(stdout, "Automatic Node-era dependency installation is intentionally not performed; build or install the chinachu-go binary directly.")
 		return nil
 	case "updater":
 		fmt.Fprintln(stdout, "Chinachu-Go updater: automatic git/service/installer operations are intentionally not performed.")

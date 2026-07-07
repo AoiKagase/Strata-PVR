@@ -27,7 +27,7 @@ before or after the ID.
 
 | Command | Current Go status | Notes |
 | --- | --- | --- |
-| `installer` | partially compatible | Accepted. Node/npm installation is intentionally not performed. |
+| `installer` | intentionally changed | Accepted. Node/npm and Node-era dependency installation are intentionally not performed; build or install the Go binary directly. |
 | `updater` | intentionally changed | Accepted, but automatic git/service/installer operations are not performed. This avoids Node/npm runtime assumptions and destructive service changes; users should update repository/binary explicitly. |
 | `service <operator|wui> <initscript|execute>` | partially compatible | Initscript generation uses the Go binary and includes legacy LSB headers, start/stop/restart/status handling, `/var/run/chinachu-*.pid`, `su $USER` launch, and process-group `SIGQUIT` stop behavior. `execute` creates missing `config.json`/`rules.json` from samples and ensures `log/` and `data/`; `operator execute` runs the Go operator loop; `wui execute` starts the Go WUI/API server. |
 | `update [-s|--simulation]` | partially compatible | Fetches Mirakurun services/programs/tuners, writes schedule/reserves, applies rules/manual/skip/conflict logic, maintains `data/scheduler.pid`, runs scheduler/EPG/conflict hooks, and logs legacy Mirakurun fetch/error/reserve/conflict/skip/write/tuner/duplicate/result lines. |
@@ -260,7 +260,7 @@ Current Go client status: partially compatible for HTTP, `http+unix`, and legacy
 | Scheduler | partially compatible |
 | Operator/recorder | partially compatible; startup recording-state cleanup, missing `recordedDir` creation, active `abort:true` polling, ctx/signal cancellation that closes active streams and finalizes recording/recorded state, `recordedCommand` execution, `data/operator.pid` lifecycle, process context cancellation on `SIGINT`/`SIGTERM`/Unix `SIGQUIT`, and low-storage `remove`/`stop`/sendmail core actions with throttling implemented, but exact logs and every in-flight signal edge case remain incomplete. |
 | WUI/API | partially compatible |
-| Installer/updater | partially compatible |
+| Installer/updater | intentionally changed; commands are accepted and provide Go-runtime guidance, but Node-era dependency installation, git automation, and service mutation are not performed. |
 | Logging | partially compatible |
 | Compat doctor/check/diff/backup | implemented; validates required JSON state files, `data/`, writable `recordedDir`, legacy WUI static entry files/directories, available disk space lookup, Mirakurun services/programs/tuners reachability, Node.js runtime non-requirement, warns about intentionally omitted personal-use-overkill integrations, reports dry-run JSON rewrite differences for compatible state files, and can back up current JSON state files under `backup/`. |
 | Tests | partially compatible |

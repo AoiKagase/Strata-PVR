@@ -36,6 +36,17 @@ func TestUpdaterAcceptedWithoutNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestInstallerAcceptedWithoutNodeRuntime(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"installer"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "Node.js/npm modules are not required") || !strings.Contains(text, "Automatic Node-era dependency installation is intentionally not performed") {
+		t.Fatalf("unexpected installer output: %s", text)
+	}
+}
+
 func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	var out bytes.Buffer
 	if err := Run(context.Background(), []string{"service", "operator", "initscript"}, &out, &bytes.Buffer{}); err != nil {
