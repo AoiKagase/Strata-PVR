@@ -1,6 +1,10 @@
 package chinachu
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"sort"
+)
 
 type Channel struct {
 	Type        string                     `json:"type,omitempty"`
@@ -54,7 +58,7 @@ func (c Channel) MarshalJSON() ([]byte, error) {
 	for key, value := range known {
 		out[key] = value
 	}
-	return json.Marshal(out)
+	return marshalOrderedObject(out, channelJSONKeys())
 }
 
 func channelJSONKeys() []string {
@@ -136,7 +140,7 @@ func (p Program) MarshalJSON() ([]byte, error) {
 	for key, value := range known {
 		out[key] = value
 	}
-	return json.Marshal(out)
+	return marshalOrderedObject(out, programJSONKeys())
 }
 
 func programJSONKeys() []string {
@@ -211,7 +215,45 @@ func (s ChannelSchedule) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	out["programs"] = programsBytes
-	return json.Marshal(out)
+	return marshalOrderedObject(out, append(channelJSONKeys(), "programs"))
+}
+
+func marshalOrderedObject(values map[string]json.RawMessage, order []string) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	wrote := false
+	writeField := func(key string, value json.RawMessage) {
+		if value == nil {
+			return
+		}
+		if wrote {
+			buf.WriteByte(',')
+		}
+		keyBytes, _ := json.Marshal(key)
+		buf.Write(keyBytes)
+		buf.WriteByte(':')
+		buf.Write(value)
+		wrote = true
+	}
+	seen := make(map[string]bool, len(order))
+	for _, key := range order {
+		seen[key] = true
+		if value, ok := values[key]; ok {
+			writeField(key, value)
+		}
+	}
+	extras := make([]string, 0, len(values))
+	for key := range values {
+		if !seen[key] {
+			extras = append(extras, key)
+		}
+	}
+	sort.Strings(extras)
+	for _, key := range extras {
+		writeField(key, values[key])
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
 
 type RangeRule struct {
