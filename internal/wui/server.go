@@ -677,6 +677,9 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		s.handleRecorded(w, r)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
+		if !requireAPIType(w, r, apiType, "json", "m2ts") {
+			return
+		}
 		s.handleRecordedFile(w, r, parts[1], apiType)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "preview":
 		s.handleProgramPreview(w, r, s.paths.Recorded, parts[1])
@@ -1489,7 +1492,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			w.Header().Set("Content-Type", "video/MP2T")
 			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.m2ts"`, id))
 			http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
-		case "json", "":
+		case "json":
 			writePrettyJSON(w, http.StatusOK, fileStatJSON(info))
 		default:
 			legacyHTTPError(w, r, http.StatusUnsupportedMediaType)

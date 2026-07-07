@@ -1047,6 +1047,13 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 		t.Fatalf("content-disposition = %q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "415 Unsupported Media Type\n" {
+		t.Fatalf("file without extension status=%d body=%q", res.Code, res.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.m2ts", nil)
 	req.Header.Set("Range", "bytes=7-10")
 	res = httptest.NewRecorder()
