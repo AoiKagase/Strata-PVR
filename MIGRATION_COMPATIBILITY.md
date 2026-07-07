@@ -37,7 +37,7 @@ before or after the ID.
 | `skip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, target JSON output, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
 | `unskip <pgid> [-s|--simulation]` | partially compatible | Data side effect, simulation output, legacy `skip:` output label, legacy pre-update target JSON output, `isSkip` property removal on write, and legacy `-id/--id` program ID options implemented; known program/channel JSON fields now emit in Chinachu struct order, but unknown-field insertion order and obscure spacing edge cases remain incomplete. |
 | `stop <pgid> [-s|--simulation]` | partially compatible | Marks recording entry with `abort:true`, sets the matching auto reserve to `isSkip:true`, supports simulation/JSON output like the Node CLI, and accepts legacy `-id/--id` program ID options. |
-| `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; JSON output field ordering/spacing still differs from Node. |
+| `rule` | partially compatible | Adds/updates/removes rules with core matching fields. Supports Node-style deletion markers such as `-title null` and `-start -1`; known rule JSON fields now emit in legacy-oriented order with `isDisabled` last, but unknown/insertion-order edge cases still differ from Node. |
 | `enrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --enable`. |
 | `disrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --disable`. |
 | `rmrule <rule#>` | partially compatible | Alias for `rule -n <rule#> --remove`. |
@@ -142,7 +142,7 @@ Rule matching status: partially compatible. Type/channel/category/hour/duration/
 | File | Schema | Writer(s) | Status |
 | --- | --- | --- | --- |
 | `config.json` | JSON object, unknown fields allowed. | API config PUT writes the supplied `json` query value after validation. | partially compatible |
-| `rules.json` | Array of rule objects. Pretty printed by rule/API writes. | CLI/API | partially compatible |
+| `rules.json` | Array of rule objects. Pretty printed by rule/API writes; known fields emit in a stable legacy-oriented order. | CLI/API | partially compatible |
 | `data/schedule.json` | Array of channel objects with `programs`. | scheduler | partially compatible |
 | `data/reserves.json` | Array of program objects. Program and nested channel unknown fields are preserved across Go read/write cycles where the object is unmarshaled as `chinachu.Program`; known fields are emitted in a stable Chinachu-compatible order. | scheduler/CLI/API/operator | partially compatible |
 | `data/recording.json` | Array of recording program objects; `abort:true` requests stop. Go operator now polls this file while recording and closes the active stream when abort is set. CLI stop also updates matching auto reserves to skip. Program and nested channel unknown fields are preserved across Go read/write cycles where practical; known fields are emitted in a stable Chinachu-compatible order. | operator/CLI/API | partially compatible |

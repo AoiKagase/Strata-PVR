@@ -48,3 +48,26 @@ func TestChannelScheduleJSONPutsProgramsAfterChannelFields(t *testing.T) {
 		t.Fatalf("schedule JSON should keep channel fields before programs: %s", text)
 	}
 }
+
+func TestRuleJSONUsesLegacyKnownFieldOrder(t *testing.T) {
+	rule := Rule{
+		IsDisabled:    true,
+		Types:         []string{"GR"},
+		Categories:    []string{"anime"},
+		ReserveTitles: []string{"Title"},
+	}
+	encoded, err := json.Marshal(rule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	for _, pair := range [][2]string{
+		{`"types"`, `"categories"`},
+		{`"categories"`, `"reserve_titles"`},
+		{`"reserve_titles"`, `"isDisabled"`},
+	} {
+		if strings.Index(text, pair[0]) == -1 || strings.Index(text, pair[0]) > strings.Index(text, pair[1]) {
+			t.Fatalf("rule JSON order %s before %s not preserved: %s", pair[0], pair[1], text)
+		}
+	}
+}

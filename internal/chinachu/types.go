@@ -322,6 +322,36 @@ type Rule struct {
 	RecordedFormat      string        `json:"recorded_format,omitempty"`
 }
 
+func (r Rule) MarshalJSON() ([]byte, error) {
+	type ruleAlias Rule
+	knownBytes, err := json.Marshal(ruleAlias(r))
+	if err != nil {
+		return nil, err
+	}
+	var known map[string]json.RawMessage
+	if err := json.Unmarshal(knownBytes, &known); err != nil {
+		return nil, err
+	}
+	return marshalOrderedObject(known, []string{
+		"sid",
+		"types",
+		"channels",
+		"ignore_channels",
+		"category",
+		"categories",
+		"hour",
+		"duration",
+		"reserve_titles",
+		"ignore_titles",
+		"reserve_descriptions",
+		"ignore_descriptions",
+		"reserve_flags",
+		"ignore_flags",
+		"recorded_format",
+		"isDisabled",
+	})
+}
+
 func GetProgramByID(id string, schedules []ChannelSchedule, programs []Program) *Program {
 	for i := range schedules {
 		for j := range schedules[i].Programs {
