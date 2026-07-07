@@ -81,9 +81,11 @@ Compatibility and environment checks are available with:
 
 `compat doctor` includes the same checks plus a non-secret configuration
 summary for Mirakurun, configured and resolved recording paths, WUI listeners,
-and storage policy. It also prints state-file counts for schedule channels,
-reserves, active recordings, and recorded entries, warns when active recordings
-are present, prints conservative next-step commands, and warns when the local
+and storage policy. The checks include the bundled `config.sample.json` and
+`rules.sample.json`, so packaging mistakes are caught before first-run service
+initialization. It also prints state-file counts for schedule channels, reserves,
+active recordings, and recorded entries, warns when active recordings are
+present, prints conservative next-step commands, and warns when the local
 `strata-pvr` binary expected by generated wrappers and init scripts is not
 present yet.
 

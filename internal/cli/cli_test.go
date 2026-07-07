@@ -221,6 +221,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	files := map[string]string{
 		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
 		"rules.json":          `[]`,
+		"config.sample.json":  `{"recordedDir":"recorded"}`,
+		"rules.sample.json":   `[]`,
 		"data/schedule.json":  `[]`,
 		"data/reserves.json":  `[]`,
 		"data/recording.json": `[]`,
@@ -241,6 +243,8 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 	for _, want := range []string{
 		"OK config.json",
 		"OK rules.json",
+		"OK config.sample.json",
+		"OK rules.sample.json",
 		"OK data directory",
 		"OK log directory",
 		"OK recordedDir",
@@ -647,6 +651,8 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	for name, data := range map[string]string{
 		"config.json":                           `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `","wuiUsers":["strata:yoshikawa"],"wuiAllowCountries":["JP"],"wuiOpenServer":true,"wuiMdnsAdvertisement":true,"operTweeter":true,"wuiTlsKeyPath":"server.pfx"}`,
 		"rules.json":                            `[]`,
+		"config.sample.json":                    `{"recordedDir":"recorded"}`,
+		"rules.sample.json":                     `[]`,
 		filepath.Join("data", "schedule.json"):  `[]`,
 		filepath.Join("data", "reserves.json"):  `[]`,
 		filepath.Join("data", "recording.json"): `[]`,

@@ -1189,6 +1189,8 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 		}{
 			{"config.json", validateJSONObjectFile("config.json")},
 			{"rules.json", validateJSONArrayFile("rules.json")},
+			{"config.sample.json", validateJSONObjectFile("config.sample.json")},
+			{"rules.sample.json", validateJSONArrayFile("rules.sample.json")},
 			{"data directory", validateDir("data")},
 			{"log directory", validateWritableDir("log")},
 			{"recordedDir", recordedDirErr},
