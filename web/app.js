@@ -159,6 +159,11 @@
     request(path, method).then(refresh).catch(showError);
   }
 
+  function recordedWatchURL(program, ext, query) {
+    var url = "/api/recorded/" + encodeURIComponent(program.id) + "/watch." + ext;
+    return query ? url + "?" + query : url;
+  }
+
   function renderActions(item, program, actions) {
     if (!actions || actions.length === 0) {
       return;
@@ -192,15 +197,23 @@
         }));
       } else if (name === "watch-m2ts") {
         row.appendChild(actionButton("Watch M2TS", "Open M2TS stream", function () {
-          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.m2ts";
+          window.location.href = recordedWatchURL(program, "m2ts");
         }));
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("Watch MP4", "Open MP4 stream", function () {
-          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.mp4";
+          window.location.href = recordedWatchURL(program, "mp4");
+        }));
+      } else if (name === "watch-mp4-720p") {
+        row.appendChild(actionButton("MP4 720p", "Open 720p MP4 transcode", function () {
+          window.location.href = recordedWatchURL(program, "mp4", "s=1280x720&b%3Av=1800k&b%3Aa=128k");
+        }));
+      } else if (name === "watch-mp4-low") {
+        row.appendChild(actionButton("MP4 Low", "Open low bitrate MP4 transcode", function () {
+          window.location.href = recordedWatchURL(program, "mp4", "s=640x360&b%3Av=800k&b%3Aa=96k");
         }));
       } else if (name === "playlist") {
         row.appendChild(actionButton("XSPF", "Open XSPF playlist", function () {
-          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.xspf";
+          window.location.href = recordedWatchURL(program, "xspf");
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("Download", "Download recorded file", function () {
@@ -518,7 +531,7 @@
 
     renderList("recordingList", state.recording, "No active recordings", 8, ["watch-recording", "stop"]);
     renderList("reserveList", state.reserves, "No reserves", 8, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch-m2ts", "watch-mp4", "playlist", "download", "delete-recorded"]);
+    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "playlist", "download", "delete-recorded"]);
     renderSchedule();
     renderRules();
     renderSettings();

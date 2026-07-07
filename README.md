@@ -113,9 +113,9 @@ basic Go API actions for reserving schedule items, skipping/unskipping reserves,
 removing manual reserves, stopping active recordings, and opening/downloading or
 deleting recorded items. It also lists auto-reservation rules, can enable,
 disable, delete, add rules from JSON, and add common title/ignore-title/type/
-category/duration rules from form fields. Recorded items expose M2TS, MP4, XSPF,
-download, and delete actions, and active recordings expose a live M2TS watch
-action. The legacy WUI
+category/duration rules from form fields. Recorded items expose M2TS, direct MP4,
+720p MP4, low-bitrate MP4, XSPF, download, and delete actions, and active
+recordings expose a live M2TS watch action. The legacy WUI
 asset fallback remains available during compatibility work. Scheduler, operator,
 and WUI logs are visible from the dashboard as tail-style text panels. A
 read-only settings panel shows non-secret runtime configuration such as
@@ -124,7 +124,7 @@ The schedule panel can filter by channel, time range, and item count while
 keeping the existing `/api/schedule.json` data path.
 
 The frontend still needs full rule editing for every legacy field and, if
-desired, advanced playback/transcode controls before it can replace every legacy
+desired, custom playback/transcode controls before it can replace every legacy
 WUI workflow. For personal deployments, settings editing is intentionally
 read-only because direct `config.json` editing is safer and easier to audit; the
 legacy-compatible `/api/config.json` PUT endpoint remains available for old

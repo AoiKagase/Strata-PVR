@@ -444,7 +444,7 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contains    string
 	}{
 		{"/", "text/html", "ruleDurationMin"},
-		{"/app.js", "text/javascript", "Duration needs min and max"},
+		{"/app.js", "text/javascript", "MP4 720p"},
 		{"/styles.css", "text/css", ".rule-builder"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
