@@ -235,6 +235,28 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	}
 }
 
+func TestAPIInternalErrorsUseLegacyBody(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := os.MkdirAll(filepath.Dir(paths.Reserves), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Reserves, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/reserves.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%q", res.Code, res.Body.String())
+	}
+	if res.Body.String() != "500 Internal Server Error\n" {
+		t.Fatalf("body=%q", res.Body.String())
+	}
+}
+
 func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

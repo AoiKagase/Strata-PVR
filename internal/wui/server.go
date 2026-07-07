@@ -704,7 +704,7 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 	}
 	var v any
 	if err := storage.ReadJSON(path, &v, empty); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	writeCompactJSON(w, http.StatusOK, v)
@@ -718,12 +718,12 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := os.Stat(s.paths.Schedule)
 	if err != nil && !os.IsNotExist(err) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	var schedule []chinachu.ChannelSchedule
 	if err := storage.ReadJSON(s.paths.Schedule, &schedule, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if err == nil {
@@ -736,7 +736,7 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := json.Marshal(schedule)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if acceptsDeflate(r.Header.Get("Accept-Encoding")) {
@@ -744,11 +744,11 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		zw := zlib.NewWriter(&compressed)
 		if _, err := zw.Write(body); err != nil {
 			_ = zw.Close()
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		if err := zw.Close(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Encoding", "deflate")
@@ -786,7 +786,7 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if r.Method == http.MethodPut {
@@ -801,7 +801,7 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := storage.WriteFileAtomic(s.paths.Config, []byte(raw)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -812,7 +812,7 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := os.ReadFile(s.paths.Config)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -829,7 +829,7 @@ func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) 
 	}
 	schedules, err := s.readSchedule()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	programs := []chinachu.Program{}
@@ -847,7 +847,7 @@ func (s *server) handleScheduleBroadcasting(w http.ResponseWriter, r *http.Reque
 	}
 	schedules, err := s.readSchedule()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, broadcastingPrograms(schedules, time.Now()))
@@ -861,7 +861,7 @@ func (s *server) handleScheduleChannel(w http.ResponseWriter, r *http.Request, i
 	}
 	channel, err := s.findScheduleChannel(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if channel == nil {
@@ -879,7 +879,7 @@ func (s *server) handleScheduleChannelPrograms(w http.ResponseWriter, r *http.Re
 	}
 	channel, err := s.findScheduleChannel(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if channel == nil {
@@ -897,7 +897,7 @@ func (s *server) handleScheduleChannelBroadcasting(w http.ResponseWriter, r *htt
 	}
 	channel, err := s.findScheduleChannel(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if channel == nil {
@@ -915,7 +915,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	var recordedSize int64
@@ -934,7 +934,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	usage, err := system.GetDiskUsage(recordedDir)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, map[string]any{
@@ -953,7 +953,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 	}
 	if r.Method == http.MethodPut {
 		if err := s.runScheduler(r.Context(), false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 	}
@@ -966,7 +966,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -977,7 +977,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 	default:
 		result, ok, err := s.schedulerResultFromLog(logPath)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		if !ok {
@@ -1022,7 +1022,7 @@ func (s *server) handleLog(w http.ResponseWriter, r *http.Request, name string, 
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1166,7 +1166,7 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 	var rules []map[string]json.RawMessage
 	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	switch r.Method {
@@ -1181,7 +1181,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 		normalizeRuleEnabled(rule)
 		rules = append(rules, rule)
 		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusCreated, rule)
@@ -1199,7 +1199,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 	}
 	var rules []map[string]json.RawMessage
 	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if index < 0 || index >= len(rules) {
@@ -1218,14 +1218,14 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 		normalizeRuleEnabled(rule)
 		rules[index] = rule
 		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, rule)
 	case http.MethodDelete:
 		rules = append(rules[:index], rules[index+1:]...)
 		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1248,7 +1248,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 	}
 	var rules []map[string]json.RawMessage
 	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if index < 0 || index >= len(rules) {
@@ -1265,7 +1265,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		return
 	}
 	if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1279,7 +1279,7 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 	}
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if r.Method == http.MethodPut {
@@ -1299,12 +1299,12 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 		recorded = kept
 		if removed {
 			if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
 			}
 		}
 		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 	}
@@ -1323,7 +1323,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	}
 	var reserves []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(reserves, id)
@@ -1341,7 +1341,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 		}
 		reserves = removeProgram(reserves, id)
 		if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1355,7 +1355,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			return
 		}
 		if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1369,7 +1369,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 	id := parts[0]
 	var recording []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Recording, &recording, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(recording, id)
@@ -1384,20 +1384,20 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 		if !recording[index].IsManualReserved {
 			var reserves []chinachu.Program
 			if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
 			}
 			if reserveIndex := findProgram(reserves, id); reserveIndex != -1 {
 				reserves[reserveIndex].IsSkip = true
 				if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					legacyHTTPError(w, r, http.StatusInternalServerError)
 					return
 				}
 			}
 		}
 		recording[index].Abort = true
 		if err := storage.WriteJSONAtomic(s.paths.Recording, recording, false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1411,7 +1411,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	id := parts[0]
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(recorded, id)
@@ -1427,12 +1427,12 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
 		}
 		if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		recorded = removeProgram(recorded, id)
 		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1445,7 +1445,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
 	var recorded []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(recorded, id)
@@ -1460,7 +1460,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	switch r.Method {
@@ -1469,7 +1469,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 		case "m2ts":
 			file, err := os.Open(path)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
 			}
 			defer file.Close()
@@ -1483,7 +1483,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 		}
 	case http.MethodDelete:
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		if apiType == "m2ts" {
@@ -1505,7 +1505,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 	}
 	var programs []chinachu.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(programs, id)
@@ -1533,7 +1533,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	switch apiType {
@@ -1565,7 +1565,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		}
 		file, err := os.Open(filePath)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		defer file.Close()
@@ -1582,7 +1582,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		}
 		file, err := os.Open(filePath)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		defer file.Close()
@@ -1684,7 +1684,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	}
 	var programs []chinachu.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	index := findProgram(programs, id)
@@ -1711,7 +1711,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 			legacyHTTPError(w, r, http.StatusGone)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 
@@ -1798,7 +1798,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 	}
 	schedules, err := s.readSchedule()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if program := chinachu.GetProgramByID(id, schedules, nil); program != nil {
@@ -1819,7 +1819,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program chinachu.Program) {
 	var reserves []chinachu.Program
 	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	if findProgram(reserves, program.ID) != -1 {
@@ -1830,7 +1830,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	program.OneSeg = r.URL.Query().Get("mode") == "1seg"
 	reserves = append(reserves, program)
 	if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	writeCompactJSON(w, http.StatusOK, map[string]any{})
@@ -1853,12 +1853,12 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 	}
 	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
 	client.UserAgent = mirakurun.LegacyUserAgent("wui")
@@ -1906,12 +1906,12 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 	case "m2ts":
 		serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		client.UserAgent = mirakurun.LegacyUserAgent("wui")
@@ -1934,12 +1934,12 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		}
 		serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		client.UserAgent = mirakurun.LegacyUserAgent("wui")
