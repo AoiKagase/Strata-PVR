@@ -215,21 +215,22 @@
       <section class="panel">
         <div id="ruleList" class="list empty">ルールはありません</div>
         <div class="rule-builder">
+          <div class="rule-form-status" id="ruleFormStatus">新規作成</div>
           <label>
-            <span>タイトル</span>
-            <input id="ruleTitle" type="text" autocomplete="off">
+            <span>予約タイトル reserve_titles</span>
+            <input id="ruleTitle" type="text" autocomplete="off" placeholder="正規表現、複数はカンマ区切り">
           </label>
           <label>
-            <span>除外タイトル</span>
-            <input id="ruleIgnoreTitle" type="text" autocomplete="off">
+            <span>除外タイトル ignore_titles</span>
+            <input id="ruleIgnoreTitle" type="text" autocomplete="off" placeholder="正規表現、複数はカンマ区切り">
           </label>
           <label>
-            <span>説明</span>
-            <input id="ruleDescription" type="text" autocomplete="off">
+            <span>予約説明 reserve_descriptions</span>
+            <input id="ruleDescription" type="text" autocomplete="off" placeholder="正規表現、複数はカンマ区切り">
           </label>
           <label>
-            <span>除外説明</span>
-            <input id="ruleIgnoreDescription" type="text" autocomplete="off">
+            <span>除外説明 ignore_descriptions</span>
+            <input id="ruleIgnoreDescription" type="text" autocomplete="off" placeholder="正規表現、複数はカンマ区切り">
           </label>
           <label>
             <span>種別</span>
@@ -246,8 +247,12 @@
             <input id="ruleSid" type="number" min="1" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>カテゴリ</span>
+            <span>単一カテゴリ category</span>
             <input id="ruleCategory" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span>複数カテゴリ categories</span>
+            <input id="ruleCategories" type="text" autocomplete="off" placeholder="anime, news">
           </label>
           <label>
             <span>チャンネル</span>
@@ -266,19 +271,19 @@
             <input id="ruleIgnoreFlags" type="text" autocomplete="off" placeholder="カンマ区切り">
           </label>
           <label>
-            <span>最短分</span>
+            <span>最短分 duration.min</span>
             <input id="ruleDurationMin" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>最長分</span>
+            <span>最長分 duration.max</span>
             <input id="ruleDurationMax" type="number" min="0" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>開始時</span>
+            <span>開始時 hour.start</span>
             <input id="ruleHourStart" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0-23">
           </label>
           <label>
-            <span>終了時</span>
+            <span>終了時 hour.end</span>
             <input id="ruleHourEnd" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="1-24">
           </label>
           <label>
@@ -294,6 +299,8 @@
             <textarea id="ruleExtraJson" class="compact-json-editor" spellcheck="false" aria-label="追加ルールJSON" placeholder="{ &quot;field&quot;: &quot;value&quot; }"></textarea>
           </label>
           <button id="addBasicRuleButton" type="button" title="フォームの内容からルールを追加">フォームから追加</button>
+          <button id="saveBasicRuleButton" type="button" title="フォームの内容で編集中のルールを保存" disabled>フォーム保存</button>
+          <button id="resetRuleFormButton" type="button" title="フォーム編集を解除" disabled>フォーム解除</button>
         </div>
         <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="ルールJSON">{
   "types": ["GR"],

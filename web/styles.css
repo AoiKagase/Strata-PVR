@@ -766,7 +766,7 @@ button:disabled {
 
 .rule-builder {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
   align-items: end;
   margin-top: 14px;
@@ -776,6 +776,13 @@ button:disabled {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.rule-form-status {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .rule-builder .rule-extra-json {

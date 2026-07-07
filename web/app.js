@@ -28,6 +28,7 @@
     channelProgramsGenre: "",
     channelProgramsSort: "start",
     editingRuleIndex: null,
+    editingRuleFormIndex: null,
     selectedProgram: null,
     configEditorDirty: false
   };
@@ -1453,6 +1454,9 @@
           editor.focus();
         }
       }));
+      row.appendChild(actionButton("フォーム編集", "このルールをフォームに読み込む", function () {
+        fillRuleFormFromRule(rule, index);
+      }));
       row.appendChild(actionButton("削除", "このルールを削除", function () {
         runAction("rules/" + index + ".json", "DELETE", "このルールを削除しますか？");
       }));
@@ -1965,6 +1969,125 @@
     control.value = value === undefined || value === null ? "" : String(value);
   }
 
+  function setListFormValue(id, value) {
+    if (Array.isArray(value)) {
+      setFormValue(id, value.join(", "));
+      return;
+    }
+    setFormValue(id, value);
+  }
+
+  function clearRuleForm() {
+    [
+      "ruleTitle",
+      "ruleIgnoreTitle",
+      "ruleDescription",
+      "ruleIgnoreDescription",
+      "ruleSid",
+      "ruleCategory",
+      "ruleCategories",
+      "ruleChannels",
+      "ruleIgnoreChannels",
+      "ruleFlags",
+      "ruleIgnoreFlags",
+      "ruleDurationMin",
+      "ruleDurationMax",
+      "ruleHourStart",
+      "ruleHourEnd",
+      "ruleRecordedFormat",
+      "ruleExtraJson"
+    ].forEach(function (id) {
+      setFormValue(id, "");
+    });
+    setFormValue("ruleType", "");
+    setFormValue("ruleDisabled", false);
+  }
+
+  function renderRuleFormState() {
+    var button = byId("saveBasicRuleButton");
+    var reset = byId("resetRuleFormButton");
+    var status = byId("ruleFormStatus");
+    var editing = state.editingRuleFormIndex !== null && state.editingRuleFormIndex !== undefined;
+    if (button) {
+      button.disabled = !editing;
+      button.title = editing ? "フォームの内容でルール #" + state.editingRuleFormIndex + " を保存" : "先にフォーム編集を選択してください";
+    }
+    if (reset) {
+      reset.disabled = !editing;
+    }
+    if (status) {
+      status.textContent = editing ? "編集中: ルール #" + state.editingRuleFormIndex : "新規作成";
+    }
+  }
+
+  function legacyRuleExtra(rule) {
+    var known = {
+      isDisabled: true,
+      sid: true,
+      types: true,
+      channels: true,
+      ignore_channels: true,
+      category: true,
+      categories: true,
+      hour: true,
+      duration: true,
+      reserve_titles: true,
+      ignore_titles: true,
+      reserve_descriptions: true,
+      ignore_descriptions: true,
+      reserve_flags: true,
+      ignore_flags: true,
+      recorded_format: true
+    };
+    var extra = {};
+    Object.keys(rule || {}).forEach(function (key) {
+      if (!known[key]) {
+        extra[key] = rule[key];
+      }
+    });
+    return extra;
+  }
+
+  function ruleExtraText(extra) {
+    return Object.keys(extra || {}).length ? JSON.stringify(extra, null, 2) : "";
+  }
+
+  function fillRuleFormFromRule(rule, index) {
+    rule = rule || {};
+    setListFormValue("ruleTitle", rule.reserve_titles);
+    setListFormValue("ruleIgnoreTitle", rule.ignore_titles);
+    setListFormValue("ruleDescription", rule.reserve_descriptions);
+    setListFormValue("ruleIgnoreDescription", rule.ignore_descriptions);
+    setFormValue("ruleType", Array.isArray(rule.types) && rule.types.length === 1 ? rule.types[0] : "");
+    if (byId("ruleType") && byId("ruleType").value === "" && rule.types && rule.types.length) {
+      var extra = legacyRuleExtra(rule);
+      extra.types = rule.types;
+      setFormValue("ruleExtraJson", ruleExtraText(extra));
+    } else {
+      setFormValue("ruleExtraJson", ruleExtraText(legacyRuleExtra(rule)));
+    }
+    setFormValue("ruleSid", rule.sid || "");
+    setFormValue("ruleCategory", rule.category || "");
+    setListFormValue("ruleCategories", rule.categories);
+    setListFormValue("ruleChannels", rule.channels);
+    setListFormValue("ruleIgnoreChannels", rule.ignore_channels);
+    setListFormValue("ruleFlags", rule.reserve_flags);
+    setListFormValue("ruleIgnoreFlags", rule.ignore_flags);
+    setFormValue("ruleDurationMin", rule.duration && rule.duration.min !== undefined ? Math.round(Number(rule.duration.min) / 60) : "");
+    setFormValue("ruleDurationMax", rule.duration && rule.duration.max !== undefined ? Math.round(Number(rule.duration.max) / 60) : "");
+    setFormValue("ruleHourStart", rule.hour && rule.hour.start !== undefined ? rule.hour.start : "");
+    setFormValue("ruleHourEnd", rule.hour && rule.hour.end !== undefined ? rule.hour.end : "");
+    setFormValue("ruleRecordedFormat", rule.recorded_format || "");
+    setFormValue("ruleDisabled", Boolean(rule.isDisabled));
+    state.editingRuleFormIndex = index;
+    renderRuleFormState();
+    window.location.hash = "rules";
+    var title = byId("ruleTitle");
+    if (title) {
+      title.focus();
+    }
+  }
+
   function fillRuleFormFromProgram(program) {
     if (!program) {
       return;
@@ -1989,6 +2112,7 @@
     }
     setFormValue("ruleSid", channelID && /^\d+$/.test(channelID) ? channelID : "");
     setFormValue("ruleCategory", program.category || "");
+    setFormValue("ruleCategories", "");
     setFormValue("ruleChannels", channelID && !/^\d+$/.test(channelID) ? channelID : "");
     setFormValue("ruleIgnoreChannels", "");
     setFormValue("ruleFlags", "");
@@ -2000,6 +2124,8 @@
     setFormValue("ruleRecordedFormat", "");
     setFormValue("ruleDisabled", false);
     setFormValue("ruleExtraJson", "");
+    state.editingRuleFormIndex = null;
+    renderRuleFormState();
     closeProgramDialog();
     window.location.hash = "rules";
     setBusy("番組情報をルールフォームに反映しました");
@@ -2009,7 +2135,7 @@
     }
   }
 
-  function addBasicRule() {
+  function readRuleForm() {
     var title = byId("ruleTitle");
     var ignoreTitle = byId("ruleIgnoreTitle");
     var description = byId("ruleDescription");
@@ -2017,6 +2143,7 @@
     var type = byId("ruleType");
     var sid = byId("ruleSid");
     var category = byId("ruleCategory");
+    var categories = byId("ruleCategories");
     var channels = byId("ruleChannels");
     var ignoreChannels = byId("ruleIgnoreChannels");
     var flags = byId("ruleFlags");
@@ -2036,17 +2163,21 @@
     Object.keys(extraRule).forEach(function (key) {
       rule[key] = extraRule[key];
     });
-    if (title && title.value.trim()) {
-      rule.reserve_titles = [title.value.trim()];
+    var titleValues = title ? splitList(title.value) : [];
+    if (titleValues.length) {
+      rule.reserve_titles = titleValues;
     }
-    if (ignoreTitle && ignoreTitle.value.trim()) {
-      rule.ignore_titles = [ignoreTitle.value.trim()];
+    var ignoreTitleValues = ignoreTitle ? splitList(ignoreTitle.value) : [];
+    if (ignoreTitleValues.length) {
+      rule.ignore_titles = ignoreTitleValues;
     }
-    if (description && description.value.trim()) {
-      rule.reserve_descriptions = [description.value.trim()];
+    var descriptionValues = description ? splitList(description.value) : [];
+    if (descriptionValues.length) {
+      rule.reserve_descriptions = descriptionValues;
     }
-    if (ignoreDescription && ignoreDescription.value.trim()) {
-      rule.ignore_descriptions = [ignoreDescription.value.trim()];
+    var ignoreDescriptionValues = ignoreDescription ? splitList(ignoreDescription.value) : [];
+    if (ignoreDescriptionValues.length) {
+      rule.ignore_descriptions = ignoreDescriptionValues;
     }
     if (type && type.value) {
       rule.types = [type.value];
@@ -2061,7 +2192,12 @@
       rule.sid = sidValue;
     }
     if (category && category.value.trim()) {
-      rule.categories = [category.value.trim()];
+      rule.category = category.value.trim();
+    }
+    var categoryValues = categories ? splitList(categories.value) : [];
+    if (categoryValues.length) {
+      rule.categories = categoryValues;
+      delete rule.category;
     }
     var channelValues = channels ? splitList(channels.value) : [];
     if (channelValues.length) {
@@ -2119,61 +2255,46 @@
       showError(new Error("ルール条件が空です"));
       return;
     }
+    return rule;
+  }
+
+  function addBasicRule() {
+    var rule = readRuleForm();
+    if (!rule) {
+      return;
+    }
     setBusy("処理中");
     sendJSON("rules.json", "POST", rule).then(function () {
-      if (title) {
-        title.value = "";
-      }
-      if (ignoreTitle) {
-        ignoreTitle.value = "";
-      }
-      if (description) {
-        description.value = "";
-      }
-      if (ignoreDescription) {
-        ignoreDescription.value = "";
-      }
-      if (category) {
-        category.value = "";
-      }
-      if (sid) {
-        sid.value = "";
-      }
-      if (channels) {
-        channels.value = "";
-      }
-      if (ignoreChannels) {
-        ignoreChannels.value = "";
-      }
-      if (flags) {
-        flags.value = "";
-      }
-      if (ignoreFlags) {
-        ignoreFlags.value = "";
-      }
-      if (durationMin) {
-        durationMin.value = "";
-      }
-      if (durationMax) {
-        durationMax.value = "";
-      }
-      if (hourStart) {
-        hourStart.value = "";
-      }
-      if (hourEnd) {
-        hourEnd.value = "";
-      }
-      if (recordedFormat) {
-        recordedFormat.value = "";
-      }
-      if (disabled) {
-        disabled.checked = false;
-      }
-      if (extraJSON) {
-        extraJSON.value = "";
-      }
+      clearRuleForm();
+      state.editingRuleFormIndex = null;
+      renderRuleFormState();
       refresh();
     }).catch(showError);
+  }
+
+  function saveBasicRule() {
+    if (state.editingRuleFormIndex === null || state.editingRuleFormIndex === undefined) {
+      showError(new Error("フォーム編集するルールが選択されていません"));
+      return;
+    }
+    var rule = readRuleForm();
+    if (!rule) {
+      return;
+    }
+    setBusy("処理中");
+    sendJSON("rules/" + state.editingRuleFormIndex + ".json", "PUT", rule).then(function () {
+      clearRuleForm();
+      state.editingRuleFormIndex = null;
+      renderRuleFormState();
+      refresh();
+    }).catch(showError);
+  }
+
+  function resetRuleForm() {
+    clearRuleForm();
+    state.editingRuleFormIndex = null;
+    renderRuleFormState();
+    setBusy("ルールフォームを新規作成に戻しました");
   }
 
   function tailText(value, maxLines) {
@@ -2214,6 +2335,7 @@
     renderRules();
     renderSettings();
     renderRuleEditorState();
+    renderRuleFormState();
   }
 
   function setBusy(message) {
@@ -2341,6 +2463,14 @@
     var addBasicRuleButton = byId("addBasicRuleButton");
     if (addBasicRuleButton) {
       addBasicRuleButton.addEventListener("click", addBasicRule);
+    }
+    var saveBasicRuleButton = byId("saveBasicRuleButton");
+    if (saveBasicRuleButton) {
+      saveBasicRuleButton.addEventListener("click", saveBasicRule);
+    }
+    var resetRuleFormButton = byId("resetRuleFormButton");
+    if (resetRuleFormButton) {
+      resetRuleFormButton.addEventListener("click", resetRuleForm);
     }
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {
