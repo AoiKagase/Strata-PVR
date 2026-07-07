@@ -81,6 +81,31 @@ func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
 	}
 }
 
+func TestBuildReservesUsesNormalizationForm(t *testing.T) {
+	now := time.Date(2024, 7, 1, 20, 0, 0, 0, time.Local)
+	schedule := []chinachu.ChannelSchedule{{
+		Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101},
+		Programs: []chinachu.Program{
+			{ID: "norm", FullTitle: "ＡＢＣ特集", Title: "ＡＢＣ", Detail: "第１話", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli(), Seconds: 3600, Channel: chinachu.Channel{Type: "GR", Channel: "27", ID: "svc", SID: 101}},
+		},
+	}}
+	rules := []chinachu.Rule{{ReserveTitles: []string{"ABC特集"}, ReserveDescriptions: []string{"第1話"}, RecordedFormat: "<title>.m2ts"}}
+	without, _ := BuildReserves(schedule, rules, nil, []mirakurun.Tuner{{Types: []string{"GR"}}}, now)
+	if len(without) != 0 {
+		t.Fatalf("unexpected unnormalized reserves: %#v", without)
+	}
+	reserves, result := BuildReservesWithNormalization(schedule, rules, nil, []mirakurun.Tuner{{Types: []string{"GR"}}}, now, "NFKC")
+	if len(reserves) != 1 || reserves[0].ID != "norm" {
+		t.Fatalf("normalized reserves = %#v", reserves)
+	}
+	if reserves[0].RecordedFormat != "<title>.m2ts" {
+		t.Fatalf("recorded format = %q", reserves[0].RecordedFormat)
+	}
+	if result.Matches != 1 || result.Reserves != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	dir := t.TempDir()
 	paths := Paths{

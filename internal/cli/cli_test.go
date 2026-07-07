@@ -919,6 +919,32 @@ func TestSearchFiltersSchedule(t *testing.T) {
 	}
 }
 
+func TestSearchUsesConfigNormalizationForm(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("config.json", []byte(`{"normalizationForm":"NFKC"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","category":"anime","title":"ＡＢＣ","fullTitle":"ＡＢＣ","start":1893456000000,"end":1893457800000,"seconds":1800,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
+	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"search", "-title", "ABC"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "p1") {
+		t.Fatalf("normalized search output missing p1: %s", out.String())
+	}
+}
+
 func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

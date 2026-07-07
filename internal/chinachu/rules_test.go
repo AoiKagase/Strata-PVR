@@ -77,6 +77,23 @@ func TestProgramMatchesRuleCLIRequiresDetailForLegacyDescriptionAndReserveFlags(
 	}
 }
 
+func TestProgramMatchesRuleWithNormalizationForm(t *testing.T) {
+	program := Program{FullTitle: "ＡＢＣ特集", Title: "ＡＢＣ", Detail: "第１話", Channel: Channel{Type: "GR"}}
+	rule := Rule{ReserveTitles: []string{"ABC特集"}, ReserveDescriptions: []string{"第1話"}}
+	if ProgramMatchesRule(rule, program) {
+		t.Fatal("full-width text should not match ASCII rule without normalization")
+	}
+	if !ProgramMatchesRuleWithNormalization(rule, program, "NFKC") {
+		t.Fatal("NFKC should match normalized title and detail")
+	}
+	if ProgramMatchesRuleForCLI(Rule{ReserveTitles: []string{"ABC"}}, program) {
+		t.Fatal("CLI title should not match without normalization")
+	}
+	if !ProgramMatchesRuleForCLIWithNormalization(Rule{ReserveTitles: []string{"ABC"}}, program, "NFKC") {
+		t.Fatal("CLI title should match with NFKC")
+	}
+}
+
 func TestProgramMatchesRuleIgnoresIncompleteJSONDuration(t *testing.T) {
 	var rule Rule
 	if err := json.Unmarshal([]byte(`{"duration":{"min":99999}}`), &rule); err != nil {

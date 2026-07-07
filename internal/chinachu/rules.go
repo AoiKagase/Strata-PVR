@@ -4,21 +4,31 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 func ProgramMatchesRule(rule Rule, program Program) bool {
+	return ProgramMatchesRuleWithNormalization(rule, program, "")
+}
+
+func ProgramMatchesRuleWithNormalization(rule Rule, program Program, normalizationForm string) bool {
 	title := program.FullTitle
 	if title == "" {
 		title = program.Title
 	}
-	return programMatchesRule(rule, program, title, false)
+	return programMatchesRule(rule, program, title, false, normalizationForm)
 }
 
 func ProgramMatchesRuleForCLI(rule Rule, program Program) bool {
-	return programMatchesRule(rule, program, program.Title, true)
+	return ProgramMatchesRuleForCLIWithNormalization(rule, program, "")
 }
 
-func programMatchesRule(rule Rule, program Program, title string, cli bool) bool {
+func ProgramMatchesRuleForCLIWithNormalization(rule Rule, program Program, normalizationForm string) bool {
+	return programMatchesRule(rule, program, program.Title, true, normalizationForm)
+}
+
+func programMatchesRule(rule Rule, program Program, title string, cli bool, normalizationForm string) bool {
 	if rule.IsDisabled {
 		return false
 	}
@@ -68,14 +78,14 @@ func programMatchesRule(rule Rule, program Program, title string, cli bool) bool
 			return false
 		}
 	}
-	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, title) {
+	if len(rule.ReserveTitles) > 0 && !anyRegexpMatch(rule.ReserveTitles, title, normalizationForm) {
 		return false
 	}
-	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, title) {
+	if len(rule.IgnoreTitles) > 0 && anyRegexpMatch(rule.IgnoreTitles, title, normalizationForm) {
 		return false
 	}
 	if len(rule.ReserveDescriptions) > 0 {
-		if program.Detail == "" || !anyRegexpMatch(rule.ReserveDescriptions, program.Detail) {
+		if program.Detail == "" || !anyRegexpMatch(rule.ReserveDescriptions, program.Detail, normalizationForm) {
 			return false
 		}
 	}
@@ -83,7 +93,7 @@ func programMatchesRule(rule Rule, program Program, title string, cli bool) bool
 		if cli && program.Detail == "" {
 			return false
 		}
-		if program.Detail != "" && anyRegexpMatch(rule.IgnoreDescriptions, program.Detail) {
+		if program.Detail != "" && anyRegexpMatch(rule.IgnoreDescriptions, program.Detail, normalizationForm) {
 			return false
 		}
 	}
@@ -102,8 +112,12 @@ func programMatchesRule(rule Rule, program Program, title string, cli bool) bool
 }
 
 func MatchesAnyRule(rules []Rule, program Program) bool {
+	return MatchesAnyRuleWithNormalization(rules, program, "")
+}
+
+func MatchesAnyRuleWithNormalization(rules []Rule, program Program, normalizationForm string) bool {
 	for _, rule := range rules {
-		if ProgramMatchesRule(rule, program) {
+		if ProgramMatchesRuleWithNormalization(rule, program, normalizationForm) {
 			return true
 		}
 	}
@@ -126,8 +140,10 @@ func hourMatches(rule RangeRule, startMS, endMS int64) bool {
 	return !((rule.Start > start) || (rule.End < end))
 }
 
-func anyRegexpMatch(patterns []string, value string) bool {
+func anyRegexpMatch(patterns []string, value string, normalizationForm string) bool {
+	value = normalizeForRule(value, normalizationForm)
 	for _, pattern := range patterns {
+		pattern = normalizeForRule(pattern, normalizationForm)
 		re, err := regexp.Compile(pattern)
 		if err != nil {
 			continue
@@ -137,6 +153,21 @@ func anyRegexpMatch(patterns []string, value string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeForRule(value string, normalizationForm string) string {
+	switch normalizationForm {
+	case "NFC":
+		return norm.NFC.String(value)
+	case "NFD":
+		return norm.NFD.String(value)
+	case "NFKC":
+		return norm.NFKC.String(value)
+	case "NFKD":
+		return norm.NFKD.String(value)
+	default:
+		return value
+	}
 }
 
 func contains(values []string, value string) bool {

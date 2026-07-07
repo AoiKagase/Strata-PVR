@@ -115,15 +115,16 @@ func testCommand(args []string, stdout io.Writer) error {
 }
 
 type searchOptions struct {
-	rule     chinachu.Rule
-	id       string
-	simple   bool
-	detail   bool
-	now      bool
-	today    bool
-	tomorrow bool
-	num      int
-	hasNum   bool
+	rule              chinachu.Rule
+	id                string
+	normalizationForm string
+	simple            bool
+	detail            bool
+	now               bool
+	today             bool
+	tomorrow          bool
+	num               int
+	hasNum            bool
 }
 
 func search(p paths, args []string, stdout io.Writer) error {
@@ -131,6 +132,7 @@ func search(p paths, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	opts.normalizationForm = loadNormalizationForm(p.config)
 	var schedule []chinachu.ChannelSchedule
 	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
 		return err
@@ -158,6 +160,7 @@ func programList(path string, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	opts.normalizationForm = loadNormalizationForm("config.json")
 	var programs []chinachu.Program
 	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
 		return err
@@ -223,7 +226,7 @@ func searchMatches(opts searchOptions, program chinachu.Program, now time.Time) 
 	if opts.id != "" {
 		return opts.id == program.ID
 	}
-	if !chinachu.ProgramMatchesRuleForCLI(opts.rule, program) {
+	if !chinachu.ProgramMatchesRuleForCLIWithNormalization(opts.rule, program, opts.normalizationForm) {
 		return false
 	}
 	start := time.UnixMilli(program.Start).Local()
@@ -238,6 +241,14 @@ func searchMatches(opts searchOptions, program chinachu.Program, now time.Time) 
 		return false
 	}
 	return true
+}
+
+func loadNormalizationForm(path string) string {
+	cfg, err := config.Load(path)
+	if err != nil {
+		return ""
+	}
+	return cfg.NormalizationForm
 }
 
 func writeProgramSearchTable(w io.Writer, programs []chinachu.Program, opts searchOptions) {

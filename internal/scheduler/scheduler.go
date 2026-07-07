@@ -153,7 +153,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 
-	reserves, result := BuildReserves(schedule, rules, oldReserves, tuners, now)
+	reserves, result := BuildReservesWithNormalization(schedule, rules, oldReserves, tuners, now, cfg.NormalizationForm)
 	for _, reserve := range result.OverridesByRule {
 		if err := logging.AppendLine(paths.Log, "OVERRIDEBYRULE: %s %s [%s] %s", reserve.ID, legacyISODateTime(reserve.Start), reserve.Channel.Name, reserve.Title); err != nil {
 			return Result{}, err
@@ -339,11 +339,15 @@ func runHook(ctx context.Context, logPath, command string, args []string) error 
 }
 
 func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time) ([]chinachu.Program, Result) {
+	return BuildReservesWithNormalization(schedule, rules, oldReserves, tuners, now, "")
+}
+
+func BuildReservesWithNormalization(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, oldReserves []chinachu.Program, tuners []mirakurun.Tuner, now time.Time, normalizationForm string) ([]chinachu.Program, Result) {
 	matches := []chinachu.Program{}
 	overridesByRule := []chinachu.Program{}
 	for _, channel := range schedule {
 		for _, program := range channel.Programs {
-			if chinachu.MatchesAnyRule(rules, program) {
+			if chinachu.MatchesAnyRuleWithNormalization(rules, program, normalizationForm) {
 				matches = append(matches, program)
 			}
 		}
@@ -381,7 +385,7 @@ func BuildReserves(schedule []chinachu.ChannelSchedule, rules []chinachu.Rule, o
 
 	duplicates, duplicateItems := markDuplicates(matches)
 	conflicts := markConflicts(matches, tuners)
-	applyRecordedFormats(matches, rules)
+	applyRecordedFormats(matches, rules, normalizationForm)
 
 	reserves := []chinachu.Program{}
 	result := Result{Matches: len(matches), Duplicates: duplicates, Conflicts: conflicts, OverridesByRule: overridesByRule, DuplicateItems: duplicateItems}
@@ -458,10 +462,10 @@ func markConflicts(programs []chinachu.Program, tuners []mirakurun.Tuner) int {
 	return count
 }
 
-func applyRecordedFormats(programs []chinachu.Program, rules []chinachu.Rule) {
+func applyRecordedFormats(programs []chinachu.Program, rules []chinachu.Rule, normalizationForm string) {
 	for i := range programs {
 		for _, rule := range rules {
-			if rule.RecordedFormat != "" && chinachu.ProgramMatchesRule(rule, programs[i]) {
+			if rule.RecordedFormat != "" && chinachu.ProgramMatchesRuleWithNormalization(rule, programs[i], normalizationForm) {
 				programs[i].RecordedFormat = rule.RecordedFormat
 			}
 		}
