@@ -2474,6 +2474,30 @@ func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	}
 }
 
+func TestAccessLogUsesLegacyMethodOverride(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.LogDir = filepath.Join(dir, "log")
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/status.json?method=GET", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logBytes)
+	if !strings.Contains(log, `200 GET:/api/status.json?method=GET 10.0.0.1`) {
+		t.Fatalf("access log did not use legacy override method/url: %q", log)
+	}
+}
+
 func testPaths(dir string) Paths {
 	return Paths{
 		Config:    filepath.Join(dir, "config.json"),

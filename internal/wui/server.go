@@ -421,12 +421,23 @@ func (s *server) withAccessLog(next http.Handler) http.Handler {
 			filepath.Join(s.logDir(), "wui"),
 			"%d %s:%s %s %q",
 			recorder.status,
-			r.Method,
+			legacyLogMethod(r),
 			r.URL.RequestURI(),
 			s.remoteAddress(r),
 			userAgent,
 		)
 	})
+}
+
+func legacyLogMethod(r *http.Request) string {
+	query := r.URL.Query()
+	if method := query.Get("_method"); method != "" {
+		return strings.ToUpper(method)
+	}
+	if method := query.Get("method"); method != "" {
+		return strings.ToUpper(method)
+	}
+	return r.Method
 }
 
 func (s *server) remoteAddress(r *http.Request) string {
