@@ -426,6 +426,42 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardAssetsServe(t *testing.T) {
+	dir := t.TempDir()
+	webRoot := filepath.Clean(filepath.Join("..", "..", "web"))
+	for _, name := range []string{"index.html", "app.js", "styles.css"} {
+		if _, err := os.Stat(filepath.Join(webRoot, name)); err != nil {
+			t.Fatalf("native web asset %s missing: %v", name, err)
+		}
+	}
+	paths := testPaths(dir)
+	paths.WebRoot = webRoot
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, tc := range []struct {
+		path        string
+		contentType string
+		contains    string
+	}{
+		{"/", "text/html", "Strata PVR"},
+		{"/app.js", "text/javascript", "function request"},
+		{"/styles.css", "text/css", ".program-row"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%q", tc.path, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Content-Type"); got != tc.contentType {
+			t.Fatalf("%s Content-Type=%q", tc.path, got)
+		}
+		if !strings.Contains(res.Body.String(), tc.contains) {
+			t.Fatalf("%s body missing %q", tc.path, tc.contains)
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

@@ -75,9 +75,13 @@ Compatibility and environment checks are available with:
 
 The repository now includes an initial native Strata PVR frontend under `web/`.
 It is a dependency-free HTML/CSS/JavaScript dashboard that reads the Go API for
-status, reserves, recording, recorded, and schedule summaries. The legacy WUI
-asset fallback remains available during compatibility work.
+status, reserves, recording, recorded, and schedule summaries. It also exposes
+basic Go API actions for reserving schedule items, skipping/unskipping reserves,
+removing manual reserves, stopping active recordings, and opening/downloading or
+deleting recorded items. The legacy WUI asset fallback remains available during
+compatibility work.
 
-The frontend still needs more screens and controls before it can replace every
-legacy WUI workflow, but it does not require Node.js, npm, webpack, or any
-Node-based build step.
+The frontend still needs rule editing, detailed schedule navigation, log views,
+settings, and richer playback controls before it can replace every legacy WUI
+workflow, but it does not require Node.js, npm, webpack, or any Node-based build
+step.

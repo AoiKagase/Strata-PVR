@@ -18,11 +18,20 @@
   }
 
   function api(path) {
-    return fetch("/api/" + path, { credentials: "same-origin" }).then(function (response) {
+    return request(path, "GET");
+  }
+
+  function request(path, method) {
+    return fetch("/api/" + path, {
+      credentials: "same-origin",
+      method: method || "GET"
+    }).then(function (response) {
       if (!response.ok) {
         throw new Error(path + " returned " + response.status);
       }
-      return response.json();
+      return response.text().then(function (body) {
+        return body ? JSON.parse(body) : {};
+      });
     });
   }
 
@@ -53,7 +62,75 @@
     return program.channel.name || program.channel.channel || program.channel.id || "";
   }
 
-  function renderList(id, items, emptyText, limit) {
+  function actionButton(label, title, fn) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "small-button";
+    button.title = title || label;
+    button.textContent = label;
+    button.addEventListener("click", fn);
+    return button;
+  }
+
+  function confirmAction(message) {
+    return window.confirm(message);
+  }
+
+  function runAction(path, method, message) {
+    if (message && !confirmAction(message)) {
+      return;
+    }
+    setBusy("Working");
+    request(path, method).then(refresh).catch(showError);
+  }
+
+  function renderActions(item, program, actions) {
+    if (!actions || actions.length === 0) {
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "row-actions";
+    actions.forEach(function (name) {
+      if (name === "reserve") {
+        row.appendChild(actionButton("Reserve", "Reserve this program", function () {
+          runAction("program/" + encodeURIComponent(program.id) + ".json", "PUT");
+        }));
+      } else if (name === "unreserve" && program.isManualReserved) {
+        row.appendChild(actionButton("Unreserve", "Remove this manual reserve", function () {
+          runAction("reserves/" + encodeURIComponent(program.id) + ".json", "DELETE", "Remove this manual reserve?");
+        }));
+      } else if (name === "skip" && !program.isManualReserved && !program.isSkip) {
+        row.appendChild(actionButton("Skip", "Skip this auto reserve", function () {
+          runAction("reserves/" + encodeURIComponent(program.id) + "/skip.json", "PUT");
+        }));
+      } else if (name === "unskip" && !program.isManualReserved && program.isSkip) {
+        row.appendChild(actionButton("Unskip", "Cancel skip", function () {
+          runAction("reserves/" + encodeURIComponent(program.id) + "/unskip.json", "PUT");
+        }));
+      } else if (name === "stop") {
+        row.appendChild(actionButton("Stop", "Stop this recording", function () {
+          runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "Stop this recording?");
+        }));
+      } else if (name === "watch") {
+        row.appendChild(actionButton("Watch", "Open m2ts stream", function () {
+          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/watch.m2ts";
+        }));
+      } else if (name === "download") {
+        row.appendChild(actionButton("Download", "Download recorded file", function () {
+          window.location.href = "/api/recorded/" + encodeURIComponent(program.id) + "/file.m2ts";
+        }));
+      } else if (name === "delete-recorded") {
+        row.appendChild(actionButton("Delete", "Delete recorded entry and file", function () {
+          runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "Delete this recorded item and file?");
+        }));
+      }
+    });
+    if (row.childNodes.length > 0) {
+      item.appendChild(row);
+    }
+  }
+
+  function renderList(id, items, emptyText, limit, actions) {
     var root = byId(id);
     if (!root) {
       return;
@@ -78,6 +155,7 @@
 
       item.appendChild(title);
       item.appendChild(meta);
+      renderActions(item, program, actions);
       root.appendChild(item);
     });
   }
@@ -93,7 +171,7 @@
     programs.sort(function (a, b) {
       return (a.start || 0) - (b.start || 0);
     });
-    renderList("scheduleList", programs, "No schedule data", 10);
+    renderList("scheduleList", programs, "No schedule data", 10, ["reserve"]);
   }
 
   function render() {
@@ -110,18 +188,30 @@
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
-    renderList("recordingList", state.recording, "No active recordings", 8);
-    renderList("reserveList", state.reserves, "No reserves", 8);
-    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8);
+    renderList("recordingList", state.recording, "No active recordings", 8, ["stop"]);
+    renderList("reserveList", state.reserves, "No reserves", 8, ["skip", "unskip", "unreserve"]);
+    renderList("recordedList", state.recorded.slice().reverse(), "No recorded items", 8, ["watch", "download", "delete-recorded"]);
     renderSchedule();
   }
 
-  function refresh() {
+  function setBusy(message) {
     var badge = byId("statusBadge");
     if (badge) {
-      badge.textContent = "Loading";
+      badge.textContent = message;
       badge.className = "status-badge";
     }
+  }
+
+  function showError(error) {
+    var badge = byId("statusBadge");
+    if (badge) {
+      badge.textContent = error.message;
+      badge.className = "status-badge error";
+    }
+  }
+
+  function refresh() {
+    setBusy("Loading");
     Promise.all([
       api("status.json"),
       api("reserves.json"),
@@ -135,12 +225,7 @@
       state.recorded = result[3] || [];
       state.schedule = result[4] || [];
       render();
-    }).catch(function (error) {
-      if (badge) {
-        badge.textContent = error.message;
-        badge.className = "status-badge error";
-      }
-    });
+    }).catch(showError);
   }
 
   document.addEventListener("DOMContentLoaded", function () {

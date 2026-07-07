@@ -187,6 +187,27 @@ button:hover {
   font-size: 12px;
 }
 
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.small-button {
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: var(--line);
+  background: #f7fafb;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.small-button:hover {
+  border-color: #8fb8b4;
+  background: #eaf5f3;
+}
+
 @media (max-width: 820px) {
   .topbar {
     align-items: flex-start;
