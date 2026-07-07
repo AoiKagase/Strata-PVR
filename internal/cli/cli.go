@@ -1166,7 +1166,7 @@ func legacyAssetName(ext string) string {
 
 func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup>")
+		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
 	}
 	switch args[0] {
 	case "check", "doctor":
@@ -1221,9 +1221,28 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 		return compatDiff(stdout)
 	case "backup":
 		return compatBackup(stdout)
+	case "wrapper":
+		fmt.Fprint(stdout, compatWrapperScript())
+		return nil
 	default:
-		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup>")
+		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
 	}
+}
+
+func compatWrapperScript() string {
+	root, err := os.Getwd()
+	if err != nil {
+		root = "."
+	}
+	root = filepath.ToSlash(root)
+	return fmt.Sprintf(`#!/bin/bash
+
+STRATA_PVR_DIR=%s
+DAEMON=${STRATA_PVR_DIR}/strata-pvr
+
+cd "$STRATA_PVR_DIR" || exit 1
+exec "$DAEMON" "$@"
+`, shellQuote(root))
 }
 
 func compatWarnings(cfg *config.Config) []string {
@@ -1704,7 +1723,7 @@ recorded                Show a list of recorded programs.
 
 cleanup                 Clean-up the recorded list.
 
-compat <check|doctor|diff|backup>
+compat <check|doctor|diff|backup|wrapper>
                         Check or back up Strata PVR compatibility state.
 
 ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)

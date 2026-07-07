@@ -71,6 +71,13 @@ Compatibility and environment checks are available with:
 ./strata-pvr compat doctor
 ```
 
+To review a safe shell wrapper that forwards existing command arguments to the
+Go binary without overwriting any file automatically:
+
+```sh
+./strata-pvr compat wrapper > strata-pvr-wrapper
+```
+
 ## Frontend
 
 The repository now includes an initial native Strata PVR frontend under `web/`.

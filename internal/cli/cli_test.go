@@ -87,6 +87,29 @@ func TestShellQuote(t *testing.T) {
 	}
 }
 
+func TestCompatWrapperOutputsSafeLauncher(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"compat", "wrapper"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"#!/bin/bash",
+		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
+		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
+		`cd "$STRATA_PVR_DIR" || exit 1`,
+		`exec "$DAEMON" "$@"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("wrapper missing %q: %s", want, text)
+		}
+	}
+}
+
 func TestPrepareServiceRuntimeCopiesSamplesAndCreatesDirs(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
