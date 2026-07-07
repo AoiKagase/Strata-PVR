@@ -19,11 +19,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if output := os.Getenv("CHINACHU_GO_RECORDED_COMMAND_OUTPUT"); output != "" && len(os.Args) == 3 {
+	if output := os.Getenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT"); output != "" && len(os.Args) == 3 {
 		_ = os.WriteFile(output, []byte(os.Args[1]+"\n"+os.Args[2]), 0o644)
 		os.Exit(0)
 	}
-	if output := os.Getenv("CHINACHU_GO_SENDMAIL_OUTPUT"); output != "" && len(os.Args) == 2 && os.Args[1] == "-t" {
+	if output := os.Getenv("STRATA_PVR_SENDMAIL_OUTPUT"); output != "" && len(os.Args) == 2 && os.Args[1] == "-t" {
 		data, _ := io.ReadAll(os.Stdin)
 		_ = os.WriteFile(output, data, 0o644)
 		os.Exit(0)
@@ -532,7 +532,7 @@ func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := filepath.Join(dir, "recorded-command.txt")
-	t.Setenv("CHINACHU_GO_RECORDED_COMMAND_OUTPUT", output)
+	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
 	cfg := &config.Config{
 		RecordedDir:     filepath.Join(dir, "recorded"),
 		RecordedFormat:  "<id>.m2ts",
@@ -679,7 +679,7 @@ func TestLowStorageSendsNotification(t *testing.T) {
 	sendmailPath = os.Args[0]
 	defer func() { sendmailPath = oldSendmailPath }()
 	output := filepath.Join(dir, "sendmail.txt")
-	t.Setenv("CHINACHU_GO_SENDMAIL_OUTPUT", output)
+	t.Setenv("STRATA_PVR_SENDMAIL_OUTPUT", output)
 	recordedDir := filepath.Join(dir, "recorded")
 	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -730,7 +730,7 @@ func TestLowStorageNotificationIsThrottled(t *testing.T) {
 	lowStorageLastNotified = time.Time{}
 	defer func() { lowStorageLastNotified = time.Time{} }()
 	output := filepath.Join(dir, "sendmail.txt")
-	t.Setenv("CHINACHU_GO_SENDMAIL_OUTPUT", output)
+	t.Setenv("STRATA_PVR_SENDMAIL_OUTPUT", output)
 	recordedDir := filepath.Join(dir, "recorded")
 	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
 		t.Fatal(err)

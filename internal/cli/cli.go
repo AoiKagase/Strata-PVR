@@ -977,11 +977,11 @@ func dumpJSONFile(path, empty string, stdout io.Writer) error {
 
 func service(ctx context.Context, p paths, args []string, stdout io.Writer) error {
 	if len(args) != 2 {
-		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
+		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 	}
 	name, action := args[0], args[1]
 	if name != "operator" && name != "wui" {
-		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
+		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 	}
 	switch action {
 	case "initscript":
@@ -1015,10 +1015,10 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				OperatorPID:  filepath.Join("data", "operator.pid"),
 			})
 		default:
-			return fmt.Errorf("Usage: ./chinachu service <name> <action>")
+			return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 		}
 	default:
-		return fmt.Errorf("Usage: ./chinachu service <name> <action>")
+		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 	}
 }
 
@@ -1049,11 +1049,11 @@ func copyIfMissing(src, dst string) error {
 }
 
 func serviceInitScript(name string) string {
-	chinachuDir, err := os.Getwd()
+	strataDir, err := os.Getwd()
 	if err != nil {
-		chinachuDir = "."
+		strataDir = "."
 	}
-	chinachuDir = filepath.ToSlash(chinachuDir)
+	strataDir = filepath.ToSlash(strataDir)
 	return fmt.Sprintf(`#!/bin/bash
 # /etc/
 
@@ -1063,8 +1063,8 @@ func serviceInitScript(name string) string {
 # Required-Stop:     $local_fs $remote_fs $network $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: starts the chinachu-%[1]s
-# Description:       starts the chinachu-%[1]s (USER=$USER)
+# Short-Description: starts the Strata PVR %[1]s
+# Description:       starts the Strata PVR %[1]s service (USER=$USER)
 ### END INIT INFO
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -1146,7 +1146,7 @@ case "$1" in
 esac
 
 exit 0
-`, name, shellQuote(chinachuDir))
+`, name, shellQuote(strataDir))
 }
 
 func shellQuote(s string) string {
@@ -1704,7 +1704,7 @@ func writePretty(w io.Writer, v any) {
 
 func printHelp(w io.Writer) {
 	fmt.Fprint(w, `
-Usage: ./chinachu <cmd> ...
+Usage: strata-pvr <cmd> ...
 
 Commands:
 

@@ -61,6 +61,7 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	for _, want := range []string{
 		"### BEGIN INIT INFO",
 		"# Provides:          chinachu-operator",
+		"# Short-Description: starts the Strata PVR operator",
 		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
 		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
 		`DAEMON_OPTS="service operator execute"`,
