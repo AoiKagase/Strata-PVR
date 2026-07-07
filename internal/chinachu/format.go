@@ -208,6 +208,8 @@ func dateFormatToken(t time.Time, s string) (token, value string, ok bool) {
 		{"M", strconv.Itoa(t.Minute())},
 		{"ss", fmt.Sprintf("%02d", t.Second())},
 		{"s", strconv.Itoa(t.Second())},
+		{"l", fmt.Sprintf("%03d", t.Nanosecond()/int(time.Millisecond))},
+		{"L", fmt.Sprintf("%02d", (t.Nanosecond()/int(time.Millisecond)+5)/10)},
 		{"TT", meridiem(t, true)},
 		{"tt", meridiem(t, false)},
 		{"T", meridiem(t, true)[:1]},

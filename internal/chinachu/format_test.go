@@ -93,6 +93,24 @@ func TestFormatRecordedNameAdditionalDateformatTokens(t *testing.T) {
 	}
 }
 
+func TestFormatRecordedNameLegacyMillisecondDateformatTokens(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	program := Program{
+		ID:      "abc",
+		Title:   "Title",
+		Start:   time.Date(2024, 7, 1, 23, 5, 6, 789*int(time.Millisecond), time.Local).UnixMilli(),
+		Channel: Channel{Type: "GR", Channel: "27", Name: "Test", SID: 101},
+	}
+	got := FormatRecordedName(program, "<date:HHMMss.l-L>.m2ts")
+	want := "230506.789-79.m2ts"
+	if got != want {
+		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}
+
 func TestFormatRecordedNameLegacyTunerAndEpisodeTokens(t *testing.T) {
 	program := Program{
 		ID:       "abc",
