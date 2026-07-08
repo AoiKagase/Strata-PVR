@@ -443,8 +443,8 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "scheduleChannelTools"},
-		{"/app.js", "text/javascript", "renderScheduleChannelTools"},
+		{"/", "text/html", "mp4XSPFButton"},
+		{"/app.js", "text/javascript", "submitMP4Playlist"},
 		{"/styles.css", "text/css", ".channel-tools"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -587,8 +587,8 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			`function programPreviewURL(program, resource, size)`,
 			`function renderProgramPreview(program, resource)`,
 			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size="`,
-			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
-			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
+			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
+			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`actionButton("静止画", "録画中の静止画を開く"`,
 			`actionButton("静止画", "録画済みの静止画を開く"`,
 			`row.classList.remove("with-preview");`,

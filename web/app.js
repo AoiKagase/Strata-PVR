@@ -24,7 +24,6 @@
     config: {},
     storage: null,
     scheduleChannel: "",
-    scheduleStreamChannel: "",
     scheduleType: "",
     scheduleDay: "",
     scheduleGenre: "",
@@ -1134,6 +1133,7 @@
   };
 
   var pendingMP4Open = null;
+  var pendingMP4PlaylistOpen = null;
 
   function applyMP4Preset(name) {
     var preset = mp4Presets[name];
@@ -1209,23 +1209,49 @@
     return Object.keys(query).length ? query : null;
   }
 
-  function openMP4Dialog(meta, openWithQuery, initialPreset) {
+  function normalizeMP4DialogOptions(options) {
+    if (typeof options === "string") {
+      return { initialPreset: options };
+    }
+    return options || {};
+  }
+
+  function mergeQuery(base, next) {
+    var merged = {};
+    [base, next].forEach(function (query) {
+      if (!query) {
+        return;
+      }
+      Object.keys(query).forEach(function (key) {
+        merged[key] = query[key];
+      });
+    });
+    return Object.keys(merged).length ? merged : null;
+  }
+
+  function openMP4Dialog(meta, openWithQuery, options) {
+    options = normalizeMP4DialogOptions(options);
     var dialog = byId("mp4Dialog");
     if (!dialog || !dialog.showModal) {
-      openWithQuery(initialPreset && mp4Presets[initialPreset] ? {
-        "s": mp4Presets[initialPreset].s,
-        "b:v": mp4Presets[initialPreset].video,
-        "b:a": mp4Presets[initialPreset].audio
+      openWithQuery(options.initialPreset && mp4Presets[options.initialPreset] ? {
+        "s": mp4Presets[options.initialPreset].s,
+        "b:v": mp4Presets[options.initialPreset].video,
+        "b:a": mp4Presets[options.initialPreset].audio
       } : null);
       return;
     }
     mp4DialogReturnFocus = rememberFocus();
     pendingMP4Open = openWithQuery;
+    pendingMP4PlaylistOpen = typeof options.openPlaylist === "function" ? options.openPlaylist : null;
     text(byId("mp4DialogMeta"), meta || "");
     var preset = byId("mp4Preset");
     if (preset) {
-      preset.value = initialPreset || "";
+      preset.value = options.initialPreset || "";
       applyMP4Preset(preset.value);
+    }
+    var playlistButton = byId("mp4XSPFButton");
+    if (playlistButton) {
+      playlistButton.hidden = !pendingMP4PlaylistOpen;
     }
     dialog.showModal();
     focusFirstDialogControl(dialog);
@@ -1236,13 +1262,28 @@
     if (query === false || !pendingMP4Open) {
       return;
     }
+    var open = pendingMP4Open;
+    pendingMP4Open = null;
+    pendingMP4PlaylistOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
     }
-    var open = pendingMP4Open;
-    pendingMP4Open = null;
     open(query);
+  }
+
+  function submitMP4Playlist() {
+    if (!pendingMP4PlaylistOpen) {
+      return;
+    }
+    var openPlaylist = pendingMP4PlaylistOpen;
+    pendingMP4Open = null;
+    pendingMP4PlaylistOpen = null;
+    var dialog = byId("mp4Dialog");
+    if (dialog) {
+      dialog.close();
+    }
+    openPlaylist();
   }
 
   function formatBytes(value) {
@@ -1301,14 +1342,14 @@
           runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画を停止しますか？", actionConfirmOptions("DELETE", "この録画を停止しますか？", program, "録画停止の確認"));
         }));
       } else if (name === "watch-recording-mp4" && program.isRecording) {
-        row.appendChild(actionButton("視聴", "録画中の番組を変換視聴で開く", function () {
+        row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {
           openMP4Dialog(program.title || program.id || "録画中", function (query) {
             openURL(recordingWatchURL(program, "mp4", query));
+          }, {
+            openPlaylist: function () {
+              openURL(recordingWatchURL(program, "xspf"));
+            }
           });
-        }));
-      } else if (name === "playlist-recording" && program.isRecording) {
-        row.appendChild(actionButton("XSPF", "録画中のプレイリストを開く", function () {
-          openURL(recordingWatchURL(program, "xspf"));
         }));
       } else if (name === "preview-recording" && program.isRecording) {
         row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
@@ -1319,30 +1360,51 @@
           openURL(recordedWatchURL(program, "m2ts"));
         }));
       } else if (name === "watch-mp4") {
-        row.appendChild(actionButton("視聴", "録画済み番組を変換視聴で開く", function () {
+        row.appendChild(actionButton("視聴", "録画済み番組を視聴", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
+          }, {
+            openPlaylist: function () {
+              openURL(recordedWatchURL(program, "xspf"));
+            }
           });
         }));
       } else if (name === "watch-mp4-720p") {
-        row.appendChild(actionButton("720p視聴", "720p変換視聴を開く", function () {
+        row.appendChild(actionButton("720p視聴", "720pで視聴", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
-          }, "720p");
+          }, {
+            initialPreset: "720p",
+            openPlaylist: function () {
+              openURL(recordedWatchURL(program, "xspf"));
+            }
+          });
         }));
       } else if (name === "watch-mp4-low") {
-        row.appendChild(actionButton("低画質視聴", "低ビットレート変換視聴を開く", function () {
+        row.appendChild(actionButton("低画質視聴", "低画質で視聴", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
-          }, "360p");
+          }, {
+            initialPreset: "360p",
+            openPlaylist: function () {
+              openURL(recordedWatchURL(program, "xspf"));
+            }
+          });
         }));
       } else if (name === "watch-mp4-custom") {
-        row.appendChild(actionButton("詳細視聴", "再生条件付き変換視聴を開く", function () {
-          var query = playbackQuery(true);
-          if (query === false) {
+        row.appendChild(actionButton("詳細視聴", "再生条件を指定して視聴", function () {
+          var baseQuery = playbackQuery(true);
+          if (baseQuery === false) {
             return;
           }
-          openURL(recordedWatchURL(program, "mp4", query));
+          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
+            openURL(recordedWatchURL(program, "mp4", mergeQuery(baseQuery, query)));
+          }, {
+            initialPreset: "custom",
+            openPlaylist: function () {
+              openURL(recordedWatchURL(program, "xspf"));
+            }
+          });
         }));
       } else if (name === "watch-m2ts-offset") {
         row.appendChild(actionButton("M2TS指定", "開始位置・長さ指定付きM2TSを開く", function () {
@@ -1351,10 +1413,6 @@
             return;
           }
           openURL(recordedWatchURL(program, "m2ts", query));
-        }));
-      } else if (name === "playlist") {
-        row.appendChild(actionButton("XSPF", "プレイリストを開く", function () {
-          openURL(recordedWatchURL(program, "xspf"));
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("保存", "録画ファイルを保存", function () {
@@ -1371,9 +1429,13 @@
       } else if (name === "watch-channel-mp4") {
         var channelID = programChannelID(program);
         if (channelID) {
-          row.appendChild(actionButton("視聴", "この番組のチャンネルを変換視聴で開く", function () {
+          row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
             openMP4Dialog(program.title || channelID || "チャンネル", function (query) {
               openURL(channelURL(channelID, "watch", "mp4", query));
+            }, {
+              openPlaylist: function () {
+                openURL(channelURL(channelID, "watch", "xspf"));
+              }
             });
           }));
         }
@@ -1399,9 +1461,13 @@
 
   function recordedActionButton(name, program, className) {
     if (name === "watch-mp4") {
-      return actionButton("視聴", "録画済み番組を変換視聴で開く", function () {
+      return actionButton("視聴", "録画済み番組を視聴", function () {
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
           openURL(recordedWatchURL(program, "mp4", query));
+        }, {
+          openPlaylist: function () {
+            openURL(recordedWatchURL(program, "xspf"));
+          }
         });
       }, className);
     }
@@ -1411,26 +1477,43 @@
       }, className);
     }
     if (name === "watch-mp4-720p") {
-      return actionButton("720p視聴", "720p変換視聴を開く", function () {
+      return actionButton("720p視聴", "720pで視聴", function () {
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
           openURL(recordedWatchURL(program, "mp4", query));
-        }, "720p");
+        }, {
+          initialPreset: "720p",
+          openPlaylist: function () {
+            openURL(recordedWatchURL(program, "xspf"));
+          }
+        });
       }, className);
     }
     if (name === "watch-mp4-low") {
-      return actionButton("低画質視聴", "低ビットレート変換視聴を開く", function () {
+      return actionButton("低画質視聴", "低画質で視聴", function () {
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
           openURL(recordedWatchURL(program, "mp4", query));
-        }, "360p");
+        }, {
+          initialPreset: "360p",
+          openPlaylist: function () {
+            openURL(recordedWatchURL(program, "xspf"));
+          }
+        });
       }, className);
     }
     if (name === "watch-mp4-custom") {
-      return actionButton("詳細視聴", "再生条件付き変換視聴を開く", function () {
-        var query = playbackQuery(true);
-        if (query === false) {
+      return actionButton("詳細視聴", "再生条件を指定して視聴", function () {
+        var baseQuery = playbackQuery(true);
+        if (baseQuery === false) {
           return;
         }
-        openURL(recordedWatchURL(program, "mp4", query));
+        openMP4Dialog(program.title || program.id || "録画済み", function (query) {
+          openURL(recordedWatchURL(program, "mp4", mergeQuery(baseQuery, query)));
+        }, {
+          initialPreset: "custom",
+          openPlaylist: function () {
+            openURL(recordedWatchURL(program, "xspf"));
+          }
+        });
       }, className);
     }
     if (name === "watch-m2ts-offset") {
@@ -1440,11 +1523,6 @@
           return;
         }
         openURL(recordedWatchURL(program, "m2ts", query));
-      }, className);
-    }
-    if (name === "playlist") {
-      return actionButton("XSPF", "プレイリストを開く", function () {
-        openURL(recordedWatchURL(program, "xspf"));
       }, className);
     }
     if (name === "download") {
@@ -1784,7 +1862,7 @@
     items.sort(function (a, b) {
       return channelName(a).localeCompare(channelName(b), "ja");
     }).forEach(function (program) {
-      root.appendChild(renderProgramRowWithChannelLink(program, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop", "watch-channel-mp4"]));
+      root.appendChild(renderProgramRowWithChannelLink(program, ["watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4"]));
     });
   }
 
@@ -1860,7 +1938,6 @@
     renderScheduleChannelOptions(channels);
     renderScheduleFilterOptions(channels);
     syncScheduleFilterControls();
-    renderScheduleChannelTools(channels);
     root.innerHTML = "";
     if (!channelGroups.length) {
       renderScheduleEmpty(root, channels);
@@ -2021,6 +2098,7 @@
         heading.appendChild(logo);
       }
       heading.appendChild(channelLink(group.id, group.name));
+      heading.appendChild(renderChannelActions(group.id, group.name));
       grid.appendChild(heading);
     });
 
@@ -2059,48 +2137,22 @@
     }, 0);
   }
 
-  function renderChannelActions(channelID) {
+  function renderChannelActions(channelID, label) {
     var row = document.createElement("div");
     row.className = "channel-actions";
     if (!channelID || channelID === "unknown") {
       return row;
     }
-    row.appendChild(actionButton("視聴", "チャンネルを変換視聴で開く", function () {
-      openURL(channelURL(channelID, "watch", "mp4"));
-    }));
-    row.appendChild(actionButton("XSPF", "チャンネルのプレイリストを開く", function () {
-      openURL(channelURL(channelID, "watch", "xspf"));
+    row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
+      openMP4Dialog(label || channelID || "チャンネル", function (query) {
+        openURL(channelURL(channelID, "watch", "mp4", query));
+      }, {
+        openPlaylist: function () {
+          openURL(channelURL(channelID, "watch", "xspf"));
+        }
+      });
     }));
     return row;
-  }
-
-  function renderScheduleChannelTools(channels) {
-    var root = byId("scheduleChannelTools");
-    if (!root) {
-      return;
-    }
-    root.innerHTML = "";
-    root.hidden = true;
-    if (!state.scheduleStreamChannel) {
-      return;
-    }
-    var selected = null;
-    channels.some(function (channel) {
-      if (scheduleChannelID(channel) === state.scheduleStreamChannel) {
-        selected = channel;
-        return true;
-      }
-      return false;
-    });
-    if (!selected) {
-      return;
-    }
-    var label = document.createElement("span");
-    label.className = "channel-tool-label";
-    label.textContent = scheduleChannelName(selected) || state.scheduleStreamChannel;
-    root.appendChild(label);
-    root.appendChild(renderChannelActions(state.scheduleStreamChannel));
-    root.hidden = false;
   }
 
   function categoryClass(category) {
@@ -2193,7 +2245,7 @@
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
-      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "playlist-recording", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"]);
+      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"]);
     }
     programDialogReturnFocus = rememberFocus();
     if (dialog && dialog.showModal) {
@@ -2245,26 +2297,6 @@
       if (filterSelect.value !== currentFilter) {
         state.scheduleChannel = "";
         filterSelect.value = "";
-      }
-    }
-
-    if (!state.scheduleStreamChannel && options.length) {
-      state.scheduleStreamChannel = options[0].id;
-    }
-    var streamSelect = byId("scheduleStreamChannel");
-    if (streamSelect) {
-      var currentStream = state.scheduleStreamChannel;
-      streamSelect.innerHTML = "";
-      options.forEach(function (entry) {
-        var option = document.createElement("option");
-        option.value = entry.id;
-        option.textContent = entry.name;
-        streamSelect.appendChild(option);
-      });
-      streamSelect.value = currentStream;
-      if (streamSelect.value !== currentStream) {
-        state.scheduleStreamChannel = options.length ? options[0].id : "";
-        streamSelect.value = state.scheduleStreamChannel;
       }
     }
   }
@@ -2423,7 +2455,7 @@
     }
     root.className = "list";
     programs.forEach(function (program) {
-      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "playlist-recording", "preview-recording", "stop", "watch-channel-mp4", "create-rule-from-program"], false));
+      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "create-rule-from-program"], false));
     });
   }
 
@@ -3488,11 +3520,11 @@
     updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
 
-    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
+    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
     renderChannelPrograms();
@@ -3819,6 +3851,10 @@
     if (mp4OpenButton) {
       mp4OpenButton.addEventListener("click", submitMP4Dialog);
     }
+    var mp4XSPFButton = byId("mp4XSPFButton");
+    if (mp4XSPFButton) {
+      mp4XSPFButton.addEventListener("click", submitMP4Playlist);
+    }
     var mp4DialogClose = byId("mp4DialogClose");
     if (mp4DialogClose) {
       mp4DialogClose.addEventListener("click", function () {
@@ -3838,6 +3874,11 @@
       });
       mp4Dialog.addEventListener("close", function () {
         pendingMP4Open = null;
+        pendingMP4PlaylistOpen = null;
+        var playlistButton = byId("mp4XSPFButton");
+        if (playlistButton) {
+          playlistButton.hidden = true;
+        }
         restoreFocus(mp4DialogReturnFocus);
         mp4DialogReturnFocus = null;
       });
@@ -3964,13 +4005,6 @@
       scheduleChannel.addEventListener("change", function () {
         state.scheduleChannel = scheduleChannel.value;
         renderSchedule();
-      });
-    }
-    var scheduleStreamChannel = byId("scheduleStreamChannel");
-    if (scheduleStreamChannel) {
-      scheduleStreamChannel.addEventListener("change", function () {
-        state.scheduleStreamChannel = scheduleStreamChannel.value;
-        renderScheduleChannelTools(state.schedule || []);
       });
     }
     var scheduleType = byId("scheduleType");

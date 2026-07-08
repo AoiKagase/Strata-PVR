@@ -33,10 +33,6 @@
         <button id="scheduleRefreshButton" type="button">再読込</button>
         <a class="schedule-status-link" href="#logs">ログ</a>
       </div>
-      <label for="scheduleStreamChannel">視聴Ch</label>
-      <select id="scheduleStreamChannel">
-        <option value="">選択</option>
-      </select>
       <label for="scheduleType">種別</label>
       <select id="scheduleType">
         <option value="">すべて</option>
@@ -156,7 +152,6 @@
           </label>
         </div>
       </div>
-      <div id="scheduleChannelTools" class="channel-tools" hidden></div>
       <div id="scheduleList" class="list empty">番組表データがありません</div>
     </section>
 
@@ -696,7 +691,7 @@
       <div class="program-dialog-head">
         <div>
           <span id="mp4DialogMeta" class="program-dialog-meta"></span>
-          <h2 id="mp4DialogTitle">MP4変換視聴</h2>
+          <h2 id="mp4DialogTitle">視聴</h2>
         </div>
         <button class="small-button" type="button" id="mp4DialogClose">閉じる</button>
       </div>
@@ -725,8 +720,9 @@
           <input id="mp4AudioBitrate" type="text" inputmode="text" autocomplete="off" placeholder="128k">
         </label>
       </div>
-      <div class="program-dialog-actions">
-        <button class="small-button" type="button" id="mp4OpenButton">再生</button>
+      <div class="program-dialog-actions mp4-dialog-actions">
+        <button class="small-button" type="button" id="mp4XSPFButton" hidden>XSPF</button>
+        <button class="small-button primary-action" type="button" id="mp4OpenButton">再生</button>
       </div>
     </form>
   </dialog>

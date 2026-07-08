@@ -173,10 +173,6 @@ body {
   font-size: 12px;
 }
 
-.schedule-nav-controls #scheduleStreamChannel {
-  max-width: 180px;
-}
-
 .schedule-nav-controls button {
   min-height: 36px;
   padding: 0 10px;
@@ -693,6 +689,16 @@ summary:focus-visible,
   white-space: nowrap;
 }
 
+.schedule-channel-head .channel-actions {
+  justify-content: center;
+}
+
+.schedule-channel-head .channel-actions button {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
 .schedule-time-rail {
   position: sticky;
   left: 0;
@@ -1004,6 +1010,10 @@ summary:focus-visible,
   flex-wrap: wrap;
   gap: 8px;
   padding: 14px 16px 16px;
+}
+
+.mp4-dialog-actions {
+  justify-content: flex-end;
 }
 
 .confirm-dialog .program-dialog-actions {
