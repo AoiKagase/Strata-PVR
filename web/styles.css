@@ -362,6 +362,26 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.program-row.with-preview {
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+}
+
+.program-row-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.program-preview-image {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
 .program-row:last-child {
   border-bottom: 0;
 }

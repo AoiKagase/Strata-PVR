@@ -49,8 +49,12 @@ type Paths struct {
 	Scheduler    func(context.Context, bool) error
 }
 
-var runFFmpegPreview = func(ctx context.Context, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, "ffmpeg", args...).Output()
+const legacyRecordingPreviewTailBytes int64 = 3200000
+
+var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd.Stdin = input
+	return cmd.Output()
 }
 
 var runFFmpegStream = func(ctx context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
@@ -2299,24 +2303,9 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	if r.URL.Query().Get("type") == "png" || apiType == "png" {
 		codec = "png"
 	}
-	pos := previewPosition(r)
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	output, err := runFFmpegPreview(ctx,
-		"-f", "mpegts",
-		"-ss", pos,
-		"-r", "10",
-		"-i", filePath,
-		"-ss", "1.5",
-		"-r", "10",
-		"-frames:v", "1",
-		"-c:v", codec,
-		"-an",
-		"-f", "image2",
-		"-s", width+"x"+height,
-		"-map", "0:0",
-		"-y", "pipe:1",
-	)
+	output, err := s.runProgramPreview(ctx, path == s.paths.Recording, filePath, width, height, codec, r)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -2333,6 +2322,69 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	_, _ = w.Write(output)
+}
+
+func (s *server) runProgramPreview(ctx context.Context, recording bool, filePath, width, height, codec string, r *http.Request) ([]byte, error) {
+	if recording {
+		input, err := legacyRecordingPreviewInput(filePath)
+		if err != nil {
+			return nil, err
+		}
+		return runFFmpegPreview(ctx, input,
+			"-f", "mpegts",
+			"-r", "10",
+			"-i", "pipe:0",
+			"-ss", "1.5",
+			"-r", "10",
+			"-frames:v", "1",
+			"-f", "image2",
+			"-codec:v", codec,
+			"-an",
+			"-s", width+"x"+height,
+			"-map", "0:0",
+			"-y", "pipe:1",
+		)
+	}
+	pos := previewPosition(r)
+	return runFFmpegPreview(ctx, nil,
+		"-f", "mpegts",
+		"-ss", pos,
+		"-r", "10",
+		"-i", filePath,
+		"-ss", "1.5",
+		"-r", "10",
+		"-frames:v", "1",
+		"-c:v", codec,
+		"-an",
+		"-f", "image2",
+		"-s", width+"x"+height,
+		"-map", "0:0",
+		"-y", "pipe:1",
+	)
+}
+
+func legacyRecordingPreviewInput(filePath string) (io.Reader, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	start := info.Size() - legacyRecordingPreviewTailBytes
+	if start < 0 {
+		start = 0
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(body), nil
 }
 
 func previewSize(r *http.Request) (string, string) {
@@ -2965,7 +3017,7 @@ func fileStatJSON(info os.FileInfo) map[string]any {
 }
 
 func programHasPID(program legacy.Program) bool {
-	return program.PID > 0
+	return program.PID != 0
 }
 
 func programIsScrambling(program legacy.Program) bool {

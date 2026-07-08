@@ -282,24 +282,19 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 			return program, err
 		}
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(finalPath), "."+filepath.Base(finalPath)+".recording-*")
+	out, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return program, err
 	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := io.Copy(tmp, stream); err != nil && !aborted.Load() && recordCtx.Err() == nil {
-		tmp.Close()
+	if _, err := io.Copy(out, stream); err != nil && !aborted.Load() && recordCtx.Err() == nil {
+		out.Close()
 		return program, err
 	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+	if err := out.Sync(); err != nil {
+		out.Close()
 		return program, err
 	}
-	if err := tmp.Close(); err != nil {
-		return program, err
-	}
-	if err := os.Rename(tmpName, finalPath); err != nil {
+	if err := out.Close(); err != nil {
 		return program, err
 	}
 	program.PID = 0

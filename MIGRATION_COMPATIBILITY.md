@@ -10,6 +10,8 @@ Description: A Chinachu-compatible PVR for Mirakurun, written in Go.
 
 ## Audit Source
 
+The migration source tree is `H:\sourcecode\Chinachu`.
+
 - Wrapper: `chinachu`
 - CLI: `app-cli.js`
 - Scheduler: `app-scheduler.js`
@@ -256,8 +258,7 @@ They are used by scheduler tests to exercise schedule import and reservation gen
 - Operator creates `recordedDir` and nested recorded directories.
 - Operator writes `data/recording.json`, `data/recorded.json`, and may remove manual reserves.
 - Operator writes recorded files directly to final path with append mode.
-- Go operator currently starts due non-skip reserves 15 seconds before start, including conflict reserves at `conflictedPriority`, writes `data/recording.json`, updates the active recording entry with legacy runtime fields (`recorded`, `pid:-1`, `priority`, `tuner`, and `command`) after the Mirakurun stream is opened, records the Mirakurun decoded program stream, merges the completed item into `data/recorded.json` with the legacy same-ID replacement/old-ID suffix behavior, and removes the completed reserve only when it is `isManualReserved`, matching the old operator.
-- Go operator writes to a temporary `.recording-*` file and renames it after a successful copy. This is an intentional safety improvement and is not byte-for-byte identical to the old direct final-path write behavior.
+- Go operator currently starts due non-skip reserves 15 seconds before start, including conflict reserves at `conflictedPriority`, writes `data/recording.json`, updates the active recording entry with legacy runtime fields (`recorded`, `pid:-1`, `priority`, `tuner`, and `command`) after the Mirakurun stream is opened, records the Mirakurun decoded program stream directly to the final `recorded` path with append mode, merges the completed item into `data/recorded.json` with the legacy same-ID replacement/old-ID suffix behavior, and removes the completed reserve only when it is `isManualReserved`, matching the old operator.
 - Go operator startup clears `data/recording.json` to `[]`, creates missing `recordedDir` with legacy `MKDIR:` logging, polls `abort:true` during an active stream, and runs `recordedCommand` with recorded file path plus program JSON after state writes, logging the legacy `SPAWN:` line after process start. Low-storage command plus `remove`/`stop` actions, sendmail notification, and notification throttling are partially implemented; `remove` creates a timestamped `recorded.json` backup before rewriting the list. Operator logs now include the main legacy `PREPARE`/`RECORD`/`STREAM`/`WRITE`/`SPAWN`/`FIN` recording lines, including completion writes for `recorded.json` and `recording.json`. The Go entrypoint cancels runtime services on `SIGINT`/`SIGTERM` and Unix `SIGQUIT`; active streams are closed, recording/recorded state is finalized, and `recordedCommand` plus `FIN` logging still run after context cancellation. Remaining risk is exact byte-for-byte cleanup/log ordering for rarer external-signal races.
 - CLI and WUI/API cleanup remove missing file entries from `data/recorded.json` and create a timestamped backup before destructive writes.
 - WUI/API may rewrite config, rules, reserves, recording, recorded. Config PUT validates the supplied JSON but stores the raw query value to preserve the Node API shape.
@@ -265,7 +266,7 @@ They are used by scheduler tests to exercise schedule import and reservation gen
 - Go WUI `log/:name/stream.txt` writes the legacy padding, the last 100 log lines, and follows appended log data until the request is closed.
 - Go WUI scheduler JSON parses `RESERVE:` and legacy `!CONFLICT:`/`CONFLICT:` lines from `log/scheduler`; exact old shell `tac/sed` behavior is approximated in Go.
 - Go WUI status includes legacy operator PID values when the operator PID file is present and checks whether the referenced process is alive before setting `alive:true`; it intentionally does not expose a scheduler field because the old `data.status` object did not include one.
-- Go WUI recorded/recording watch supports XSPF, m2ts, and fragmented mp4 serving. Recorded watch performs the legacy `ffprobe -show_format` preflight before responding, including XSPF. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed. Recording mp4 watch now transcodes from a growing file reader with live ffmpeg arguments so browser playback does not stop at the file size that existed when playback started.
+- Go WUI recorded/recording watch supports XSPF, m2ts, and fragmented mp4 serving. Recorded watch performs the legacy `ffprobe -show_format` preflight before responding, including XSPF. Recording m2ts watch streams the last 61440 bytes and follows appended file data until the request is closed. Recording mp4 watch now transcodes from a growing file reader with live ffmpeg arguments so browser playback does not stop at the file size that existed when playback started. Recording preview generation reads the final-path recording file's last 3200000 bytes into ffmpeg stdin, matching the old `tail -c 3200000 ... | ffmpeg -i pipe:0` behavior.
 - Old wrapper installer/updater run git, wget, npm, and ffmpeg installation steps. Go runtime intentionally does not require Node/npm; Go updater is a safe no-op guidance command.
 
 ## Compatibility Status Matrix

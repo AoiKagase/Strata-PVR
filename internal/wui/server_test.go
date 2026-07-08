@@ -560,6 +560,56 @@ func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function operatorAlive()`,
+		`function programOnAir(program)`,
+		`var label = onAir ? "録画開始" : "予約";`,
+		`オペレータが停止中です。録画を開始するには service operator execute を起動してください`,
+		`badge.textContent = alive ? "オペレータ稼働中" : "オペレータ停止中";`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
+func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function programPreviewURL(program, resource, size)`,
+			`function renderProgramPreview(program, resource)`,
+			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size="`,
+			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
+			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
+			`actionButton("静止画", "録画中の静止画を開く"`,
+			`actionButton("静止画", "録画済みの静止画を開く"`,
+			`row.classList.remove("with-preview");`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-row.with-preview`,
+			`.program-preview-image`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardScheduleDayWindowStartsAtSelectedDay(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {
@@ -2025,12 +2075,15 @@ func TestAPIProgramPreview(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{
+		{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: 123},
+		{ID: "go-operator", Recorded: filepath.ToSlash(recordedPath), PID: -1},
+	}, false); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
 
-	for _, target := range []string{"/api/recorded/recorded/preview.png", "/api/recorded/recorded/preview.jpg", "/api/recording/recording/preview.png"} {
+	for _, target := range []string{"/api/recorded/recorded/preview.png", "/api/recorded/recorded/preview.jpg", "/api/recording/recording/preview.png", "/api/recording/go-operator/preview.png"} {
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
@@ -2050,6 +2103,52 @@ func TestAPIProgramPreview(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("missing preview status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recording.m2ts")
+	body := strings.Repeat("a", int(legacyRecordingPreviewTailBytes)+10)
+	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := runFFmpegPreview
+	var gotInput string
+	var gotArgs []string
+	runFFmpegPreview = func(_ context.Context, input io.Reader, args ...string) ([]byte, error) {
+		data, err := io.ReadAll(input)
+		if err != nil {
+			return nil, err
+		}
+		gotInput = string(data)
+		gotArgs = append(gotArgs[:0], args...)
+		return []byte("preview-image"), nil
+	}
+	defer func() { runFFmpegPreview = old }()
+
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: -1}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview.jpg?pos=99&size=480x270", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
+		t.Fatalf("recording preview status=%d body=%q", res.Code, res.Body.String())
+	}
+	if len(gotInput) != int(legacyRecordingPreviewTailBytes) || gotInput != body[10:] {
+		t.Fatalf("recording preview input length=%d", len(gotInput))
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-f mpegts", "-i pipe:0", "-ss 1.5", "-codec:v mjpeg", "-s 480x270"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("recording preview args missing %q: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "-ss 97.5") || strings.Contains(joined, recordedPath) {
+		t.Fatalf("recording preview should use legacy tail pipe args: %s", joined)
 	}
 }
 
@@ -2113,7 +2212,7 @@ func installFakeFFmpeg(t *testing.T, output string, exitCode ...int) func() {
 		code = exitCode[0]
 	}
 	old := runFFmpegPreview
-	runFFmpegPreview = func(context.Context, ...string) ([]byte, error) {
+	runFFmpegPreview = func(context.Context, io.Reader, ...string) ([]byte, error) {
 		if code != 0 {
 			return nil, fmt.Errorf("fake ffmpeg exit %d", code)
 		}

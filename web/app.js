@@ -420,6 +420,19 @@
     return byID;
   }
 
+  function operatorAlive() {
+    var operator = state.status && state.status.operator;
+    return Boolean(operator && (operator.alive || operator.isRunning));
+  }
+
+  function programOnAir(program) {
+    if (!program || !program.start) {
+      return false;
+    }
+    var now = Date.now();
+    return now >= program.start && now <= programEnd(program);
+  }
+
   function decorateProgramState(program) {
     if (!program || !program.id) {
       return program;
@@ -1139,8 +1152,16 @@
     actions.forEach(function (name) {
       if (name === "reserve") {
         if (!program.isReserved && !program.isRecording) {
-          row.appendChild(actionButton("予約", "この番組を予約", function () {
-            runAction("program/" + encodeURIComponent(program.id) + ".json", "PUT");
+          var onAir = programOnAir(program);
+          var label = onAir ? "録画開始" : "予約";
+          var title = onAir ? "この放送中の番組を手動予約して録画開始を待つ" : "この番組を予約";
+          row.appendChild(actionButton(label, title, function () {
+            setBusy("Working");
+            request("program/" + encodeURIComponent(program.id) + ".json", "PUT").then(refresh).then(function () {
+              if (onAir && !operatorAlive()) {
+                showError(new Error("オペレータが停止中です。録画を開始するには service operator execute を起動してください"));
+              }
+            }).catch(showError);
           }));
         }
       } else if (name === "unreserve" && program.isManualReserved && !program.isRecording) {
@@ -1170,7 +1191,7 @@
           openURL(recordingWatchURL(program, "xspf"));
         }));
       } else if (name === "preview-recording" && program.isRecording) {
-        row.appendChild(actionButton("プレビュー", "録画中のプレビュー画像を開く", function () {
+        row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
           openURL("/api/recording/" + encodeURIComponent(program.id) + "/preview.png");
         }));
       } else if (name === "watch-m2ts") {
@@ -1220,7 +1241,7 @@
           openURL("/api/recorded/" + encodeURIComponent(program.id) + "/file.m2ts");
         }));
       } else if (name === "preview-recorded") {
-        row.appendChild(actionButton("プレビュー", "録画済みプレビュー画像を開く", function () {
+        row.appendChild(actionButton("静止画", "録画済みの静止画を開く", function () {
           openURL("/api/recorded/" + encodeURIComponent(program.id) + "/preview.png");
         }));
       } else if (name === "delete-recorded") {
@@ -1272,10 +1293,35 @@
     return Boolean(program && program.id && state.activeProgramID && program.id === state.activeProgramID);
   }
 
-  function renderProgramRow(program, actions, showChannel) {
+  function programPreviewURL(program, resource, size) {
+    return "/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size=" + encodeURIComponent(size || "160x90");
+  }
+
+  function renderProgramPreview(program, resource) {
+    if (!program || !program.recorded || (resource !== "recording" && resource !== "recorded")) {
+      return null;
+    }
+    var image = document.createElement("img");
+    image.className = "program-preview-image";
+    image.src = programPreviewURL(program, resource, "160x90");
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("error", function () {
+      var row = image.closest(".program-row");
+      if (row) {
+        row.classList.remove("with-preview");
+      }
+      image.remove();
+    });
+    return image;
+  }
+
+  function renderProgramRow(program, actions, showChannel, options) {
     program = decorateProgramState(program);
+    options = options || {};
     var item = document.createElement("article");
     item.className = "program-row";
+    item.classList.toggle("with-preview", Boolean(options.preview));
     item.classList.toggle("selected", isActiveProgram(program));
     item.tabIndex = 0;
     item.setAttribute("role", "group");
@@ -1312,10 +1358,20 @@
     parts.push(program.category);
     meta.textContent = parts.filter(Boolean).join(" / ");
 
-    item.appendChild(title);
-    item.appendChild(meta);
-    renderProgramStateBadges(item, program);
-    renderActions(item, program, actions);
+    var body = document.createElement("div");
+    body.className = "program-row-body";
+    body.appendChild(title);
+    body.appendChild(meta);
+    renderProgramStateBadges(body, program);
+    renderActions(body, program, actions);
+
+    if (options.preview) {
+      var preview = renderProgramPreview(program, options.previewResource || "recording");
+      if (preview) {
+        item.appendChild(preview);
+      }
+    }
+    item.appendChild(body);
     return item;
   }
 
@@ -1445,7 +1501,7 @@
     renderChannelPrograms();
   }
 
-  function renderList(id, items, emptyText, limit, actions) {
+  function renderList(id, items, emptyText, limit, actions, options) {
     var root = byId(id);
     if (!root) {
       return;
@@ -1458,7 +1514,7 @@
     }
     root.className = "list";
     items.slice(0, limit || 8).forEach(function (program) {
-      root.appendChild(renderProgramRow(program, actions, true));
+      root.appendChild(renderProgramRow(program, actions, true, options));
     });
   }
 
@@ -3090,9 +3146,8 @@
 
     var badge = byId("statusBadge");
     if (badge) {
-      var operator = state.status && state.status.operator;
-      var alive = operator && (operator.alive || operator.isRunning);
-      badge.textContent = alive ? "オペレータ稼働中" : "オペレータ待機中";
+      var alive = operatorAlive();
+      badge.textContent = alive ? "オペレータ稼働中" : "オペレータ停止中";
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
@@ -3105,11 +3160,11 @@
     updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
 
-    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"]);
+    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
-    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
+    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
     renderChannelPrograms();
