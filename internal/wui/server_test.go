@@ -605,6 +605,34 @@ func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardRealtimeNotifications(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function publishMutation(path, method)`,
+		`function publishRealtime(eventName)`,
+		`function subscribeRealtimeRefresh()`,
+		`window.StrataPVRNotify`,
+		`BroadcastChannel("strata-pvr")`,
+		`realtimeChannel`,
+		`strata-pvr:notify`,
+		`notify-reserves`,
+		`notify-recording`,
+		`notify-recorded`,
+		`notify-rules`,
+		`notify-schedule`,
+		`notify-config`,
+		`subscribeRealtimeRefresh();`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardVisualStateRetention(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {
@@ -750,6 +778,10 @@ func TestSocketIOCompatScript(t *testing.T) {
 		"'reconnect' : 'disconnect'",
 		"emit: function(name)",
 		"clearInterval",
+		"BroadcastChannel",
+		"StrataPVRNotify",
+		"strata-pvr:notify",
+		"createRealtimeBus",
 		"once:",
 		"off:",
 	} {

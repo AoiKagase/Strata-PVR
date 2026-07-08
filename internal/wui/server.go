@@ -530,6 +530,49 @@ const socketIOCompatScript = `(function(global){
       'notify-storage': 'storage.json'
     }[name] || null;
   }
+  function createRealtimeBus(onEvent) {
+    var channel = null;
+    var storageKey = 'strata-pvr:notify';
+    function handle(message) {
+      if (!message || !message.event) { return; }
+      onEvent(message.event);
+    }
+    if (typeof global.BroadcastChannel === 'function') {
+      try {
+        channel = new global.BroadcastChannel('strata-pvr');
+        channel.onmessage = function(event){ handle(event.data); };
+      } catch (e) {
+        channel = null;
+      }
+    }
+    if (global.addEventListener) {
+      global.addEventListener('storage', function(event){
+        if (event.key !== storageKey || !event.newValue) { return; }
+        try { handle(JSON.parse(event.newValue)); } catch (e) {}
+      });
+    }
+    return {
+      close: function(){
+        if (channel && channel.close) { channel.close(); }
+        channel = null;
+      }
+    };
+  }
+  global.StrataPVRNotify = global.StrataPVRNotify || function(name) {
+    var message = { event: name, at: Date.now() };
+    if (typeof global.BroadcastChannel === 'function') {
+      try {
+        var channel = new global.BroadcastChannel('strata-pvr');
+        channel.postMessage(message);
+        channel.close();
+      } catch (e) {}
+    }
+    try {
+      if (global.localStorage) {
+        global.localStorage.setItem('strata-pvr:notify', JSON.stringify(message));
+      }
+    } catch (e) {}
+  };
   global.io = global.io || {};
   global.io.connect = function(){
     var pollers = {};
@@ -537,6 +580,7 @@ const socketIOCompatScript = `(function(global){
     var snapshots = {};
     var connected = true;
     var active = true;
+    var bus;
     var socket;
     function fire(name, payload) {
       var list = handlers[name] || [];
@@ -580,6 +624,10 @@ const socketIOCompatScript = `(function(global){
       pollers[name] = poller;
       return poller;
     }
+    bus = createRealtimeBus(function(name){
+      var path = name === 'status' ? 'status.json' : resourceForEvent(name);
+      if (path) { fetchResource(name, path, name === 'status'); }
+    });
     socket = {
       on: function(name, cb) {
         if (!handlers[name]) { handlers[name] = []; }
@@ -620,6 +668,7 @@ const socketIOCompatScript = `(function(global){
           }
         }
         pollers = {};
+        if (bus) { bus.close(); }
         fire('disconnect');
       }
     };

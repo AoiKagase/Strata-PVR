@@ -45,6 +45,7 @@
       reserves: { query: "", category: "" }
     },
     programStateIndex: { reserves: {}, recording: {} },
+    realtimeChannel: null,
     configEditorDirty: false
   };
 
@@ -125,7 +126,9 @@
         throw new Error(path + " returned " + response.status);
       }
       return response.text().then(function (body) {
-        return body ? JSON.parse(body) : {};
+        var result = body ? JSON.parse(body) : {};
+        publishMutation(path, method || "GET");
+        return result;
       });
     });
   }
@@ -141,7 +144,9 @@
         throw new Error(path + " returned " + response.status);
       }
       return response.text().then(function (body) {
-        return body ? JSON.parse(body) : {};
+        var result = body ? JSON.parse(body) : {};
+        publishMutation(path, method);
+        return result;
       });
     });
   }
@@ -155,8 +160,103 @@
         throw new Error("config.json returned " + response.status);
       }
       return response.text().then(function (body) {
-        return body ? JSON.parse(body) : {};
+        var result = body ? JSON.parse(body) : {};
+        publishRealtime("notify-config");
+        return result;
       });
+    });
+  }
+
+  function notifyEventForPath(path, method) {
+    if (!method || method === "GET") {
+      return "";
+    }
+    if (/^program\//.test(path) || /^reserves?(\b|\/|\.json)/.test(path)) {
+      return "notify-reserves";
+    }
+    if (/^recording\//.test(path)) {
+      return "notify-recording";
+    }
+    if (/^recorded\//.test(path)) {
+      return "notify-recorded";
+    }
+    if (/^rules(\b|\/|\.json)/.test(path)) {
+      return "notify-rules";
+    }
+    if (/^scheduler\//.test(path)) {
+      return "notify-schedule";
+    }
+    return "";
+  }
+
+  function publishMutation(path, method) {
+    publishRealtime(notifyEventForPath(path, method));
+  }
+
+  function publishRealtime(eventName) {
+    if (!eventName) {
+      return;
+    }
+    if (typeof window.StrataPVRNotify === "function") {
+      window.StrataPVRNotify(eventName);
+      return;
+    }
+    var message = { event: eventName, at: Date.now() };
+    if (typeof window.BroadcastChannel === "function") {
+      try {
+        var channel = new window.BroadcastChannel("strata-pvr");
+        channel.postMessage(message);
+        channel.close();
+      } catch (error) {
+        // Continue with the localStorage fallback.
+      }
+    }
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem("strata-pvr:notify", JSON.stringify(message));
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
+    }
+  }
+
+  function subscribeRealtimeRefresh() {
+    var storageKey = "strata-pvr:notify";
+    var refreshEvents = {
+      "notify-config": true,
+      "notify-recorded": true,
+      "notify-recording": true,
+      "notify-reserves": true,
+      "notify-rules": true,
+      "notify-schedule": true,
+      "notify-storage": true
+    };
+    function handle(message) {
+      if (!message || !refreshEvents[message.event]) {
+        return;
+      }
+      refresh();
+    }
+    if (typeof window.BroadcastChannel === "function") {
+      try {
+        var channel = new window.BroadcastChannel("strata-pvr");
+        channel.onmessage = function (event) {
+          handle(event.data);
+        };
+        state.realtimeChannel = channel;
+      } catch (error) {
+        // The storage event fallback below still covers other tabs.
+      }
+    }
+    window.addEventListener("storage", function (event) {
+      if (event.key !== storageKey || !event.newValue) {
+        return;
+      }
+      try {
+        handle(JSON.parse(event.newValue));
+      } catch (error) {
+        // Ignore malformed values written by other code.
+      }
     });
   }
 
@@ -3205,6 +3305,7 @@
         renderChannelPrograms();
       });
     }
+    subscribeRealtimeRefresh();
     refresh();
     setInterval(refresh, 30000);
     setInterval(refreshLogs, 60000);
