@@ -12,6 +12,7 @@
   var mp4DialogReturnFocus = null;
   var confirmDialogReturnFocus = null;
   var pendingConfirmResolve = null;
+  var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
   var state = {
     status: null,
@@ -154,7 +155,7 @@
       return;
     }
     window.setTimeout(function () {
-      var control = dialog.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+      var control = dialog.querySelector(focusableControlSelector);
       if (control && typeof control.focus === "function") {
         control.focus();
       }
@@ -173,6 +174,39 @@
         focusFirstDialogControl(dialog);
       }
     }, 0);
+  }
+
+  function dialogFocusableControls(dialog) {
+    return Array.prototype.slice.call(dialog.querySelectorAll(focusableControlSelector)).filter(function (control) {
+      return !control.disabled && control.getAttribute("aria-hidden") !== "true" && typeof control.focus === "function";
+    });
+  }
+
+  function trapDialogFocus(dialog, event) {
+    if (event.key !== "Tab" || !dialog.open) {
+      return;
+    }
+    var controls = dialogFocusableControls(dialog);
+    if (!controls.length) {
+      return;
+    }
+    var first = controls[0];
+    var last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function bindDialogFocusTrap(dialog) {
+    if (dialog) {
+      dialog.addEventListener("keydown", function (event) {
+        trapDialogFocus(dialog, event);
+      });
+    }
   }
 
   function api(path) {
@@ -3506,6 +3540,7 @@
     }
     var mp4Dialog = byId("mp4Dialog");
     if (mp4Dialog) {
+      bindDialogFocusTrap(mp4Dialog);
       mp4Dialog.addEventListener("click", function (event) {
         if (event.target === mp4Dialog) {
           mp4Dialog.close();
@@ -3580,6 +3615,7 @@
     }
     var programDialog = byId("programDialog");
     if (programDialog) {
+      bindDialogFocusTrap(programDialog);
       programDialog.addEventListener("click", function (event) {
         if (event.target === programDialog) {
           closeProgramDialog();
@@ -3593,6 +3629,7 @@
     }
     var confirmDialog = byId("confirmDialog");
     if (confirmDialog) {
+      bindDialogFocusTrap(confirmDialog);
       confirmDialog.addEventListener("cancel", function () {
         closeConfirmDialog(false);
       });
