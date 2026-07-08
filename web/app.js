@@ -161,6 +161,20 @@
     }, 0);
   }
 
+  function focusDialogControl(dialog, selector) {
+    if (!dialog) {
+      return;
+    }
+    window.setTimeout(function () {
+      var control = dialog.querySelector(selector);
+      if (control && typeof control.focus === "function") {
+        control.focus();
+      } else {
+        focusFirstDialogControl(dialog);
+      }
+    }, 0);
+  }
+
   function api(path) {
     return request(path, "GET");
   }
@@ -953,7 +967,7 @@
     return new Promise(function (resolve) {
       pendingConfirmResolve = resolve;
       dialog.showModal();
-      focusFirstDialogControl(dialog);
+      focusDialogControl(dialog, "#confirmDialogOK");
     });
   }
 
