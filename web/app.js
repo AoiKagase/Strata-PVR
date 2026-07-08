@@ -1,6 +1,7 @@
 (function () {
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
   var listFiltersStorageKey = "strata-pvr.listFilters";
+  var dashboardOnAirVisibleStorageKey = "strata-pvr.dashboardOnAirVisible";
   var scheduleWindowHoursByMode = {
     "day": 24,
     "three-days": 72,
@@ -28,6 +29,7 @@
     scheduleDay: "",
     scheduleGenre: "",
     scheduleHiddenChannels: loadHiddenChannels(),
+    dashboardOnAirVisible: loadDashboardOnAirVisible(),
     scheduleWindowMode: "all",
     channelProgramsChannel: "",
     channelProgramsGenre: "",
@@ -128,6 +130,25 @@
       if (window.localStorage) {
         state.scheduleHiddenChannels = normalizeHiddenChannels(state.scheduleHiddenChannels);
         window.localStorage.setItem(hiddenChannelsStorageKey, JSON.stringify(state.scheduleHiddenChannels));
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
+    }
+  }
+
+  function loadDashboardOnAirVisible() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(dashboardOnAirVisibleStorageKey) : "";
+      return raw !== "false";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function saveDashboardOnAirVisible() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(dashboardOnAirVisibleStorageKey, state.dashboardOnAirVisible ? "true" : "false");
       }
     } catch (error) {
       // localStorage can be unavailable in private or embedded contexts.
@@ -698,6 +719,24 @@
       return String(channel.channel.type || channel.channel.channelType || "");
     }
     return String(channel.type || channel.channelType || "");
+  }
+
+  function scheduleChannelTypeRank(type) {
+    var normalized = String(type || "").toUpperCase();
+    if (normalized === "GR") {
+      return 0;
+    }
+    if (normalized === "BS") {
+      return 1;
+    }
+    if (normalized === "CS") {
+      return 2;
+    }
+    return 3;
+  }
+
+  function compareScheduleChannelGroups(a, b) {
+    return scheduleChannelTypeRank(a && a.type) - scheduleChannelTypeRank(b && b.type) || (a && a.order || 0) - (b && b.order || 0);
   }
 
   function scheduleProgramChannelName(program, fallback) {
@@ -1706,53 +1745,73 @@
     return item;
   }
 
-  function renderProgramRowWithChannelLink(program, actions) {
-    program = decorateProgramState(program);
+  function currentProgramForGroup(group, now) {
+    var current = null;
+    (group.programs || []).some(function (program) {
+      if (program.start <= now && programEnd(program) > now) {
+        current = program;
+        return true;
+      }
+      return false;
+    });
+    return current;
+  }
+
+  function channelGroupHidden(group) {
+    var firstProgramChannelID = programChannelID((group.programs || [])[0]);
+    return state.scheduleHiddenChannels.indexOf(group.id) >= 0 || state.scheduleHiddenChannels.indexOf(firstProgramChannelID) >= 0;
+  }
+
+  function visibleChannelProgramGroups() {
+    return channelProgramGroups().filter(function (group) {
+      return !channelGroupHidden(group);
+    });
+  }
+
+  function renderOnAirLiveRow(group, current) {
     var item = document.createElement("article");
-    item.className = "program-row";
-    item.classList.toggle("selected", isActiveProgram(program));
-    item.tabIndex = 0;
-    item.setAttribute("role", "group");
-    item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
-    item.addEventListener("dblclick", function (event) {
-      if (!isEditableTarget(event.target)) {
-        openProgramDialog(program);
-      }
-    });
-    item.addEventListener("keydown", function (event) {
-      if (event.target !== item) {
-        return;
-      }
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openProgramDialog(program);
-      }
-    });
+    item.className = "live-channel-row";
 
-    var title = document.createElement("button");
-    title.type = "button";
-    title.className = "program-title-button";
-    title.textContent = programTitle(program);
-    title.title = "番組詳細を開く";
-    title.addEventListener("click", function () {
-      openProgramDialog(program);
-    });
+    var channel = document.createElement("div");
+    channel.className = "inline-channel-row live-channel-name";
+    channel.appendChild(channelLink(group.id, group.name || group.id));
 
-    var meta = document.createElement("span");
-    var channelID = programChannelID(program);
-    var parts = [formatTime(program.start), program.category];
-    meta.textContent = parts.filter(Boolean).join(" / ");
-
-    item.appendChild(title);
-    item.appendChild(meta);
-    if (channelID || channelName(program)) {
-      var channelRow = document.createElement("div");
-      channelRow.className = "inline-channel-row";
-      channelRow.appendChild(channelLink(channelID, channelName(program) || channelID));
-      item.appendChild(channelRow);
+    var nowPlaying = document.createElement("button");
+    nowPlaying.type = "button";
+    nowPlaying.className = "program-title-button live-channel-program";
+    if (current) {
+      nowPlaying.textContent = programTitle(current);
+      nowPlaying.title = "番組詳細を開く";
+      nowPlaying.addEventListener("click", function () {
+        openProgramDialog(current);
+      });
+    } else {
+      nowPlaying.textContent = "番組情報なし";
+      nowPlaying.disabled = true;
     }
-    renderProgramStateBadges(item, program);
-    renderActions(item, program, actions);
+
+    var time = document.createElement("span");
+    time.className = "live-channel-time";
+    time.textContent = current ? [formatClock(current.start), formatClock(programEnd(current))].filter(Boolean).join("-") : "";
+
+    var actions = document.createElement("div");
+    actions.className = "row-actions live-channel-actions";
+    if (group.id) {
+      actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
+        openMP4Dialog(group.name || group.id || "チャンネル", function (query) {
+          openURL(channelURL(group.id, "watch", "mp4", query));
+        }, {
+          openPlaylist: function () {
+            openURL(channelURL(group.id, "watch", "xspf"));
+          }
+        });
+      }, "small-button"));
+    }
+
+    item.appendChild(channel);
+    item.appendChild(nowPlaying);
+    item.appendChild(time);
+    item.appendChild(actions);
     return item;
   }
 
@@ -1777,13 +1836,15 @@
 
   function channelProgramGroups() {
     var groups = [];
-    (state.schedule || []).forEach(function (channel) {
+    (state.schedule || []).forEach(function (channel, index) {
       var channelID = scheduleChannelID(channel);
       var groupID = channelID || scheduleChannelName(channel) || "unknown";
       var displayName = scheduleChannelName(channel) || channelID || "不明なチャンネル";
       var group = {
         id: groupID,
         name: displayName,
+        order: index,
+        type: scheduleChannelType(channel),
         logo: Boolean(channelID && scheduleChannelHasLogo(channel)),
         programs: []
       };
@@ -1854,44 +1915,39 @@
     if (!root) {
       return;
     }
-    var now = Date.now();
-    var items = [];
-    channelProgramGroups().forEach(function (group) {
-      var groupID = group.id || programChannelID(group.programs[0]) || group.name || "unknown";
-      if (state.scheduleHiddenChannels.indexOf(groupID) >= 0) {
-        return;
-      }
-      var current = null;
-      group.programs.some(function (program) {
-        if (program.start <= now && programEnd(program) > now) {
-          current = program;
-          return true;
-        }
-        return false;
-      });
-      if (current) {
-        items.push(current);
-      }
+    syncOnAirPanelVisibility();
+    var groups = visibleChannelProgramGroups().sort(function (a, b) {
+      return compareScheduleChannelGroups(a, b);
     });
     root.innerHTML = "";
-    if (!items.length) {
+    if (!groups.length) {
       root.className = "list empty";
       root.textContent = "現在放送中の番組はありません";
       return;
     }
-    root.className = "list";
-    items.sort(function (a, b) {
-      return channelName(a).localeCompare(channelName(b), "ja");
+    var now = Date.now();
+    root.className = "list live-channel-list";
+    groups.forEach(function (group) {
+      root.appendChild(renderOnAirLiveRow(group, currentProgramForGroup(group, now)));
     });
-    items.slice(0, 8).forEach(function (program) {
-      root.appendChild(renderProgramRowWithChannelLink(program, ["watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4"]));
-    });
-    if (items.length > 8) {
-      var summary = document.createElement("p");
-      summary.className = "list-limit-summary";
-      summary.textContent = "ほか " + (items.length - 8) + " 件は番組表で確認できます";
-      root.appendChild(summary);
+  }
+
+  function syncOnAirPanelVisibility() {
+    var panel = document.querySelector(".dashboard-on-air-panel");
+    if (panel) {
+      panel.hidden = !state.dashboardOnAirVisible;
     }
+    var button = byId("toggleOnAirPanelButton");
+    if (button) {
+      button.classList.toggle("active", state.dashboardOnAirVisible);
+      button.setAttribute("aria-pressed", state.dashboardOnAirVisible ? "true" : "false");
+    }
+  }
+
+  function toggleOnAirPanel() {
+    state.dashboardOnAirVisible = !state.dashboardOnAirVisible;
+    saveDashboardOnAirVisible();
+    syncOnAirPanelVisibility();
   }
 
   function renderSchedule() {
@@ -1925,6 +1981,8 @@
         channelMeta[groupID] = {
           id: groupID,
           name: displayName,
+          order: channelOrder.length,
+          type: scheduleChannelType(channel),
           logo: Boolean(channelID && scheduleChannelHasLogo(channel)),
           programs: []
         };
@@ -1955,7 +2013,9 @@
         channelMeta[groupID].programs.push(item);
       });
     });
-    channelOrder.forEach(function (id) {
+    channelOrder.sort(function (a, b) {
+      return compareScheduleChannelGroups(channelMeta[a] || {}, channelMeta[b] || {});
+    }).forEach(function (id) {
       if (channelMeta[id] && channelMeta[id].programs.length) {
         channelMeta[id].programs.sort(function (a, b) {
           return (a.start || 0) - (b.start || 0);
@@ -3850,6 +3910,10 @@
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
     }
+    var toggleOnAirPanelButton = byId("toggleOnAirPanelButton");
+    if (toggleOnAirPanelButton) {
+      toggleOnAirPanelButton.addEventListener("click", toggleOnAirPanel);
+    }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     resetListFilter("reserves", {
@@ -4105,6 +4169,7 @@
           state.scheduleHiddenChannels.push(select.value);
           saveHiddenChannels();
           renderSchedule();
+          renderOnAirList();
         }
       });
     }
@@ -4120,6 +4185,7 @@
         });
         saveHiddenChannels();
         renderSchedule();
+        renderOnAirList();
       });
     }
     var scheduleClearHiddenButton = byId("scheduleClearHiddenButton");
@@ -4128,6 +4194,7 @@
         state.scheduleHiddenChannels = [];
         saveHiddenChannels();
         renderSchedule();
+        renderOnAirList();
       });
     }
     var scheduleWindow = byId("scheduleWindow");

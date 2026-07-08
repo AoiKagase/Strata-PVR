@@ -330,6 +330,95 @@ h3 {
   grid-column: 1 / -1;
 }
 
+.dashboard-on-air-panel {
+  min-height: 0;
+}
+
+.dashboard-summary-panel {
+  min-height: 220px;
+}
+
+#toggleOnAirPanelButton:not(.active) {
+  border-color: var(--line);
+  background: #f4f8fa;
+  color: var(--ink);
+}
+
+#toggleOnAirPanelButton:not(.active):hover {
+  background: #e8eef1;
+}
+
+.live-channel-list:not(.empty) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 0 18px;
+  margin-top: 8px;
+}
+
+.live-channel-row {
+  display: grid;
+  grid-template-columns: minmax(108px, 150px) minmax(0, 1fr) 72px auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.live-channel-row:last-child {
+  border-bottom: 0;
+}
+
+.live-channel-name,
+.live-channel-program {
+  min-width: 0;
+}
+
+.live-channel-name .channel-link,
+.live-channel-program {
+  overflow: hidden;
+  max-width: 100%;
+  min-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-channel-time {
+  overflow: hidden;
+  color: #566770;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-channel-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.live-channel-actions button {
+  min-height: 24px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .live-channel-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .live-channel-program,
+  .live-channel-time {
+    grid-column: 1;
+  }
+
+  .live-channel-actions {
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+}
+
 .panel-head {
   display: flex;
   align-items: center;

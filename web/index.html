@@ -86,20 +86,23 @@
       <div class="view-head">
         <div>
           <h2>ダッシュボード</h2>
-          <p>現在の録画状態、直近の予約、最近の録画だけを確認します。</p>
+          <p>現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。</p>
         </div>
-        <button id="refreshButton" type="button" title="Refresh">更新</button>
+        <div class="panel-actions">
+          <button id="toggleOnAirPanelButton" type="button" aria-pressed="true">放送中の番組</button>
+          <button id="refreshButton" type="button" title="Refresh">更新</button>
+        </div>
       </div>
       <section class="content-grid">
-        <section class="panel">
+        <section class="panel wide-panel dashboard-on-air-panel">
+          <h3>放送中の番組</h3>
+          <div id="onAirList" class="list empty">現在放送中の番組はありません</div>
+        </section>
+        <section class="panel dashboard-summary-panel">
           <h3>録画中</h3>
           <div id="recordingList" class="list empty">録画中の番組はありません</div>
         </section>
-        <section class="panel">
-          <h3>放送中</h3>
-          <div id="onAirList" class="list empty">現在放送中の番組はありません</div>
-        </section>
-        <section class="panel">
+        <section class="panel dashboard-summary-panel">
           <h3>予約</h3>
           <div id="reserveList" class="list empty">予約はありません</div>
         </section>
@@ -266,6 +269,7 @@
           <p>Chinachu互換の予約ルールを編集します。</p>
         </div>
         <div class="panel-actions">
+          <button id="forceSchedulerButton" type="button" title="スケジューラを実行">スケジューラ実行</button>
           <button id="addRuleButton" type="button" title="ルールを追加">JSON追加</button>
           <button id="saveRuleButton" type="button" title="編集中のルールを保存">JSON保存</button>
         </div>
@@ -422,7 +426,6 @@
           <h2>ステータス</h2>
           <p>サーバーの稼働状態、リソース、ストレージを確認します。</p>
         </div>
-        <button id="forceSchedulerButton" type="button" title="スケジューラを実行">スケジューラ実行</button>
       </div>
       <div class="settings-grid">
         <section class="panel">
