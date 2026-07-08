@@ -818,6 +818,31 @@
     return true;
   }
 
+  function focusRowAt(index) {
+    var rows = currentFocusableRows();
+    if (!rows.length) {
+      return false;
+    }
+    index = Math.max(0, Math.min(rows.length - 1, index));
+    rows[index].focus();
+    return true;
+  }
+
+  function focusPagedRow(delta) {
+    var rows = currentFocusableRows();
+    if (!rows.length) {
+      return false;
+    }
+    var index = rows.indexOf(document.activeElement);
+    if (index < 0) {
+      index = delta > 0 ? -1 : rows.length;
+    }
+    index += delta * 10;
+    index = Math.max(0, Math.min(rows.length - 1, index));
+    rows[index].focus();
+    return true;
+  }
+
   function closeTopDialog() {
     var dialogs = ["mp4Dialog", "programDialog", "confirmDialog"];
     for (var i = 0; i < dialogs.length; i++) {
@@ -869,6 +894,22 @@
         }
       } else if (event.key === "k" || event.key === "ArrowUp") {
         if (focusAdjacentRow(-1)) {
+          event.preventDefault();
+        }
+      } else if (event.key === "Home") {
+        if (focusRowAt(0)) {
+          event.preventDefault();
+        }
+      } else if (event.key === "End") {
+        if (focusRowAt(currentFocusableRows().length - 1)) {
+          event.preventDefault();
+        }
+      } else if (event.key === "PageDown") {
+        if (focusPagedRow(1)) {
+          event.preventDefault();
+        }
+      } else if (event.key === "PageUp") {
+        if (focusPagedRow(-1)) {
           event.preventDefault();
         }
       }
