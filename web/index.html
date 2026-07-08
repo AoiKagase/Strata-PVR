@@ -23,6 +23,7 @@
       <a href="#recorded" data-view-link="recorded">録画済み</a>
       <a href="#rules" data-view-link="rules">ルール</a>
       <a href="#logs" data-view-link="logs">ログ</a>
+      <a href="#status" data-view-link="status">ステータス</a>
       <a href="#settings" data-view-link="settings">設定</a>
     </div>
     <div class="schedule-nav-controls" aria-label="番組表フィルタ">
@@ -415,19 +416,19 @@
       </div>
     </section>
 
-    <section class="view" data-view="settings" hidden>
+    <section class="view" data-view="status" hidden>
       <div class="view-head">
         <div>
-          <h2>設定</h2>
-          <p>Chinachu互換設定の現在値を確認します。</p>
+          <h2>ステータス</h2>
+          <p>サーバーの稼働状態、リソース、ストレージを確認します。</p>
         </div>
         <button id="forceSchedulerButton" type="button" title="スケジューラを実行">スケジューラ実行</button>
       </div>
       <div class="settings-grid">
         <section class="panel">
-          <h3>設定</h3>
-          <dl id="settingsList" class="settings-list">
-            <dt>設定</dt>
+          <h3>リソース</h3>
+          <dl id="resourceList" class="settings-list">
+            <dt>リソース</dt>
             <dd>読み込み中</dd>
           </dl>
         </section>
@@ -435,6 +436,24 @@
           <h3>ストレージ</h3>
           <dl id="storageList" class="settings-list">
             <dt>ストレージ</dt>
+            <dd>読み込み中</dd>
+          </dl>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" data-view="settings" hidden>
+      <div class="view-head">
+        <div>
+          <h2>設定</h2>
+          <p>Chinachu互換設定の現在値を確認します。</p>
+        </div>
+      </div>
+      <div class="settings-grid">
+        <section class="panel">
+          <h3>設定</h3>
+          <dl id="settingsList" class="settings-list">
+            <dt>設定</dt>
             <dd>読み込み中</dd>
           </dl>
         </section>

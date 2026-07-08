@@ -634,7 +634,7 @@ summary:focus-visible,
 
 .schedule-guide-grid {
   display: grid;
-  grid-template-rows: 56px auto;
+  grid-template-rows: 76px auto;
   align-items: stretch;
 }
 
@@ -662,11 +662,24 @@ summary:focus-visible,
 
 .schedule-channel-head {
   align-content: center;
-  justify-items: center;
-  gap: 2px;
-  padding: 5px;
+  gap: 5px;
+  padding: 6px 5px;
   border-right: 1px solid #c7d2d8;
   text-align: center;
+}
+
+.schedule-channel-name-row,
+.schedule-channel-media-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.schedule-channel-media-row {
+  gap: 6px;
+  min-height: 28px;
 }
 
 .schedule-channel-logo {
@@ -690,6 +703,7 @@ summary:focus-visible,
 }
 
 .schedule-channel-head .channel-actions {
+  flex: 0 0 auto;
   justify-content: center;
 }
 
@@ -1186,6 +1200,17 @@ button:focus-visible {
   gap: 12px;
 }
 
+body.view-settings .settings-grid {
+  grid-template-columns: 1fr;
+}
+
+.list-limit-summary {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .config-editor-panel {
   margin-top: 12px;
 }
@@ -1443,7 +1468,7 @@ button:focus-visible {
   }
 
   .schedule-guide-grid {
-    grid-template-rows: 64px auto;
+    grid-template-rows: 88px auto;
   }
 
   .schedule-channel-head .channel-link,

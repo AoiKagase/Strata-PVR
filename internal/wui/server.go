@@ -85,6 +85,8 @@ var runFFprobeFormat = func(ctx context.Context, filePath string) ([]byte, error
 	return exec.CommandContext(ctx, "ffprobe", "-v", "0", "-show_format", "-of", "json", filePath).Output()
 }
 
+var serverStartedAt = time.Now()
+
 func Run(ctx context.Context, paths Paths) error {
 	cfg, err := config.Load(paths.Config)
 	if err != nil {
@@ -2811,6 +2813,9 @@ func broadcastingPrograms(schedules []legacy.ChannelSchedule, now time.Time) []l
 
 func (s *server) status() map[string]any {
 	operatorPID := readPID(s.pidPath("operator"))
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	now := time.Now()
 	return map[string]any{
 		"connectedCount": 0,
 		"feature": map[string]any{
@@ -2820,7 +2825,28 @@ func (s *server) status() map[string]any {
 			"configurator":      true,
 			"normalizationForm": s.cfg.NormalizationForm,
 		},
-		"system": map[string]any{"core": runtime.NumCPU()},
+		"system": map[string]any{
+			"core":          runtime.NumCPU(),
+			"os":            runtime.GOOS,
+			"arch":          runtime.GOARCH,
+			"goVersion":     runtime.Version(),
+			"goroutines":    runtime.NumGoroutine(),
+			"pid":           os.Getpid(),
+			"startedAt":     serverStartedAt.Format(time.RFC3339),
+			"uptimeSeconds": int64(now.Sub(serverStartedAt).Seconds()),
+			"memory": map[string]any{
+				"alloc":      mem.Alloc,
+				"totalAlloc": mem.TotalAlloc,
+				"sys":        mem.Sys,
+				"heapAlloc":  mem.HeapAlloc,
+				"heapSys":    mem.HeapSys,
+				"heapIdle":   mem.HeapIdle,
+				"heapInuse":  mem.HeapInuse,
+				"stackInuse": mem.StackInuse,
+				"numGC":      mem.NumGC,
+				"lastGC":     mem.LastGC,
+			},
+		},
 		"operator": map[string]any{
 			"alive": pidAlive(operatorPID),
 			"pid":   operatorPID,

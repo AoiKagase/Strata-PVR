@@ -1300,6 +1300,23 @@
     return (unit === 0 ? String(size) : size.toFixed(size >= 10 ? 1 : 2)) + " " + units[unit];
   }
 
+  function formatUptime(seconds) {
+    if (typeof seconds !== "number" || !isFinite(seconds) || seconds < 0) {
+      return "取得不可";
+    }
+    var total = Math.floor(seconds);
+    var days = Math.floor(total / 86400);
+    var hours = Math.floor((total % 86400) / 3600);
+    var minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) {
+      return days + "日 " + hours + "時間";
+    }
+    if (hours > 0) {
+      return hours + "時間 " + minutes + "分";
+    }
+    return minutes + "分";
+  }
+
   function renderActions(item, program, actions) {
     if (!actions || actions.length === 0) {
       return;
@@ -1840,6 +1857,10 @@
     var now = Date.now();
     var items = [];
     channelProgramGroups().forEach(function (group) {
+      var groupID = group.id || programChannelID(group.programs[0]) || group.name || "unknown";
+      if (state.scheduleHiddenChannels.indexOf(groupID) >= 0) {
+        return;
+      }
       var current = null;
       group.programs.some(function (program) {
         if (program.start <= now && programEnd(program) > now) {
@@ -1861,9 +1882,16 @@
     root.className = "list";
     items.sort(function (a, b) {
       return channelName(a).localeCompare(channelName(b), "ja");
-    }).forEach(function (program) {
+    });
+    items.slice(0, 8).forEach(function (program) {
       root.appendChild(renderProgramRowWithChannelLink(program, ["watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4"]));
     });
+    if (items.length > 8) {
+      var summary = document.createElement("p");
+      summary.className = "list-limit-summary";
+      summary.textContent = "ほか " + (items.length - 8) + " 件は番組表で確認できます";
+      root.appendChild(summary);
+    }
   }
 
   function renderSchedule() {
@@ -2089,16 +2117,22 @@
     channelGroups.forEach(function (group) {
       var heading = document.createElement("div");
       heading.className = "schedule-channel-head";
+      var nameRow = document.createElement("div");
+      nameRow.className = "schedule-channel-name-row";
+      nameRow.appendChild(channelLink(group.id, group.name));
+      heading.appendChild(nameRow);
+      var mediaRow = document.createElement("div");
+      mediaRow.className = "schedule-channel-media-row";
       if (group.logo) {
         var logo = document.createElement("img");
         logo.className = "schedule-channel-logo";
         logo.src = channelURL(group.id, "logo", "png");
         logo.alt = "";
         logo.loading = "lazy";
-        heading.appendChild(logo);
+        mediaRow.appendChild(logo);
       }
-      heading.appendChild(channelLink(group.id, group.name));
-      heading.appendChild(renderChannelActions(group.id, group.name));
+      mediaRow.appendChild(renderChannelActions(group.id, group.name));
+      heading.appendChild(mediaRow);
       grid.appendChild(heading);
     });
 
@@ -2700,6 +2734,40 @@
     });
     renderConfigForm();
     renderConfigEditor();
+  }
+
+  function renderStatus() {
+    var root = byId("resourceList");
+    if (!root) {
+      return;
+    }
+    var status = state.status || {};
+    var system = status.system || {};
+    var memory = system.memory || {};
+    var operator = status.operator || {};
+    var rows = [
+      ["WUI", "稼働中" + (system.pid ? " / PID " + system.pid : "")],
+      ["オペレータ", (operator.alive ? "稼働中" : "停止中") + (operator.pid ? " / PID " + operator.pid : "")],
+      ["CPUコア", system.core],
+      ["OS", [system.os, system.arch].filter(Boolean).join(" / ")],
+      ["Go", system.goVersion],
+      ["Goroutine", system.goroutines],
+      ["起動時刻", system.startedAt ? formatTime(system.startedAt) : ""],
+      ["稼働時間", formatUptime(system.uptimeSeconds)],
+      ["メモリ使用量", formatBytes(memory.alloc)],
+      ["ヒープ使用量", formatBytes(memory.heapAlloc)],
+      ["システム確保", formatBytes(memory.sys)],
+      ["GC回数", memory.numGC]
+    ];
+    root.innerHTML = "";
+    rows.forEach(function (row) {
+      var key = document.createElement("dt");
+      var value = document.createElement("dd");
+      key.textContent = row[0];
+      value.textContent = settingValue(row[1]);
+      root.appendChild(key);
+      root.appendChild(value);
+    });
     renderStorage();
   }
 
@@ -3530,6 +3598,7 @@
     renderChannelPrograms();
     renderRules();
     renderSettings();
+    renderStatus();
     renderRuleEditorState();
     renderRuleFormState();
   }
