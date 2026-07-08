@@ -1192,6 +1192,10 @@ summary:focus-visible,
   color: var(--ink);
 }
 
+.player-dialog {
+  width: min(960px, calc(100vw - 28px));
+}
+
 .program-dialog::backdrop {
   background: rgba(15, 28, 34, 0.42);
 }
@@ -1234,6 +1238,19 @@ summary:focus-visible,
 
 .mp4-dialog-actions {
   justify-content: flex-end;
+}
+
+.player-dialog-actions {
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.embedded-player {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 190px);
+  background: #0b1418;
 }
 
 .confirm-dialog .program-dialog-actions {

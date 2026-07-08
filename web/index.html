@@ -746,6 +746,20 @@
     </form>
   </dialog>
 
+  <dialog id="playerDialog" class="program-dialog player-dialog" aria-labelledby="playerDialogTitle">
+    <div class="program-dialog-head">
+      <div>
+        <span id="playerDialogMeta" class="program-dialog-meta"></span>
+        <h2 id="playerDialogTitle">視聴</h2>
+      </div>
+      <button class="small-button" type="button" id="playerDialogClose">閉じる</button>
+    </div>
+    <video id="playerVideo" class="embedded-player" controls autoplay playsinline tabindex="0"></video>
+    <div class="program-dialog-actions player-dialog-actions">
+      <a class="small-button" id="playerOpenLink" href="#" target="_blank" rel="noopener">別画面で開く</a>
+    </div>
+  </dialog>
+
   <script src="/app.js"></script>
 </body>
 </html>
