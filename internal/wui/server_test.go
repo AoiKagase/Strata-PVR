@@ -652,6 +652,23 @@ func TestNativeDashboardShowsProgramCategoryChips(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardStorageSummaryShowsRecordedTarget(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`["対象", storage.path || "録画保存先"]`,
+		`var storagePath = state.storage && state.storage.path ? state.storage.path : "";`,
+		`(storagePath ? "対象 " + storagePath + " / " : "録画保存先 / ")`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {
@@ -2751,6 +2768,9 @@ func TestAPIStorage(t *testing.T) {
 	}
 	if usage["recorded"].(float64) != float64(allocatedFileSize(recordedInfo)) {
 		t.Fatalf("recorded = %#v", usage["recorded"])
+	}
+	if usage["path"] != dir {
+		t.Fatalf("path = %#v, want %q", usage["path"], dir)
 	}
 	if usage["size"].(float64) <= 0 || usage["avail"].(float64) <= 0 {
 		t.Fatalf("unexpected usage: %#v", usage)

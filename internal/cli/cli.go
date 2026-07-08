@@ -993,7 +993,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 	}
 	name, action := args[0], args[1]
-	if name != "operator" && name != "wui" {
+	if name != "operator" && name != "scheduler" && name != "wui" {
 		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
 	}
 	switch action {
@@ -1014,6 +1014,16 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 				PID:       filepath.Join("data", "operator.pid"),
 				Log:       filepath.Join("log", "operator"),
 			}, 0)
+		case "scheduler":
+			_, err := scheduler.Run(ctx, scheduler.Paths{
+				Config:   p.config,
+				Rules:    p.rules,
+				Schedule: p.schedule,
+				Reserves: p.reserves,
+				PID:      filepath.Join("data", "scheduler.pid"),
+				Log:      filepath.Join("log", "scheduler"),
+			}, false)
+			return err
 		case "wui":
 			return wui.Run(ctx, wui.Paths{
 				Config:       p.config,

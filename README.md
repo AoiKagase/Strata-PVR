@@ -25,6 +25,8 @@ Compatibility scaffolding and major runtime pieces are present:
   socket URL setup.
 - `strata-pvr update` performs the first scheduler pass against Mirakurun and
   writes legacy JSON state.
+- `strata-pvr service scheduler execute` runs the Go scheduler pass as a
+  service-compatible command for init scripts or task schedulers.
 - `strata-pvr service operator execute` runs the Go operator loop, starts due
   reservations, records Mirakurun program streams, and updates legacy JSON
   state.
@@ -69,6 +71,7 @@ Mirakurun configuration.
 ```sh
 ./strata-pvr update
 ./strata-pvr reserves
+./strata-pvr service scheduler execute
 ./strata-pvr service operator execute
 ./strata-pvr service wui execute
 ```

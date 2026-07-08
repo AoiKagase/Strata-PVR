@@ -2800,6 +2800,7 @@
     }
     var storage = state.storage || {};
     var rows = [
+      ["対象", storage.path || "録画保存先"],
       ["録画ファイル", formatBytes(storage.recorded)],
       ["ディスク容量", formatBytes(storage.size)],
       ["使用量", formatBytes(storage.used)],
@@ -2827,6 +2828,7 @@
       return;
     }
     var storage = state.metrics && state.metrics.current || state.storage || {};
+    var storagePath = state.storage && state.storage.path ? state.storage.path : "";
     var used = numberValue(storage.storageUsed, storage.used);
     var total = numberValue(storage.storageTotal, storage.size);
     var avail = numberValue(storage.storageAvail, storage.avail);
@@ -2852,7 +2854,7 @@
       '<span><i class="legend-total"></i>総量 ', formatBytes(total), '</span>',
       '</div>'
     ].join("");
-    text(byId("storageChartSummary"), "総量 " + formatBytes(total) + " / 空き " + formatPercent(freePercent));
+    text(byId("storageChartSummary"), (storagePath ? "対象 " + storagePath + " / " : "録画保存先 / ") + "総量 " + formatBytes(total) + " / 空き " + formatPercent(freePercent));
   }
 
   function renderResourceLineChart() {

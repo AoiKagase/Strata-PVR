@@ -1491,6 +1491,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	writePrettyJSON(w, http.StatusOK, map[string]any{
 		"recorded": recordedSize,
+		"path":     s.recordedStoragePath(),
 		"size":     usage.Size,
 		"used":     usage.Used,
 		"avail":    usage.Avail,
@@ -1532,15 +1533,23 @@ func (s *server) storageUsage() (int64, system.DiskUsage, error) {
 			recordedSize += allocatedFileSize(info)
 		}
 	}
-	recordedDir := s.cfg.RecordedDir
-	if recordedDir == "" {
-		recordedDir = "."
-	}
+	recordedDir := s.recordedStoragePath()
 	usage, err := system.GetDiskUsage(recordedDir)
 	if err != nil {
 		return 0, system.DiskUsage{}, err
 	}
 	return recordedSize, usage, nil
+}
+
+func (s *server) recordedStoragePath() string {
+	recordedDir := ""
+	if s.cfg != nil {
+		recordedDir = s.cfg.RecordedDir
+	}
+	if recordedDir == "" {
+		recordedDir = "."
+	}
+	return recordedDir
 }
 
 func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType string) {

@@ -85,6 +85,25 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	}
 }
 
+func TestServiceSchedulerInitscript(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"service", "scheduler", "initscript"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"# Provides:          strata-pvr-scheduler",
+		"# Short-Description: starts the Strata PVR scheduler",
+		`DAEMON_OPTS="service scheduler execute"`,
+		"NAME=strata-pvr-scheduler",
+		"PIDFILE=/var/run/chinachu-scheduler.pid",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("scheduler initscript missing %q: %s", want, text)
+		}
+	}
+}
+
 func TestShellQuote(t *testing.T) {
 	got := shellQuote(`/opt/chi na'chu`)
 	if got != `'/opt/chi na'"'"'chu'` {
