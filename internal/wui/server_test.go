@@ -624,6 +624,59 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardConfigControlsCoverRuntimeFields(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "index.html"): {
+			`id="configUid"`,
+			`id="configGid"`,
+			`id="configSchedulerMirakurunPath"`,
+			`id="configWuiXFF"`,
+			`id="configWuiMdnsAdvertisement"`,
+			`id="configVaapiDevice"`,
+			`id="configRecordingPriority"`,
+			`id="configConflictedPriority"`,
+			`id="configWuiTlsCaPath"`,
+			`id="configWuiTlsRequestCert"`,
+			`id="configWuiTlsRejectUnauthorized"`,
+			`id="configStorageLowSpaceCommand"`,
+			`id="configSchedulerStartCommand"`,
+			`id="configEpgEndCommand"`,
+			`id="configRecordedCommand"`,
+		},
+		filepath.Join("..", "..", "web", "app.js"): {
+			`cfg.schedulerMirakurunPath`,
+			`cfg.wuiXFF`,
+			`cfg.wuiMdnsAdvertisement`,
+			`cfg.vaapiDevice`,
+			`cfg.recordingPriority`,
+			`cfg.conflictedPriority`,
+			`cfg.wuiTlsCaPath`,
+			`cfg.wuiTlsRequestCert`,
+			`cfg.wuiTlsRejectUnauthorized`,
+			`cfg.storageLowSpaceCommand`,
+			`cfg.schedulerStartCommand`,
+			`cfg.epgEndCommand`,
+			`cfg.recordedCommand`,
+			`setOptionalBooleanSelect(config, "wuiXFF"`,
+			`setOptionalBooleanSelect(config, "wuiMdnsAdvertisement"`,
+			`setOptionalString(config, "schedulerStartCommand"`,
+			`setOptionalString(config, "recordedCommand"`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
