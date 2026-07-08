@@ -1,5 +1,6 @@
 (function () {
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
+  var listFiltersStorageKey = "strata-pvr.listFilters";
   var scheduleWindowHoursByMode = {
     "day": 24,
     "three-days": 72,
@@ -38,12 +39,7 @@
     currentView: "",
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
-    listFilters: {
-      channelPrograms: { query: "", category: "" },
-      rules: { query: "", state: "" },
-      recorded: { query: "", category: "" },
-      reserves: { query: "", category: "" }
-    },
+    listFilters: loadListFilters(),
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
     configEditorDirty: false,
@@ -73,6 +69,46 @@
       return normalizeHiddenChannels(values);
     } catch (error) {
       return [];
+    }
+  }
+
+  function defaultListFilters() {
+    return {
+      channelPrograms: { query: "", category: "" },
+      rules: { query: "", state: "" },
+      recorded: { query: "", category: "" },
+      reserves: { query: "", category: "" }
+    };
+  }
+
+  function normalizeListFilters(value) {
+    var defaults = defaultListFilters();
+    Object.keys(defaults).forEach(function (name) {
+      var source = value && typeof value[name] === "object" ? value[name] : {};
+      Object.keys(defaults[name]).forEach(function (key) {
+        defaults[name][key] = typeof source[key] === "string" ? source[key] : "";
+      });
+    });
+    return defaults;
+  }
+
+  function loadListFilters() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(listFiltersStorageKey) : "";
+      return normalizeListFilters(raw ? JSON.parse(raw) : {});
+    } catch (error) {
+      return defaultListFilters();
+    }
+  }
+
+  function saveListFilters() {
+    try {
+      if (window.localStorage) {
+        state.listFilters = normalizeListFilters(state.listFilters);
+        window.localStorage.setItem(listFiltersStorageKey, JSON.stringify(state.listFilters));
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
     }
   }
 
@@ -1348,6 +1384,8 @@
     }
     state.channelProgramsChannel = channelID;
     state.channelProgramsGenre = "";
+    state.listFilters.channelPrograms.category = "";
+    saveListFilters();
     window.location.hash = "channel-programs";
     renderChannelPrograms();
   }
@@ -1941,7 +1979,7 @@
     if (!select) {
       return;
     }
-    var current = state.channelProgramsGenre;
+    var current = state.listFilters.channelPrograms.category || state.channelProgramsGenre;
     var genres = {};
     (programs || []).forEach(function (program) {
       if (program && program.category) {
@@ -1962,8 +2000,12 @@
     select.value = current;
     if (select.value !== current) {
       state.channelProgramsGenre = "";
+      state.listFilters.channelPrograms.category = "";
       select.value = "";
+      return;
     }
+    state.channelProgramsGenre = current;
+    state.listFilters.channelPrograms.category = current;
   }
 
   function renderRules() {
@@ -3144,15 +3186,19 @@
   function bindListFilter(filterName, queryID, categoryID) {
     var query = byId(queryID);
     var category = byId(categoryID);
+    var current = state.listFilters[filterName] || {};
     if (query) {
+      query.value = current.query || "";
       query.addEventListener("input", function () {
         state.listFilters[filterName].query = query.value;
+        saveListFilters();
         render();
       });
     }
     if (category) {
       category.addEventListener("change", function () {
         state.listFilters[filterName].category = category.value;
+        saveListFilters();
         render();
       });
     }
@@ -3169,22 +3215,28 @@
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory");
     var channelProgramsQuery = byId("channelProgramsQuery");
     if (channelProgramsQuery) {
+      channelProgramsQuery.value = state.listFilters.channelPrograms.query || "";
       channelProgramsQuery.addEventListener("input", function () {
         state.listFilters.channelPrograms.query = channelProgramsQuery.value;
+        saveListFilters();
         renderChannelPrograms();
       });
     }
     var ruleListQuery = byId("ruleListQuery");
     if (ruleListQuery) {
+      ruleListQuery.value = state.listFilters.rules.query || "";
       ruleListQuery.addEventListener("input", function () {
         state.listFilters.rules.query = ruleListQuery.value;
+        saveListFilters();
         renderRules();
       });
     }
     var ruleListState = byId("ruleListState");
     if (ruleListState) {
+      ruleListState.value = state.listFilters.rules.state || "";
       ruleListState.addEventListener("change", function () {
         state.listFilters.rules.state = ruleListState.value;
+        saveListFilters();
         renderRules();
       });
     }
@@ -3405,6 +3457,8 @@
     if (channelProgramsGenre) {
       channelProgramsGenre.addEventListener("change", function () {
         state.channelProgramsGenre = channelProgramsGenre.value;
+        state.listFilters.channelPrograms.category = channelProgramsGenre.value;
+        saveListFilters();
         renderChannelPrograms();
       });
     }
