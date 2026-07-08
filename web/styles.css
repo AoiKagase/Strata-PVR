@@ -455,17 +455,6 @@ h3 {
   gap: 8px;
 }
 
-.media-controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.media-controls input {
-  max-width: 96px;
-}
-
 .control-field {
   display: grid;
   gap: 4px;
@@ -1476,11 +1465,6 @@ body.view-settings .settings-grid {
     width: 100%;
   }
 
-  .media-controls {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
   .schedule-controls .control-field {
     flex: 1 1 140px;
   }
@@ -1491,15 +1475,6 @@ body.view-settings .settings-grid {
 
   .schedule-controls input {
     min-width: 180px;
-  }
-
-  .media-controls .control-field {
-    flex: 1 1 100px;
-  }
-
-  .media-controls input,
-  .media-controls select {
-    max-width: none;
   }
 
   .list-filter-controls {

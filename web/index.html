@@ -109,24 +109,6 @@
         <section class="panel wide-panel">
           <div class="panel-head">
             <h3>最近の録画</h3>
-            <div class="media-controls" aria-label="Playback controls">
-              <label class="control-field" for="playbackStart">
-                <span>開始分</span>
-                <input id="playbackStart" type="number" min="0" step="1" inputmode="numeric">
-              </label>
-              <label class="control-field" for="playbackDuration">
-                <span>長さ分</span>
-                <input id="playbackDuration" type="number" min="0" step="1" inputmode="numeric">
-              </label>
-              <label class="control-field" for="playbackQuality">
-                <span>画質</span>
-                <select id="playbackQuality">
-                  <option value="">元データ</option>
-                  <option value="720p">720p</option>
-                  <option value="low">低画質</option>
-                </select>
-              </label>
-            </div>
           </div>
           <div id="recordedList" class="list empty">録画済み番組はありません</div>
         </section>
@@ -728,6 +710,14 @@
             <option value="360p">低画質</option>
             <option value="custom">手動指定</option>
           </select>
+        </label>
+        <label class="control-field" for="mp4Start">
+          <span>開始分</span>
+          <input id="mp4Start" type="number" min="0" step="1" inputmode="numeric">
+        </label>
+        <label class="control-field" for="mp4Duration">
+          <span>長さ分</span>
+          <input id="mp4Duration" type="number" min="0" step="1" inputmode="numeric">
         </label>
         <label class="control-field" for="mp4Resolution">
           <span>解像度</span>

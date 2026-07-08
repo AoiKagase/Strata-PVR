@@ -1121,7 +1121,7 @@
     window.location.href = url;
   }
 
-  function playbackNumber(id, label) {
+  function minuteNumber(id, label) {
     var input = byId(id);
     var value = input ? input.value.trim() : "";
     if (!value) {
@@ -1129,18 +1129,18 @@
     }
     var number = Number(value);
     if (!Number.isInteger(number) || number < 0) {
-      showError(new Error(label + " is invalid"));
+      showError(new Error(label + "は0以上の整数で指定してください"));
       return false;
     }
     return number;
   }
 
-  function playbackQuery(includeQuality) {
-    var start = playbackNumber("playbackStart", "Playback start");
+  function playbackRangeQuery(startId, durationId) {
+    var start = minuteNumber(startId, "開始分");
     if (start === false) {
       return false;
     }
-    var duration = playbackNumber("playbackDuration", "Playback duration");
+    var duration = minuteNumber(durationId, "長さ分");
     if (duration === false) {
       return false;
     }
@@ -1150,16 +1150,6 @@
     }
     if (duration !== null && duration > 0) {
       query.t = String(duration * 60);
-    }
-    var quality = byId("playbackQuality");
-    if (includeQuality && quality && quality.value === "720p") {
-      query.s = "1280x720";
-      query["b:v"] = "1800k";
-      query["b:a"] = "128k";
-    } else if (includeQuality && quality && quality.value === "low") {
-      query.s = "640x360";
-      query["b:v"] = "800k";
-      query["b:a"] = "96k";
     }
     return Object.keys(query).length ? query : null;
   }
@@ -1223,6 +1213,10 @@
   }
 
   function mp4QueryFromDialog() {
+    var range = playbackRangeQuery("mp4Start", "mp4Duration");
+    if (range === false) {
+      return false;
+    }
     var resolution = resolutionValue("mp4Resolution");
     if (resolution === false) {
       return false;
@@ -1235,7 +1229,7 @@
     if (audioBitrate === false) {
       return false;
     }
-    var query = {};
+    var query = range || {};
     if (resolution) {
       query.s = resolution;
     }
@@ -1255,19 +1249,6 @@
     return options || {};
   }
 
-  function mergeQuery(base, next) {
-    var merged = {};
-    [base, next].forEach(function (query) {
-      if (!query) {
-        return;
-      }
-      Object.keys(query).forEach(function (key) {
-        merged[key] = query[key];
-      });
-    });
-    return Object.keys(merged).length ? merged : null;
-  }
-
   function openMP4Dialog(meta, openWithQuery, options) {
     options = normalizeMP4DialogOptions(options);
     var dialog = byId("mp4Dialog");
@@ -1283,6 +1264,12 @@
     pendingMP4Open = openWithQuery;
     pendingMP4PlaylistOpen = typeof options.openPlaylist === "function" ? options.openPlaylist : null;
     text(byId("mp4DialogMeta"), meta || "");
+    ["mp4Start", "mp4Duration"].forEach(function (id) {
+      var input = byId(id);
+      if (input) {
+        input.value = "";
+      }
+    });
     var preset = byId("mp4Preset");
     if (preset) {
       preset.value = options.initialPreset || "";
@@ -1449,26 +1436,14 @@
         }));
       } else if (name === "watch-mp4-custom") {
         row.appendChild(actionButton("詳細視聴", "再生条件を指定して視聴", function () {
-          var baseQuery = playbackQuery(true);
-          if (baseQuery === false) {
-            return;
-          }
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-            openURL(recordedWatchURL(program, "mp4", mergeQuery(baseQuery, query)));
+            openURL(recordedWatchURL(program, "mp4", query));
           }, {
             initialPreset: "custom",
             openPlaylist: function () {
               openURL(recordedWatchURL(program, "xspf"));
             }
           });
-        }));
-      } else if (name === "watch-m2ts-offset") {
-        row.appendChild(actionButton("M2TS指定", "開始位置・長さ指定付きM2TSを開く", function () {
-          var query = playbackQuery(false);
-          if (query === false) {
-            return;
-          }
-          openURL(recordedWatchURL(program, "m2ts", query));
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("保存", "録画ファイルを保存", function () {
@@ -1558,27 +1533,14 @@
     }
     if (name === "watch-mp4-custom") {
       return actionButton("詳細視聴", "再生条件を指定して視聴", function () {
-        var baseQuery = playbackQuery(true);
-        if (baseQuery === false) {
-          return;
-        }
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openURL(recordedWatchURL(program, "mp4", mergeQuery(baseQuery, query)));
+          openURL(recordedWatchURL(program, "mp4", query));
         }, {
           initialPreset: "custom",
           openPlaylist: function () {
             openURL(recordedWatchURL(program, "xspf"));
           }
         });
-      }, className);
-    }
-    if (name === "watch-m2ts-offset") {
-      return actionButton("M2TS指定", "開始位置・長さ指定付きM2TSを開く", function () {
-        var query = playbackQuery(false);
-        if (query === false) {
-          return;
-        }
-        openURL(recordedWatchURL(program, "m2ts", query));
       }, className);
     }
     if (name === "download") {
@@ -3651,8 +3613,8 @@
     renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
     renderChannelPrograms();
