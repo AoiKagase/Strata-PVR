@@ -39,6 +39,8 @@
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
     listFilters: {
+      channelPrograms: { query: "", category: "" },
+      rules: { query: "", state: "" },
       recorded: { query: "", category: "" },
       reserves: { query: "", category: "" }
     },
@@ -341,6 +343,27 @@
     });
   }
 
+  function filteredRules(items) {
+    var filter = state.listFilters.rules || {};
+    var query = normalizeSearchText(filter.query);
+    var wantedState = filter.state || "";
+    return (items || []).map(function (rule, index) {
+      return { index: index, rule: rule };
+    }).filter(function (entry) {
+      var rule = entry.rule;
+      if (wantedState === "enabled" && rule.isDisabled) {
+        return false;
+      }
+      if (wantedState === "disabled" && !rule.isDisabled) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return normalizeSearchText("#" + entry.index + " " + ruleSummary(rule) + " " + JSON.stringify(rule)).indexOf(query) >= 0;
+    });
+  }
+
   function listCategories(items) {
     var seen = {};
     var values = [];
@@ -548,9 +571,10 @@
   function focusCurrentSearch() {
     var view = currentView();
     var focusByView = {
+      "channel-programs": "channelProgramsQuery",
       "reserves": "reserveListQuery",
       "recorded": "recordedListQuery",
-      "rules": "ruleTitle",
+      "rules": "ruleListQuery",
       "settings": "configEditor"
     };
     var control = byId(focusByView[view]);
@@ -565,6 +589,47 @@
     }
   }
 
+  function currentFocusableRows() {
+    var view = document.querySelector("[data-view='" + state.currentView + "']");
+    if (!view) {
+      return [];
+    }
+    return Array.prototype.slice.call(view.querySelectorAll(".program-row[tabindex='0']"));
+  }
+
+  function focusAdjacentRow(delta) {
+    var rows = currentFocusableRows();
+    if (!rows.length) {
+      return false;
+    }
+    var index = rows.indexOf(document.activeElement);
+    if (index < 0) {
+      rows[delta > 0 ? 0 : rows.length - 1].focus();
+      return true;
+    }
+    index = Math.max(0, Math.min(rows.length - 1, index + delta));
+    rows[index].focus();
+    return true;
+  }
+
+  function closeTopDialog() {
+    var dialogs = ["mp4Dialog", "programDialog", "confirmDialog"];
+    for (var i = 0; i < dialogs.length; i++) {
+      var dialog = byId(dialogs[i]);
+      if (dialog && dialog.open) {
+        if (dialogs[i] === "programDialog") {
+          closeProgramDialog();
+        } else if (dialogs[i] === "confirmDialog") {
+          closeConfirmDialog(false);
+        } else {
+          dialog.close();
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
   function initKeyboardShortcuts() {
     var viewShortcuts = {
       "1": "dashboard",
@@ -576,6 +641,10 @@
       "7": "settings"
     };
     window.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && closeTopDialog()) {
+        event.preventDefault();
+        return;
+      }
       if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) {
         return;
       }
@@ -588,6 +657,14 @@
       } else if (event.key === "/") {
         event.preventDefault();
         focusCurrentSearch();
+      } else if (event.key === "j" || event.key === "ArrowDown") {
+        if (focusAdjacentRow(1)) {
+          event.preventDefault();
+        }
+      } else if (event.key === "k" || event.key === "ArrowUp") {
+        if (focusAdjacentRow(-1)) {
+          event.preventDefault();
+        }
       }
     });
   }
@@ -1704,6 +1781,7 @@
         tools.innerHTML = "";
       }
       renderChannelProgramsGenreOptions([]);
+      updateListFilterSummary("channelProgramsFilterSummary", 0, 0);
       root.className = "list empty";
       root.textContent = "チャンネルを選択してください";
       return;
@@ -1729,6 +1807,9 @@
       }
       return !state.channelProgramsGenre || String(program.category || "") === state.channelProgramsGenre;
     });
+    state.listFilters.channelPrograms.category = state.channelProgramsGenre;
+    programs = filteredPrograms(programs, "channelPrograms");
+    updateListFilterSummary("channelProgramsFilterSummary", programs.length, group.programs.length);
     programs.sort(function (a, b) {
       if (state.channelProgramsSort === "category") {
         return String(a.category || "").localeCompare(String(b.category || ""), "ja") || (a.start || 0) - (b.start || 0);
@@ -1792,12 +1873,23 @@
     if (!state.rules || state.rules.length === 0) {
       root.className = "list empty";
       root.textContent = "ルールはありません";
+      updateListFilterSummary("ruleListFilterSummary", 0, 0);
+      return;
+    }
+    var filtered = filteredRules(state.rules);
+    updateListFilterSummary("ruleListFilterSummary", filtered.length, state.rules.length);
+    if (!filtered.length) {
+      root.className = "list empty";
+      root.textContent = "条件に一致するルールはありません";
       return;
     }
     root.className = "list";
-    state.rules.forEach(function (rule, index) {
+    filtered.forEach(function (entry) {
+      var rule = entry.rule;
+      var index = entry.index;
       var item = document.createElement("article");
       item.className = "program-row";
+      item.tabIndex = 0;
 
       var title = document.createElement("strong");
       title.textContent = "#" + index + (rule.isDisabled ? " 無効" : " 有効");
@@ -2864,6 +2956,27 @@
     }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory");
+    var channelProgramsQuery = byId("channelProgramsQuery");
+    if (channelProgramsQuery) {
+      channelProgramsQuery.addEventListener("input", function () {
+        state.listFilters.channelPrograms.query = channelProgramsQuery.value;
+        renderChannelPrograms();
+      });
+    }
+    var ruleListQuery = byId("ruleListQuery");
+    if (ruleListQuery) {
+      ruleListQuery.addEventListener("input", function () {
+        state.listFilters.rules.query = ruleListQuery.value;
+        renderRules();
+      });
+    }
+    var ruleListState = byId("ruleListState");
+    if (ruleListState) {
+      ruleListState.addEventListener("change", function () {
+        state.listFilters.rules.state = ruleListState.value;
+        renderRules();
+      });
+    }
     var mp4Preset = byId("mp4Preset");
     if (mp4Preset) {
       mp4Preset.addEventListener("change", function () {

@@ -160,6 +160,10 @@
           <p>選択したチャンネル内の番組を確認し、手動予約やルール作成に進めます。</p>
         </div>
         <div class="schedule-controls" aria-label="Channel program controls">
+          <label class="control-field" for="channelProgramsQuery">
+            <span>検索</span>
+            <input id="channelProgramsQuery" type="search" autocomplete="off" placeholder="タイトル、説明">
+          </label>
           <label class="control-field" for="channelProgramsGenre">
             <span>ジャンル</span>
             <select id="channelProgramsGenre">
@@ -175,6 +179,7 @@
               <option value="duration">長さ</option>
             </select>
           </label>
+          <span id="channelProgramsFilterSummary" class="list-filter-summary">0件</span>
         </div>
       </div>
       <div id="channelProgramsTools" class="channel-tools" hidden></div>
@@ -239,6 +244,21 @@
         </div>
       </div>
       <section class="panel">
+        <div class="list-filter-controls" aria-label="ルールフィルタ">
+          <label class="control-field" for="ruleListQuery">
+            <span>検索</span>
+            <input id="ruleListQuery" type="search" autocomplete="off" placeholder="番号、タイトル、条件JSON">
+          </label>
+          <label class="control-field" for="ruleListState">
+            <span>状態</span>
+            <select id="ruleListState">
+              <option value="">すべて</option>
+              <option value="enabled">有効</option>
+              <option value="disabled">無効</option>
+            </select>
+          </label>
+          <span id="ruleListFilterSummary" class="list-filter-summary">0件</span>
+        </div>
         <div id="ruleList" class="list empty">ルールはありません</div>
         <div class="rule-builder">
           <div class="rule-form-status" id="ruleFormStatus">新規作成</div>

@@ -457,12 +457,15 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
+	output := filepath.Join(dir, "recorded-command.txt")
+	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
 		result, err := RunOnce(ctx, paths, &config.Config{
-			RecordedDir:    filepath.Join(dir, "recorded"),
-			RecordedFormat: "<id>.m2ts",
+			RecordedDir:     filepath.Join(dir, "recorded"),
+			RecordedFormat:  "<id>.m2ts",
+			RecordedCommand: os.Args[0],
 		}, &abortableStreamer{}, now)
 		if err != nil {
 			done <- err
@@ -509,6 +512,34 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	}
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
 		t.Fatalf("recorded entry missing after cancel: %#v", recorded)
+	}
+	var content []byte
+	var err error
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		content, err = os.ReadFile(output)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), recorded[0].Recorded) {
+		t.Fatalf("recorded command did not receive recorded path: %q", content)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"SPAWN: " + os.Args[0] + " (pid=",
+		"FIN: 21i3v9",
+		"FIN: #21i3v9 ",
+	} {
+		if !strings.Contains(string(logData), want) {
+			t.Fatalf("operator log missing %q after cancel: %s", want, string(logData))
+		}
 	}
 }
 
@@ -576,6 +607,38 @@ func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "SPAWN: "+os.Args[0]+" (pid=") {
 		t.Fatalf("recorded command spawn log missing: %s", string(logData))
+	}
+}
+
+func TestRunRecordedCommandStartsAfterContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "recorded-command.txt")
+	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	program := legacy.Program{
+		ID:       "21i3v9",
+		Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "21i3v9.m2ts")),
+	}
+	if err := runRecordedCommand(ctx, "", os.Args[0], program); err != nil {
+		t.Fatal(err)
+	}
+
+	var content []byte
+	var err error
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		content, err = os.ReadFile(output)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), program.Recorded) {
+		t.Fatalf("recorded command did not receive recorded path: %q", content)
 	}
 }
 

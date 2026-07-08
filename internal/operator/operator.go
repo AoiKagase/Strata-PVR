@@ -418,6 +418,7 @@ func runRecordedCommand(ctx context.Context, logPath, command string, program le
 	if err != nil {
 		return err
 	}
+	ctx = context.WithoutCancel(ctx)
 	cmd := exec.CommandContext(ctx, command, filepath.FromSlash(program.Recorded), string(payload))
 	if err := cmd.Start(); err != nil {
 		return err
