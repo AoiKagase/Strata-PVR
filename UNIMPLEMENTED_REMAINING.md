@@ -11,7 +11,7 @@ backlog.
 | --- | --- | --- |
 | CLI wrapper and modes | `chinachu`, `app-cli.js` | No known must-implement command is missing. Remaining differences are output-format and JSON-order parity risks. |
 | Scheduler | `app-scheduler.js`, `common/lib/chinachu-common.js` | Core schedule import, rule matching, reserve generation, hooks, pid files, and legacy log lines are implemented. Remaining differences are oracle-test risks. |
-| Operator/recorder | `app-operator.js`, `common/lib/chinachu-common.js` | Core reserve execution, recording state, low-space behavior, abort handling, hooks, and finalization are implemented. Rare signal/log ordering still needs oracle-level validation. |
+| Operator/recorder | `app-operator.js`, `common/lib/chinachu-common.js` | Core reserve execution, recording state, low-space behavior, abort handling, hooks, finalization, and normal/cancel finalize log ordering are implemented. Remaining signal risk is optional external JavaScript oracle validation for rare races. |
 | WUI/API server | `app-wui.js`, `api/resource-*.json`, `api/script-*.vm.js` | API resources, static serving, auth/listeners, watch/preview routes, log streams, scheduler force, mutating actions, and legacy Socket.IO 0.9 XHR polling server push are covered. Remaining differences are old-client/oracle-test risks. |
 | Legacy browser WUI | `web/index.html`, `web/chinachu.js`, `web/page/**/*.js` | Native Go WUI covers the main user workflows. Remaining differences are old frontend affordances and browser-specific behavior, not core migration blockers unless legacy UI byte-for-byte behavior becomes a target. |
 | Config and samples | `config.sample.json`, `rules.sample.json` | Non-retired runtime fields are parsed and mostly surfaced in WUI forms. Some Node-era integrations are intentionally not implemented. |
@@ -30,7 +30,7 @@ backlog.
 | JSON state writes | Known fields are emitted in stable legacy-oriented order, but unknown-field insertion order and obscure spacing edge cases can still differ from Node `JSON.stringify` behavior. |
 | Rule engine | JavaScript RegExp semantics are approximated with Go regexp; uncommon regex behavior needs oracle tests against `app-cli.js`/`chinachu-common.js`. |
 | Recorded filename format | Unusual JavaScript `dateformat` parsing edge cases need oracle tests against the legacy `dateformat` module. |
-| Operator signals | Runtime services cancel on `SIGINT`, `SIGTERM`, and Unix `SIGQUIT`; active streams are closed, recording/recorded state is finalized, and `recordedCommand` plus `FIN` logging are covered. Remaining risk is exact byte-for-byte cleanup/log ordering for rarer external-signal races. |
+| Operator signals | Runtime services cancel on `SIGINT`, `SIGTERM`, and Unix `SIGQUIT`; active streams are closed, recording/recorded state is finalized, and `recordedCommand` plus `FIN` logging/order are covered. Remaining risk is optional external JavaScript oracle validation for rarer external-signal races. |
 | Logs | Scheduler/operator/WUI logs cover major legacy lines, but exact shell/log formatting parity remains partial. |
 | Mirakurun client | Product token intentionally uses `StrataPVR` instead of the legacy product name. |
 | Tests | Optional JavaScript oracle tests remain future work and are not required for normal `go test ./...`. |

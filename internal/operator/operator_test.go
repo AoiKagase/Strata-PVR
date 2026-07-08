@@ -117,6 +117,19 @@ func (r *abortableReadCloser) Close() error {
 	return nil
 }
 
+func assertLogSubsequence(t *testing.T, logData []byte, want ...string) {
+	t.Helper()
+	logText := string(logData)
+	cursor := 0
+	for _, entry := range want {
+		index := strings.Index(logText[cursor:], entry)
+		if index < 0 {
+			t.Fatalf("operator log missing %q after offset %d: %s", entry, cursor, logText)
+		}
+		cursor += index + len(entry)
+	}
+}
+
 func TestRunOnceRecordsDueProgram(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
@@ -202,6 +215,18 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	if got := strings.Count(string(logData), "WRITE: "+paths.Recording); got < 2 {
 		t.Fatalf("operator log should include initial and completion recording writes, got %d: %s", got, string(logData))
 	}
+	assertLogSubsequence(t, logData,
+		"PREPARE: #21i3v9 ",
+		"WRITE: "+paths.Recording,
+		"START: 21i3v9",
+		"RECORD: #21i3v9 ",
+		"STREAM: ",
+		"WRITE: "+paths.Recording,
+		"WRITE: "+paths.Recording,
+		"WRITE: "+paths.Recorded,
+		"FIN: 21i3v9",
+		"FIN: #21i3v9 ",
+	)
 }
 
 func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
@@ -541,6 +566,19 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 			t.Fatalf("operator log missing %q after cancel: %s", want, string(logData))
 		}
 	}
+	assertLogSubsequence(t, logData,
+		"PREPARE: #21i3v9 ",
+		"WRITE: "+paths.Recording,
+		"START: 21i3v9",
+		"RECORD: #21i3v9 ",
+		"STREAM: ",
+		"WRITE: "+paths.Recording,
+		"WRITE: "+paths.Recording,
+		"WRITE: "+paths.Recorded,
+		"SPAWN: "+os.Args[0]+" (pid=",
+		"FIN: 21i3v9",
+		"FIN: #21i3v9 ",
+	)
 }
 
 func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
