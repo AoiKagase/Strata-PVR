@@ -703,6 +703,20 @@ button:disabled {
   padding: 14px 16px 16px;
 }
 
+.confirm-dialog .program-dialog-actions {
+  justify-content: flex-end;
+}
+
+.danger-button {
+  border-color: #b93b34;
+  background: #d94b43;
+  color: #fff;
+}
+
+.danger-button:hover {
+  background: #c6423b;
+}
+
 .mp4-dialog form {
   margin: 0;
 }

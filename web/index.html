@@ -612,6 +612,22 @@
     <div id="programDialogActions" class="program-dialog-actions"></div>
   </dialog>
 
+  <dialog id="confirmDialog" class="program-dialog confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+    <form method="dialog">
+      <div class="program-dialog-head">
+        <div>
+          <span id="confirmDialogMeta" class="program-dialog-meta"></span>
+          <h2 id="confirmDialogTitle">確認</h2>
+        </div>
+      </div>
+      <p id="confirmDialogMessage" class="program-dialog-description">実行しますか？</p>
+      <div class="program-dialog-actions">
+        <button class="small-button" type="button" id="confirmDialogCancel">キャンセル</button>
+        <button class="small-button danger-button" type="button" id="confirmDialogOK">実行</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="mp4Dialog" class="program-dialog mp4-dialog" aria-labelledby="mp4DialogTitle">
     <form id="mp4Form" method="dialog">
       <div class="program-dialog-head">

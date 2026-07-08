@@ -9,6 +9,8 @@
   var scheduleMinimumProgramMinutes = 30;
   var programDialogReturnFocus = null;
   var mp4DialogReturnFocus = null;
+  var confirmDialogReturnFocus = null;
+  var pendingConfirmResolve = null;
 
   var state = {
     status: null,
@@ -457,16 +459,68 @@
     });
   }
 
-  function confirmAction(message) {
-    return window.confirm(message);
+  function closeConfirmDialog(result) {
+    var dialog = byId("confirmDialog");
+    if (pendingConfirmResolve) {
+      pendingConfirmResolve(Boolean(result));
+      pendingConfirmResolve = null;
+    }
+    if (dialog && dialog.close) {
+      dialog.close();
+    } else if (dialog) {
+      dialog.removeAttribute("open");
+      restoreFocus(confirmDialogReturnFocus);
+      confirmDialogReturnFocus = null;
+    }
   }
 
-  function runAction(path, method, message) {
-    if (message && !confirmAction(message)) {
-      return;
+  function confirmAction(message, options) {
+    var dialog = byId("confirmDialog");
+    if (!dialog || !dialog.showModal) {
+      return Promise.resolve(window.confirm(message));
     }
-    setBusy("Working");
-    request(path, method).then(refresh).catch(showError);
+    if (pendingConfirmResolve) {
+      closeConfirmDialog(false);
+    }
+    options = options || {};
+    text(byId("confirmDialogTitle"), options.title || "確認");
+    text(byId("confirmDialogMessage"), message || "実行しますか？");
+    text(byId("confirmDialogMeta"), options.meta || "");
+    text(byId("confirmDialogCancel"), options.cancelLabel || "キャンセル");
+    text(byId("confirmDialogOK"), options.okLabel || "実行");
+    var ok = byId("confirmDialogOK");
+    if (ok) {
+      ok.classList.toggle("danger-button", options.danger !== false);
+    }
+    confirmDialogReturnFocus = rememberFocus();
+    return new Promise(function (resolve) {
+      pendingConfirmResolve = resolve;
+      dialog.showModal();
+      focusFirstDialogControl(dialog);
+    });
+  }
+
+  function runAction(path, method, message, options) {
+    return (message ? confirmAction(message, options || actionConfirmOptions(method, message)) : Promise.resolve(true)).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("Working");
+      return request(path, method).then(refresh).catch(showError);
+    });
+  }
+
+  function programConfirmMeta(program) {
+    return [programTitle(program), channelName(program), program && program.id].filter(Boolean).join(" / ");
+  }
+
+  function actionConfirmOptions(method, message, program, title) {
+    return {
+      danger: method === "DELETE" || /削除|停止/.test(message || ""),
+      meta: program ? programConfirmMeta(program) : "",
+      okLabel: /停止/.test(message || "") ? "停止" : (method === "DELETE" || /削除/.test(message || "") ? "削除" : "実行"),
+      title: title || "操作の確認"
+    };
   }
 
   function recordedWatchURL(program, ext, query) {
@@ -686,7 +740,7 @@
         }));
       } else if (name === "unreserve" && program.isManualReserved) {
         row.appendChild(actionButton("予約削除", "手動予約を削除", function () {
-          runAction("reserves/" + encodeURIComponent(program.id) + ".json", "DELETE", "この手動予約を削除しますか？");
+          runAction("reserves/" + encodeURIComponent(program.id) + ".json", "DELETE", "この手動予約を削除しますか？", actionConfirmOptions("DELETE", "この手動予約を削除しますか？", program, "予約削除の確認"));
         }));
       } else if (name === "skip" && !program.isManualReserved && !program.isSkip) {
         row.appendChild(actionButton("スキップ", "自動予約をスキップ", function () {
@@ -698,7 +752,7 @@
         }));
       } else if (name === "stop") {
         row.appendChild(actionButton("停止", "録画を停止", function () {
-          runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画を停止しますか？");
+          runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画を停止しますか？", actionConfirmOptions("DELETE", "この録画を停止しますか？", program, "録画停止の確認"));
         }));
       } else if (name === "watch-recording-mp4") {
         row.appendChild(actionButton("視聴", "録画中の番組を変換視聴で開く", function () {
@@ -766,7 +820,7 @@
         }));
       } else if (name === "delete-recorded") {
         row.appendChild(actionButton("削除", "録画済み項目とファイルを削除", function () {
-          runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？");
+          runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
         }));
       } else if (name === "watch-channel-mp4") {
         var channelID = programChannelID(program);
@@ -1573,7 +1627,12 @@
         fillRuleFormFromRule(rule, index);
       }));
       row.appendChild(actionButton("削除", "このルールを削除", function () {
-        runAction("rules/" + index + ".json", "DELETE", "このルールを削除しますか？");
+        runAction("rules/" + index + ".json", "DELETE", "このルールを削除しますか？", {
+          danger: true,
+          meta: ruleSummary(rule),
+          okLabel: "削除",
+          title: "ルール削除の確認"
+        });
       }));
 
       item.appendChild(title);
@@ -1996,16 +2055,22 @@
     if (!config) {
       return;
     }
-    if (!confirmAction("フォームの内容で config.json を保存しますか？")) {
-      return;
-    }
-    setBusy("設定保存中");
-    sendConfigJSON(JSON.stringify(config, null, 2)).then(function (savedConfig) {
-      state.config = savedConfig || {};
-      state.configEditorDirty = false;
-      render();
-      setBusy("設定を保存しました");
-    }).catch(showError);
+    confirmAction("フォームの内容で config.json を保存しますか？", {
+      danger: false,
+      okLabel: "保存",
+      title: "設定保存の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("設定保存中");
+      sendConfigJSON(JSON.stringify(config, null, 2)).then(function (savedConfig) {
+        state.config = savedConfig || {};
+        state.configEditorDirty = false;
+        render();
+        setBusy("設定を保存しました");
+      }).catch(showError);
+    });
   }
 
   function saveConfigFromEditor() {
@@ -2013,16 +2078,22 @@
     if (!raw) {
       return;
     }
-    if (!confirmAction("config.json を保存しますか？")) {
-      return;
-    }
-    setBusy("設定保存中");
-    sendConfigJSON(raw).then(function (config) {
-      state.config = config || {};
-      state.configEditorDirty = false;
-      render();
-      setBusy("設定を保存しました");
-    }).catch(showError);
+    confirmAction("config.json を保存しますか？", {
+      danger: false,
+      okLabel: "保存",
+      title: "設定保存の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("設定保存中");
+      sendConfigJSON(raw).then(function (config) {
+        state.config = config || {};
+        state.configEditorDirty = false;
+        render();
+        setBusy("設定を保存しました");
+      }).catch(showError);
+    });
   }
 
   function resetConfigEditor() {
@@ -2680,6 +2751,37 @@
         state.selectedProgram = null;
         restoreFocus(programDialogReturnFocus);
         programDialogReturnFocus = null;
+      });
+    }
+    var confirmDialog = byId("confirmDialog");
+    if (confirmDialog) {
+      confirmDialog.addEventListener("cancel", function () {
+        closeConfirmDialog(false);
+      });
+      confirmDialog.addEventListener("close", function () {
+        if (pendingConfirmResolve) {
+          pendingConfirmResolve(false);
+          pendingConfirmResolve = null;
+        }
+        restoreFocus(confirmDialogReturnFocus);
+        confirmDialogReturnFocus = null;
+      });
+      confirmDialog.addEventListener("click", function (event) {
+        if (event.target === confirmDialog) {
+          closeConfirmDialog(false);
+        }
+      });
+    }
+    var confirmDialogCancel = byId("confirmDialogCancel");
+    if (confirmDialogCancel) {
+      confirmDialogCancel.addEventListener("click", function () {
+        closeConfirmDialog(false);
+      });
+    }
+    var confirmDialogOK = byId("confirmDialogOK");
+    if (confirmDialogOK) {
+      confirmDialogOK.addEventListener("click", function () {
+        closeConfirmDialog(true);
       });
     }
     var scheduleChannel = byId("scheduleChannel");

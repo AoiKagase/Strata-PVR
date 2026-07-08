@@ -521,6 +521,44 @@ func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardConfirmDialog(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "index.html"): {
+			`id="confirmDialog"`,
+			`id="confirmDialogMessage"`,
+			`id="confirmDialogCancel"`,
+			`id="confirmDialogOK"`,
+			`aria-describedby="confirmDialogMessage"`,
+		},
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function confirmAction(message, options)`,
+			`pendingConfirmResolve`,
+			`confirmDialogReturnFocus`,
+			`restoreFocus(confirmDialogReturnFocus)`,
+			`actionConfirmOptions("DELETE"`,
+			`録画停止の確認`,
+			`録画済み削除の確認`,
+			`設定保存の確認`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.confirm-dialog .program-dialog-actions`,
+			`.danger-button`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
