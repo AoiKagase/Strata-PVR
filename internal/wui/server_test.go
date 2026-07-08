@@ -795,6 +795,37 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 }
 
+func TestAPIProgramPutSortsManualReserveLikeCLI(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	existing := legacy.Program{ID: "later", Title: "既存", Start: 2000}
+	program := legacy.Program{ID: "earlier", Title: "手動", Start: 1000}
+	schedule := []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{existing}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodPut, "/api/program/earlier.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
+	}
+	var reserves []legacy.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 2 || reserves[0].ID != "earlier" || reserves[1].ID != "later" {
+		t.Fatalf("manual reserve was not sorted by start: %#v", reserves)
+	}
+	if !reserves[0].IsManualReserved {
+		t.Fatalf("manual reserve flag was not set: %#v", reserves[0])
+	}
+}
+
 func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -991,6 +1022,39 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	}
 	if len(reserves) != 1 || !reserves[0].IsSkip {
 		t.Fatalf("reserve was not skipped: %#v", reserves)
+	}
+}
+
+func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	program := legacy.Program{ID: "manual", IsManualReserved: true}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodDelete, "/api/recording/manual.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	var recording []legacy.Program
+	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 1 || !recording[0].Abort {
+		t.Fatalf("manual recording was not aborted: %#v", recording)
+	}
+	var reserves []legacy.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("manual reserve should not be skipped: %#v", reserves)
 	}
 }
 

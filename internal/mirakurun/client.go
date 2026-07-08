@@ -20,6 +20,7 @@ type Client struct {
 }
 
 const legacyVersion = "0.10.7-gamma.1"
+const requestTimeout = 30 * time.Second
 
 func StrataUserAgent(component string) string {
 	if component == "" {
@@ -73,7 +74,7 @@ func New(raw string) (*Client, error) {
 		return nil, err
 	}
 	c.baseURL = u
-	c.httpClient = &http.Client{Timeout: 30 * time.Second}
+	c.httpClient = &http.Client{}
 	return c, nil
 }
 
@@ -85,11 +86,12 @@ func unixHTTPClient(socketPath string) *http.Client {
 				return d.DialContext(ctx, "unix", socketPath)
 			},
 		},
-		Timeout: 30 * time.Second,
 	}
 }
 
 func (c *Client) GetJSON(ctx context.Context, endpoint string, dst any) error {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
 	req, err := c.newRequest(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err

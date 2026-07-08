@@ -64,6 +64,16 @@ func TestStreamEndpoints(t *testing.T) {
 	}
 }
 
+func TestClientDoesNotUseGlobalTimeoutForStreams(t *testing.T) {
+	client, err := New("http://127.0.0.1/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.httpClient.Timeout != 0 {
+		t.Fatalf("http client timeout = %v, want no global timeout", client.httpClient.Timeout)
+	}
+}
+
 func TestStrataUserAgentAndPriorityHeaders(t *testing.T) {
 	client, err := New("http://127.0.0.1/")
 	if err != nil {

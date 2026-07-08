@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2324,6 +2325,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	program.IsManualReserved = true
 	program.OneSeg = r.URL.Query().Get("mode") == "1seg"
 	reserves = append(reserves, program)
+	sort.SliceStable(reserves, func(i, j int) bool { return reserves[i].Start < reserves[j].Start })
 	if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
