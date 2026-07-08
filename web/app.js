@@ -660,6 +660,14 @@
     return date.getTime();
   }
 
+  function dateKeyStart(value) {
+    var match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return 0;
+    }
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0).getTime();
+  }
+
   function dayLabel(value) {
     var date = new Date(value);
     return date.toLocaleDateString([], {
@@ -1499,7 +1507,8 @@
     var channelGroups = [];
     var now = Date.now();
     var hours = scheduleWindowHours();
-    var until = hours > 0 ? now + (hours * 60 * 60 * 1000) : 0;
+    var windowStart = state.scheduleDay ? dateKeyStart(state.scheduleDay) : now;
+    var until = hours > 0 ? windowStart + (hours * 60 * 60 * 1000) : 0;
 
     channels.forEach(function (channel) {
       var channelID = scheduleChannelID(channel);

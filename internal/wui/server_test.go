@@ -560,6 +560,24 @@ func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardScheduleDayWindowStartsAtSelectedDay(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function dateKeyStart(value)`,
+		`new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0).getTime()`,
+		`var windowStart = state.scheduleDay ? dateKeyStart(state.scheduleDay) : now;`,
+		`var until = hours > 0 ? windowStart + (hours * 60 * 60 * 1000) : 0;`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardConfirmDialog(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {
