@@ -1599,7 +1599,7 @@
     if (name === "watch-mp4") {
       return actionButton("視聴", "録画済み番組を視聴", function () {
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openURL(recordedWatchURL(program, "mp4", query));
+          openPlayerDialog(program.title || program.id || "録画済み", recordedWatchURL(program, "mp4", query));
         }, {
           openM2TS: function () {
             openURL(recordedWatchURL(program, "m2ts"));
