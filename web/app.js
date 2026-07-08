@@ -81,6 +81,16 @@
     };
   }
 
+  function defaultListFilter(name) {
+    var defaults = defaultListFilters();
+    var source = defaults[name] || {};
+    var result = {};
+    Object.keys(source).forEach(function (key) {
+      result[key] = source[key];
+    });
+    return result;
+  }
+
   function normalizeListFilters(value) {
     var defaults = defaultListFilters();
     Object.keys(defaults).forEach(function (name) {
@@ -3243,6 +3253,33 @@
     }
   }
 
+  function resetListFilter(filterName, ids, renderFn) {
+    var button = byId(ids.button);
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", function () {
+      var defaults = defaultListFilter(filterName);
+      state.listFilters[filterName] = defaults;
+      if (filterName === "channelPrograms") {
+        state.channelProgramsGenre = "";
+        state.channelProgramsSort = defaults.sort || "startAsc";
+      }
+      [
+        { id: ids.query, value: defaults.query || "" },
+        { id: ids.category, value: defaults.category || defaults.state || "" },
+        { id: ids.sort, value: defaults.sort || "" }
+      ].forEach(function (item) {
+        var control = byId(item.id);
+        if (control) {
+          control.value = item.value;
+        }
+      });
+      saveListFilters();
+      (renderFn || render)();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initNavigation();
     initKeyboardShortcuts();
@@ -3252,6 +3289,18 @@
     }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
+    resetListFilter("reserves", {
+      button: "reserveListFilterReset",
+      category: "reserveListCategory",
+      query: "reserveListQuery",
+      sort: "reserveListSort"
+    });
+    resetListFilter("recorded", {
+      button: "recordedListFilterReset",
+      category: "recordedListCategory",
+      query: "recordedListQuery",
+      sort: "recordedListSort"
+    });
     var channelProgramsQuery = byId("channelProgramsQuery");
     if (channelProgramsQuery) {
       channelProgramsQuery.value = state.listFilters.channelPrograms.query || "";
@@ -3292,6 +3341,12 @@
         renderRules();
       });
     }
+    resetListFilter("rules", {
+      button: "ruleListFilterReset",
+      category: "ruleListState",
+      query: "ruleListQuery",
+      sort: "ruleListSort"
+    }, renderRules);
     var mp4Preset = byId("mp4Preset");
     if (mp4Preset) {
       mp4Preset.addEventListener("change", function () {
@@ -3529,6 +3584,12 @@
         renderChannelPrograms();
       });
     }
+    resetListFilter("channelPrograms", {
+      button: "channelProgramsFilterReset",
+      category: "channelProgramsGenre",
+      query: "channelProgramsQuery",
+      sort: "channelProgramsSort"
+    }, renderChannelPrograms);
     subscribeRealtimeRefresh();
     refresh();
     setInterval(refresh, 30000);

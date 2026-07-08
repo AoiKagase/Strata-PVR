@@ -978,10 +978,21 @@ button:focus-visible {
 
 .list-filter-controls {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 200px)) auto auto;
   gap: 10px;
   align-items: end;
   margin: 0 0 12px;
+}
+
+.filter-clear-button {
+  align-self: end;
+  border-color: var(--line);
+  background: #f4f8fa;
+  color: var(--ink);
+}
+
+.filter-clear-button:hover {
+  background: #e8eef1;
 }
 
 .list-filter-summary {
