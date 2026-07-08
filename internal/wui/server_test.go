@@ -618,6 +618,40 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardShowsProgramCategoryChips(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function renderProgramCategoryChip(program)`,
+			`chip.className = "program-category-chip" + categoryClass(category);`,
+			`function renderProgramMeta(parts, program, className)`,
+			`function setProgramMeta(root, parts, program)`,
+			`var meta = renderProgramMeta(parts, program);`,
+			`setProgramMeta(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), formatDuration(program.start, end)], program);`,
+			`value.indexOf("cinema") >= 0`,
+			`return " category-information";`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-row-meta`,
+			`.program-category-chip`,
+			`.program-category-chip.category-anime`,
+			`.program-category-chip.category-information`,
+			`.schedule-card.category-information`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

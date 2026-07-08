@@ -650,6 +650,98 @@ summary:focus-visible,
   font-size: 12px;
 }
 
+.program-row-meta,
+.program-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.program-dialog-meta {
+  margin-top: 4px;
+}
+
+.program-category-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.program-row .program-category-chip {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.program-category-chip.category-anime {
+  border-color: oklch(74% 0.04 292);
+  background: oklch(95% 0.018 292);
+  color: oklch(36% 0.075 292);
+}
+
+.program-category-chip.category-movie {
+  border-color: oklch(74% 0.052 72);
+  background: oklch(95.5% 0.02 72);
+  color: oklch(34% 0.065 72);
+}
+
+.program-category-chip.category-news {
+  border-color: oklch(74% 0.045 245);
+  background: oklch(95% 0.018 245);
+  color: oklch(34% 0.07 245);
+}
+
+.program-category-chip.category-sports {
+  border-color: oklch(72% 0.045 145);
+  background: oklch(95% 0.018 145);
+  color: oklch(32% 0.065 145);
+}
+
+.program-category-chip.category-drama {
+  border-color: oklch(74% 0.048 10);
+  background: oklch(95% 0.02 10);
+  color: oklch(35% 0.07 10);
+}
+
+.program-category-chip.category-music {
+  border-color: oklch(74% 0.045 265);
+  background: oklch(95% 0.018 265);
+  color: oklch(34% 0.07 265);
+}
+
+.program-category-chip.category-information {
+  border-color: oklch(74% 0.046 185);
+  background: oklch(95% 0.018 185);
+  color: oklch(32% 0.06 185);
+}
+
+.program-category-chip.category-variety {
+  border-color: oklch(76% 0.052 95);
+  background: oklch(96% 0.024 95);
+  color: oklch(34% 0.064 95);
+}
+
+.program-category-chip.category-documentary,
+.program-category-chip.category-theater,
+.program-category-chip.category-hobby,
+.program-category-chip.category-welfare,
+.program-category-chip.category-etc {
+  border-color: oklch(76% 0.024 245);
+  background: oklch(96% 0.01 245);
+  color: oklch(35% 0.026 245);
+}
+
 .program-state-badges {
   display: flex;
   flex-wrap: wrap;
@@ -894,6 +986,25 @@ summary:focus-visible,
 .schedule-card.category-music {
   border-color: oklch(69% 0.052 265);
   background: oklch(95% 0.022 265);
+}
+
+.schedule-card.category-information {
+  border-color: oklch(69% 0.048 185);
+  background: oklch(95% 0.022 185);
+}
+
+.schedule-card.category-variety {
+  border-color: oklch(71% 0.055 95);
+  background: oklch(95.5% 0.026 95);
+}
+
+.schedule-card.category-documentary,
+.schedule-card.category-theater,
+.schedule-card.category-hobby,
+.schedule-card.category-welfare,
+.schedule-card.category-etc {
+  border-color: oklch(72% 0.026 245);
+  background: oklch(96% 0.012 245);
 }
 
 .schedule-card.recording {

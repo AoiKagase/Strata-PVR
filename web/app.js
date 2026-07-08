@@ -462,6 +462,46 @@
     return String(program && (program.category || program.genre || "") || "");
   }
 
+  function renderProgramCategoryChip(program) {
+    var category = programCategory(program);
+    if (!category) {
+      return null;
+    }
+    var chip = document.createElement("span");
+    chip.className = "program-category-chip" + categoryClass(category);
+    chip.textContent = category;
+    chip.title = "ジャンル: " + category;
+    return chip;
+  }
+
+  function renderProgramMeta(parts, program, className) {
+    var meta = document.createElement("div");
+    meta.className = className || "program-row-meta";
+    var chip = renderProgramCategoryChip(program);
+    if (chip) {
+      meta.appendChild(chip);
+    }
+    var body = document.createElement("span");
+    body.textContent = (parts || []).filter(Boolean).join(" / ");
+    meta.appendChild(body);
+    return meta;
+  }
+
+  function setProgramMeta(root, parts, program) {
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    var chip = renderProgramCategoryChip(program);
+    if (chip) {
+      root.appendChild(chip);
+    }
+    var body = document.createElement("span");
+    body.className = "program-dialog-meta-text";
+    body.textContent = (parts || []).filter(Boolean).join(" / ");
+    root.appendChild(body);
+  }
+
   function normalizeSearchText(value) {
     return String(value || "").toLocaleLowerCase("ja").trim();
   }
@@ -1610,13 +1650,11 @@
       openProgramDialog(program);
     });
 
-    var meta = document.createElement("span");
     var parts = [formatTime(program.start)];
     if (showChannel) {
       parts.push(channelName(program));
     }
-    parts.push(program.category);
-    meta.textContent = parts.filter(Boolean).join(" / ");
+    var meta = renderProgramMeta(parts, program);
 
     var body = document.createElement("div");
     body.className = "program-row-body";
@@ -2144,7 +2182,7 @@
     if (value.indexOf("anime") >= 0 || value.indexOf("アニメ") >= 0) {
       return " category-anime";
     }
-    if (value.indexOf("movie") >= 0 || value.indexOf("映画") >= 0) {
+    if (value.indexOf("movie") >= 0 || value.indexOf("cinema") >= 0 || value.indexOf("映画") >= 0) {
       return " category-movie";
     }
     if (value.indexOf("news") >= 0 || value.indexOf("ニュース") >= 0 || value.indexOf("報道") >= 0) {
@@ -2158,6 +2196,27 @@
     }
     if (value.indexOf("music") >= 0 || value.indexOf("音楽") >= 0) {
       return " category-music";
+    }
+    if (value.indexOf("information") >= 0 || value.indexOf("情報") >= 0) {
+      return " category-information";
+    }
+    if (value.indexOf("variety") >= 0 || value.indexOf("バラエティ") >= 0) {
+      return " category-variety";
+    }
+    if (value.indexOf("documentary") >= 0 || value.indexOf("ドキュメンタリー") >= 0) {
+      return " category-documentary";
+    }
+    if (value.indexOf("theater") >= 0 || value.indexOf("劇場") >= 0) {
+      return " category-theater";
+    }
+    if (value.indexOf("hobby") >= 0 || value.indexOf("趣味") >= 0) {
+      return " category-hobby";
+    }
+    if (value.indexOf("welfare") >= 0 || value.indexOf("福祉") >= 0) {
+      return " category-welfare";
+    }
+    if (value.indexOf("etc") >= 0 || value.indexOf("その他") >= 0) {
+      return " category-etc";
     }
     return "";
   }
@@ -2225,7 +2284,7 @@
     state.selectedProgram = program;
     state.activeProgramID = program && program.id ? program.id : "";
     text(title, programTitle(program));
-    text(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), program.category, formatDuration(program.start, end)].filter(Boolean).join(" / "));
+    setProgramMeta(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), formatDuration(program.start, end)], program);
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
