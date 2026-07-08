@@ -237,13 +237,24 @@ func searchMatches(opts searchOptions, program legacy.Program, now time.Time) bo
 	if opts.now && (now.Before(start) || now.After(end)) {
 		return false
 	}
-	if opts.today && now.Day() != start.Day() {
+	today := midnight(now)
+	if opts.today && !sameDay(start, today) {
 		return false
 	}
-	if opts.tomorrow && now.Day()+1 != start.Day() {
+	if opts.tomorrow && !sameDay(start, today.AddDate(0, 0, 1)) {
 		return false
 	}
 	return true
+}
+
+func midnight(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
 }
 
 func loadNormalizationForm(path string) string {

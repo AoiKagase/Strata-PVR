@@ -1400,6 +1400,34 @@ func TestSearchFiltersSchedule(t *testing.T) {
 	}
 }
 
+func TestSearchDateFiltersCrossMonthAndYearBoundaries(t *testing.T) {
+	loc := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 12, 31, 23, 30, 0, 0, loc)
+	todayProgram := legacy.Program{
+		ID:    "today",
+		Start: time.Date(2026, 12, 31, 20, 0, 0, 0, loc).UnixMilli(),
+		End:   time.Date(2026, 12, 31, 21, 0, 0, 0, loc).UnixMilli(),
+	}
+	tomorrowProgram := legacy.Program{
+		ID:    "tomorrow",
+		Start: time.Date(2027, 1, 1, 1, 0, 0, 0, loc).UnixMilli(),
+		End:   time.Date(2027, 1, 1, 2, 0, 0, 0, loc).UnixMilli(),
+	}
+
+	if !searchMatches(searchOptions{today: true}, todayProgram, now) {
+		t.Fatal("today filter did not match the same calendar day")
+	}
+	if searchMatches(searchOptions{today: true}, tomorrowProgram, now) {
+		t.Fatal("today filter matched the next year")
+	}
+	if !searchMatches(searchOptions{tomorrow: true}, tomorrowProgram, now) {
+		t.Fatal("tomorrow filter did not match across the year boundary")
+	}
+	if searchMatches(searchOptions{tomorrow: true}, todayProgram, now) {
+		t.Fatal("tomorrow filter matched today")
+	}
+}
+
 func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
