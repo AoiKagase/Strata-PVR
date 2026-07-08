@@ -414,6 +414,17 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(8, 120, 111, 0.45);
+  outline-offset: 2px;
+}
+
 .list {
   display: grid;
   gap: 8px;
@@ -672,6 +683,7 @@ button:disabled {
 .schedule-channel-head .channel-link {
   overflow: hidden;
   max-width: 100%;
+  min-width: 44px;
   color: var(--ink);
   font-size: 11px;
   justify-content: center;
