@@ -2528,7 +2528,7 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-re -i pipe:0", "-b:v 1m", "-c:a aac"} {
+	for _, want := range []string{"-re", "-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 10000000", "-probesize 10000000", "-i pipe:0", "-b:v 1m", "-c:a aac"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live recording ffmpeg args missing %q: %s", want, joined)
 		}
@@ -2668,8 +2668,11 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	if gotInput != "livets" {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
-	if !strings.Contains(strings.Join(gotArgs, " "), "-re -i pipe:0") {
-		t.Fatalf("live ffmpeg args missing -re: %v", gotArgs)
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-re", "-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-i pipe:0"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("live ffmpeg args missing %q: %s", want, joined)
+		}
 	}
 }
 

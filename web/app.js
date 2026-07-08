@@ -1270,6 +1270,7 @@
 
   var pendingMP4Open = null;
   var pendingMP4PlaylistOpen = null;
+  var pendingM2TSOpen = null;
 
   function applyMP4Preset(name) {
     var preset = mp4Presets[name];
@@ -1370,6 +1371,7 @@
     mp4DialogReturnFocus = rememberFocus();
     pendingMP4Open = openWithQuery;
     pendingMP4PlaylistOpen = typeof options.openPlaylist === "function" ? options.openPlaylist : null;
+    pendingM2TSOpen = typeof options.openM2TS === "function" ? options.openM2TS : null;
     text(byId("mp4DialogMeta"), meta || "");
     ["mp4Start", "mp4Duration"].forEach(function (id) {
       var input = byId(id);
@@ -1386,6 +1388,10 @@
     if (playlistButton) {
       playlistButton.hidden = !pendingMP4PlaylistOpen;
     }
+    var m2tsButton = byId("mp4M2TSButton");
+    if (m2tsButton) {
+      m2tsButton.hidden = !pendingM2TSOpen;
+    }
     dialog.showModal();
     focusFirstDialogControl(dialog);
   }
@@ -1398,6 +1404,7 @@
     var open = pendingMP4Open;
     pendingMP4Open = null;
     pendingMP4PlaylistOpen = null;
+    pendingM2TSOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
@@ -1412,11 +1419,27 @@
     var openPlaylist = pendingMP4PlaylistOpen;
     pendingMP4Open = null;
     pendingMP4PlaylistOpen = null;
+    pendingM2TSOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
     }
     openPlaylist();
+  }
+
+  function submitM2TSOpen() {
+    if (!pendingM2TSOpen) {
+      return;
+    }
+    var openM2TS = pendingM2TSOpen;
+    pendingMP4Open = null;
+    pendingMP4PlaylistOpen = null;
+    pendingM2TSOpen = null;
+    var dialog = byId("mp4Dialog");
+    if (dialog) {
+      dialog.close();
+    }
+    openM2TS();
   }
 
   function formatBytes(value) {
@@ -1503,6 +1526,9 @@
           openMP4Dialog(program.title || program.id || "録画中", function (query) {
             openPlayerDialog(program.title || program.id || "録画中", recordingWatchURL(program, "mp4", query));
           }, {
+            openM2TS: function () {
+              openURL(recordingWatchURL(program, "m2ts"));
+            },
             openPlaylist: function () {
               openURL(recordingWatchURL(program, "xspf"));
             }
@@ -1517,6 +1543,9 @@
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openPlayerDialog(program.title || program.id || "録画済み", recordedWatchURL(program, "mp4", query));
           }, {
+            openM2TS: function () {
+              openURL(recordedWatchURL(program, "m2ts"));
+            },
             openPlaylist: function () {
               openURL(recordedWatchURL(program, "xspf"));
             }
@@ -1537,6 +1566,9 @@
             openMP4Dialog(program.title || channelID || "チャンネル", function (query) {
               openPlayerDialog(program.title || channelID || "チャンネル", channelURL(channelID, "watch", "mp4", query));
             }, {
+              openM2TS: function () {
+                openURL(channelURL(channelID, "watch", "m2ts"));
+              },
               openPlaylist: function () {
                 openURL(channelURL(channelID, "watch", "xspf"));
               }
@@ -1569,6 +1601,9 @@
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
           openURL(recordedWatchURL(program, "mp4", query));
         }, {
+          openM2TS: function () {
+            openURL(recordedWatchURL(program, "m2ts"));
+          },
           openPlaylist: function () {
             openURL(recordedWatchURL(program, "xspf"));
           }
@@ -1778,6 +1813,9 @@
         openMP4Dialog(group.name || group.id || "チャンネル", function (query) {
           openPlayerDialog(group.name || group.id || "チャンネル", channelURL(group.id, "watch", "mp4", query));
         }, {
+          openM2TS: function () {
+            openURL(channelURL(group.id, "watch", "m2ts"));
+          },
           openPlaylist: function () {
             openURL(channelURL(group.id, "watch", "xspf"));
           }
@@ -2218,6 +2256,9 @@
       openMP4Dialog(label || channelID || "チャンネル", function (query) {
         openPlayerDialog(label || channelID || "チャンネル", channelURL(channelID, "watch", "mp4", query));
       }, {
+        openM2TS: function () {
+          openURL(channelURL(channelID, "watch", "m2ts"));
+        },
         openPlaylist: function () {
           openURL(channelURL(channelID, "watch", "xspf"));
         }
@@ -4141,6 +4182,10 @@
     if (mp4XSPFButton) {
       mp4XSPFButton.addEventListener("click", submitMP4Playlist);
     }
+    var mp4M2TSButton = byId("mp4M2TSButton");
+    if (mp4M2TSButton) {
+      mp4M2TSButton.addEventListener("click", submitM2TSOpen);
+    }
     var mp4DialogClose = byId("mp4DialogClose");
     if (mp4DialogClose) {
       mp4DialogClose.addEventListener("click", function () {
@@ -4161,9 +4206,14 @@
       mp4Dialog.addEventListener("close", function () {
         pendingMP4Open = null;
         pendingMP4PlaylistOpen = null;
+        pendingM2TSOpen = null;
         var playlistButton = byId("mp4XSPFButton");
         if (playlistButton) {
           playlistButton.hidden = true;
+        }
+        var m2tsButton = byId("mp4M2TSButton");
+        if (m2tsButton) {
+          m2tsButton.hidden = true;
         }
         restoreFocus(mp4DialogReturnFocus);
         mp4DialogReturnFocus = null;

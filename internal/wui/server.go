@@ -3031,6 +3031,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	if live {
 		args = append(args, "-re")
 	}
+	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000")
 	args = append(args, "-i", "pipe:0", "-threads", "0")
 	if !live {
 		args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
