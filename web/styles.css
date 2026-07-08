@@ -855,8 +855,78 @@ button:disabled {
 .row-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 4px;
+}
+
+.recorded-actions {
+  gap: 8px;
+}
+
+.row-danger-actions {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.primary-action {
+  border-color: #075f58;
+  background: #08786f;
+  color: #fff;
+}
+
+.primary-action:hover {
+  background: #075f58;
+}
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu-summary {
+  display: inline-flex;
+  align-items: center;
+  list-style: none;
+  cursor: pointer;
+}
+
+.action-menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.action-menu-summary::after {
+  content: "";
+  width: 0;
+  height: 0;
+  margin-left: 6px;
+  border-top: 5px solid #52636b;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.action-menu[open] .action-menu-summary {
+  border-color: #8fb8b4;
+  background: #eaf5f3;
+}
+
+.action-menu-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 18;
+  display: grid;
+  min-width: 142px;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #aebfc7;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.action-menu-panel .small-button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
 }
 
 .program-dialog {
@@ -1342,6 +1412,20 @@ button:focus-visible {
   .channel-link,
   .channel-actions button {
     min-height: 44px;
+  }
+
+  .row-actions .small-button,
+  .action-menu-summary {
+    min-height: 44px;
+  }
+
+  .recorded-actions {
+    width: 100%;
+  }
+
+  .row-danger-actions {
+    flex-basis: 100%;
+    margin-left: 0;
   }
 }
 
