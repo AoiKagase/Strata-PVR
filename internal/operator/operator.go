@@ -518,7 +518,7 @@ func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, t
 		return nil
 	}
 	message := fmt.Sprintf(
-		"From: Strata PVR <strata-pvr@localhost>\nTo: %s\nSubject: [Strata PVR] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
+		"From: Chinachu <chinachu@localhost>\nTo: %s\nSubject: [Chinachu] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
 		to,
 		freeMB,
 		thresholdMB,

@@ -764,15 +764,56 @@ func TestLowStorageSendsNotification(t *testing.T) {
 	}
 	message := string(data)
 	for _, want := range []string{
-		"From: Strata PVR <strata-pvr@localhost>",
+		"From: Chinachu <chinachu@localhost>",
 		"To: admin@example.test",
-		"Subject: [Strata PVR] ALERT: Storage Low Space!",
+		"Subject: [Chinachu] ALERT: Storage Low Space!",
 		"Current Free Space is 42 MB.",
 		"Threshold is 100 MB.",
 	} {
 		if !strings.Contains(message, want) {
 			t.Fatalf("notification missing %q: %q", want, message)
 		}
+	}
+}
+
+func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
+	dir := t.TempDir()
+	oldGetDiskUsage := getDiskUsage
+	getDiskUsage = func(string) (system.DiskUsage, error) {
+		return system.DiskUsage{Avail: 10 * 1024 * 1024}, nil
+	}
+	defer func() { getDiskUsage = oldGetDiskUsage }()
+
+	paths := Paths{
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	recording := []legacy.Program{
+		{ID: "active", Title: "Active", Channel: legacy.Channel{Name: "Service"}},
+		{ID: "already", Title: "Already", Abort: true, Channel: legacy.Channel{Name: "Service"}},
+	}
+	cfg := &config.Config{
+		RecordedDir:                filepath.Join(dir, "recorded"),
+		StorageLowSpaceThresholdMB: 100,
+		StorageLowSpaceAction:      "stop",
+	}
+
+	if _, err := handleLowStorage(context.Background(), paths, cfg, recording, nil); err != nil {
+		t.Fatal(err)
+	}
+	var updated []legacy.Program
+	if err := storage.ReadJSON(paths.Recording, &updated, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 2 || !updated[0].Abort || !updated[1].Abort {
+		t.Fatalf("recordings were not marked abort: %#v", updated)
+	}
+	logData, err := os.ReadFile(paths.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "WRITE: "+paths.Recording) {
+		t.Fatalf("operator log missing recording write: %s", string(logData))
 	}
 }
 
