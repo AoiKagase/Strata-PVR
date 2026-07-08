@@ -31,7 +31,7 @@
     scheduleWindowMode: "day",
     channelProgramsChannel: "",
     channelProgramsGenre: "",
-    channelProgramsSort: "start",
+    channelProgramsSort: "startAsc",
     editingRuleIndex: null,
     editingRuleFormIndex: null,
     selectedProgram: null,
@@ -74,10 +74,10 @@
 
   function defaultListFilters() {
     return {
-      channelPrograms: { query: "", category: "" },
-      rules: { query: "", state: "" },
-      recorded: { query: "", category: "" },
-      reserves: { query: "", category: "" }
+      channelPrograms: { query: "", category: "", sort: "startAsc" },
+      rules: { query: "", state: "", sort: "indexAsc" },
+      recorded: { query: "", category: "", sort: "startDesc" },
+      reserves: { query: "", category: "", sort: "startAsc" }
     };
   }
 
@@ -499,6 +499,43 @@
         return true;
       }
       return normalizeSearchText("#" + entry.index + " " + ruleSummary(rule) + " " + JSON.stringify(rule)).indexOf(query) >= 0;
+    });
+  }
+
+  function sortedPrograms(items, filterName) {
+    var filter = state.listFilters[filterName] || {};
+    var sort = filter.sort || (filterName === "recorded" ? "startDesc" : "startAsc");
+    return (items || []).slice().sort(function (a, b) {
+      var startOrder = (a.start || 0) - (b.start || 0);
+      if (sort === "startDesc") {
+        return -startOrder;
+      }
+      if (sort === "category") {
+        return programCategory(a).localeCompare(programCategory(b), "ja") || startOrder;
+      }
+      if (sort === "title") {
+        return programTitle(a).localeCompare(programTitle(b), "ja") || startOrder;
+      }
+      if (sort === "duration") {
+        return (programEnd(a) - (a.start || 0)) - (programEnd(b) - (b.start || 0)) || startOrder;
+      }
+      return startOrder;
+    });
+  }
+
+  function sortedRuleEntries(items) {
+    var sort = (state.listFilters.rules && state.listFilters.rules.sort) || "indexAsc";
+    return (items || []).slice().sort(function (a, b) {
+      if (sort === "indexDesc") {
+        return b.index - a.index;
+      }
+      if (sort === "state") {
+        return Number(Boolean(a.rule && a.rule.isDisabled)) - Number(Boolean(b.rule && b.rule.isDisabled)) || a.index - b.index;
+      }
+      if (sort === "title") {
+        return ruleSummary(a.rule).localeCompare(ruleSummary(b.rule), "ja") || a.index - b.index;
+      }
+      return a.index - b.index;
     });
   }
 
@@ -1950,18 +1987,7 @@
     state.listFilters.channelPrograms.category = state.channelProgramsGenre;
     programs = filteredPrograms(programs, "channelPrograms");
     updateListFilterSummary("channelProgramsFilterSummary", programs.length, group.programs.length);
-    programs.sort(function (a, b) {
-      if (state.channelProgramsSort === "category") {
-        return String(a.category || "").localeCompare(String(b.category || ""), "ja") || (a.start || 0) - (b.start || 0);
-      }
-      if (state.channelProgramsSort === "title") {
-        return programTitle(a).localeCompare(programTitle(b), "ja") || (a.start || 0) - (b.start || 0);
-      }
-      if (state.channelProgramsSort === "duration") {
-        return (programEnd(a) - a.start) - (programEnd(b) - b.start) || (a.start || 0) - (b.start || 0);
-      }
-      return (a.start || 0) - (b.start || 0);
-    });
+    programs = sortedPrograms(programs, "channelPrograms");
 
     if (!programs.length) {
       root.className = "list empty";
@@ -2020,7 +2046,7 @@
       updateListFilterSummary("ruleListFilterSummary", 0, 0);
       return;
     }
-    var filtered = filteredRules(state.rules);
+    var filtered = sortedRuleEntries(filteredRules(state.rules));
     updateListFilterSummary("ruleListFilterSummary", filtered.length, state.rules.length);
     if (!filtered.length) {
       root.className = "list empty";
@@ -3032,9 +3058,9 @@
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
-    var filteredReserves = filteredPrograms(state.reserves, "reserves");
-    var recordedNewestFirst = state.recorded.slice().reverse();
-    var filteredRecorded = filteredPrograms(recordedNewestFirst, "recorded");
+    var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
+    var recordedNewestFirst = sortedPrograms(state.recorded, "recorded");
+    var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
 
     updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
     updateListCategoryOptions("recordedListCategory", state.recorded, "recorded");
@@ -3183,9 +3209,10 @@
     }).catch(showError);
   }
 
-  function bindListFilter(filterName, queryID, categoryID) {
+  function bindListFilter(filterName, queryID, categoryID, sortID) {
     var query = byId(queryID);
     var category = byId(categoryID);
+    var sort = byId(sortID);
     var current = state.listFilters[filterName] || {};
     if (query) {
       query.value = current.query || "";
@@ -3202,6 +3229,18 @@
         render();
       });
     }
+    if (sort) {
+      sort.value = current.sort || sort.value;
+      if (current.sort && sort.value !== current.sort) {
+        sort.value = sort.options.length ? sort.options[0].value : "";
+      }
+      state.listFilters[filterName].sort = sort.value;
+      sort.addEventListener("change", function () {
+        state.listFilters[filterName].sort = sort.value;
+        saveListFilters();
+        render();
+      });
+    }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -3211,8 +3250,8 @@
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
     }
-    bindListFilter("reserves", "reserveListQuery", "reserveListCategory");
-    bindListFilter("recorded", "recordedListQuery", "recordedListCategory");
+    bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
+    bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     var channelProgramsQuery = byId("channelProgramsQuery");
     if (channelProgramsQuery) {
       channelProgramsQuery.value = state.listFilters.channelPrograms.query || "";
@@ -3236,6 +3275,19 @@
       ruleListState.value = state.listFilters.rules.state || "";
       ruleListState.addEventListener("change", function () {
         state.listFilters.rules.state = ruleListState.value;
+        saveListFilters();
+        renderRules();
+      });
+    }
+    var ruleListSort = byId("ruleListSort");
+    if (ruleListSort) {
+      ruleListSort.value = state.listFilters.rules.sort || "indexAsc";
+      if (state.listFilters.rules.sort && ruleListSort.value !== state.listFilters.rules.sort) {
+        ruleListSort.value = ruleListSort.options.length ? ruleListSort.options[0].value : "indexAsc";
+      }
+      state.listFilters.rules.sort = ruleListSort.value;
+      ruleListSort.addEventListener("change", function () {
+        state.listFilters.rules.sort = ruleListSort.value;
         saveListFilters();
         renderRules();
       });
@@ -3464,9 +3516,16 @@
     }
     var channelProgramsSort = byId("channelProgramsSort");
     if (channelProgramsSort) {
-      channelProgramsSort.value = state.channelProgramsSort;
+      channelProgramsSort.value = state.listFilters.channelPrograms.sort || state.channelProgramsSort || "startAsc";
+      if (state.listFilters.channelPrograms.sort && channelProgramsSort.value !== state.listFilters.channelPrograms.sort) {
+        channelProgramsSort.value = channelProgramsSort.options.length ? channelProgramsSort.options[0].value : "startAsc";
+      }
+      state.channelProgramsSort = channelProgramsSort.value;
+      state.listFilters.channelPrograms.sort = channelProgramsSort.value;
       channelProgramsSort.addEventListener("change", function () {
-        state.channelProgramsSort = channelProgramsSort.value || "start";
+        state.channelProgramsSort = channelProgramsSort.value || "startAsc";
+        state.listFilters.channelPrograms.sort = state.channelProgramsSort;
+        saveListFilters();
         renderChannelPrograms();
       });
     }

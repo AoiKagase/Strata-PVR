@@ -173,7 +173,8 @@
           <label class="control-field" for="channelProgramsSort">
             <span>並び順</span>
             <select id="channelProgramsSort">
-              <option value="start">開始時刻</option>
+              <option value="startAsc">開始時刻 昇順</option>
+              <option value="startDesc">開始時刻 降順</option>
               <option value="category">ジャンル</option>
               <option value="title">タイトル</option>
               <option value="duration">長さ</option>
@@ -198,14 +199,24 @@
           <span>検索</span>
           <input id="reserveListQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
         </label>
-        <label class="control-field" for="reserveListCategory">
-          <span>ジャンル</span>
-          <select id="reserveListCategory">
-            <option value="">全ジャンル</option>
-          </select>
-        </label>
-        <span id="reserveListFilterSummary" class="list-filter-summary">0件</span>
-      </div>
+          <label class="control-field" for="reserveListCategory">
+            <span>ジャンル</span>
+            <select id="reserveListCategory">
+              <option value="">全ジャンル</option>
+            </select>
+          </label>
+          <label class="control-field" for="reserveListSort">
+            <span>並び順</span>
+            <select id="reserveListSort">
+              <option value="startAsc">開始時刻 昇順</option>
+              <option value="startDesc">開始時刻 降順</option>
+              <option value="category">ジャンル</option>
+              <option value="title">タイトル</option>
+              <option value="duration">長さ</option>
+            </select>
+          </label>
+          <span id="reserveListFilterSummary" class="list-filter-summary">0件</span>
+        </div>
       <div id="reserveListPage" class="list empty">予約はありません</div>
     </section>
 
@@ -221,14 +232,24 @@
           <span>検索</span>
           <input id="recordedListQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
         </label>
-        <label class="control-field" for="recordedListCategory">
-          <span>ジャンル</span>
-          <select id="recordedListCategory">
-            <option value="">全ジャンル</option>
-          </select>
-        </label>
-        <span id="recordedListFilterSummary" class="list-filter-summary">0件</span>
-      </div>
+          <label class="control-field" for="recordedListCategory">
+            <span>ジャンル</span>
+            <select id="recordedListCategory">
+              <option value="">全ジャンル</option>
+            </select>
+          </label>
+          <label class="control-field" for="recordedListSort">
+            <span>並び順</span>
+            <select id="recordedListSort">
+              <option value="startDesc">開始時刻 降順</option>
+              <option value="startAsc">開始時刻 昇順</option>
+              <option value="category">ジャンル</option>
+              <option value="title">タイトル</option>
+              <option value="duration">長さ</option>
+            </select>
+          </label>
+          <span id="recordedListFilterSummary" class="list-filter-summary">0件</span>
+        </div>
       <div id="recordedListPage" class="list empty">録画済み番組はありません</div>
     </section>
 
@@ -255,6 +276,15 @@
               <option value="">すべて</option>
               <option value="enabled">有効</option>
               <option value="disabled">無効</option>
+            </select>
+          </label>
+          <label class="control-field" for="ruleListSort">
+            <span>並び順</span>
+            <select id="ruleListSort">
+              <option value="indexAsc">番号 昇順</option>
+              <option value="indexDesc">番号 降順</option>
+              <option value="state">状態</option>
+              <option value="title">条件</option>
             </select>
           </label>
           <span id="ruleListFilterSummary" class="list-filter-summary">0件</span>
