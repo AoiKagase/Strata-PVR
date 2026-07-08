@@ -9,6 +9,7 @@
   --accent-ink: #ffffff;
   --warn: #b45309;
   --error: #b42318;
+  --topbar-height: 86px;
 }
 
 * {
@@ -38,7 +39,7 @@ body {
 
 .main-nav {
   position: sticky;
-  top: 86px;
+  top: var(--topbar-height);
   z-index: 19;
   display: flex;
   align-items: center;
@@ -388,7 +389,8 @@ button:disabled {
 
 .program-row.selected {
   background: #eef8f6;
-  box-shadow: inset 3px 0 0 #0f766e;
+  outline: 2px solid rgba(15, 118, 110, 0.28);
+  outline-offset: -2px;
 }
 
 .program-row strong {
@@ -397,8 +399,10 @@ button:disabled {
 }
 
 .program-title-button {
-  min-height: 0;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 1px 0;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -445,7 +449,9 @@ button:disabled {
 }
 
 .channel-link {
-  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -708,9 +714,9 @@ button:disabled {
 }
 
 .channel-actions button {
-  min-height: 22px;
-  padding: 0 5px;
-  font-size: 10px;
+  min-height: 28px;
+  padding: 0 7px;
+  font-size: 11px;
 }
 
 .channel-tools {
@@ -972,6 +978,10 @@ button:focus-visible {
   margin-top: 12px;
 }
 
+.config-form-shell {
+  margin: 0;
+}
+
 .config-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1163,6 +1173,33 @@ button:focus-visible {
 
   .settings-list {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .main-nav {
+    flex-wrap: wrap;
+    gap: 0;
+    overflow-x: visible;
+    padding: 0;
+  }
+
+  .main-nav-links {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .main-nav a {
+    min-width: 0;
+    padding: 10px 6px 8px;
+    text-align: center;
+  }
+
+  .schedule-nav-controls {
+    width: 100%;
+    overflow-x: auto;
+    padding: 6px 8px;
   }
 }
 

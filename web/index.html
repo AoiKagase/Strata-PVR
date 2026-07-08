@@ -448,11 +448,12 @@
             <button id="saveConfigFormButton" type="button" title="フォームの内容で設定JSONを保存">フォーム保存</button>
           </div>
         </div>
-        <div class="config-form">
-          <label>
-            <span>Mirakurun URL</span>
-            <input id="configMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http://127.0.0.1:40772">
-          </label>
+        <form id="configForm" class="config-form-shell" autocomplete="off" novalidate>
+          <div class="config-form">
+            <label>
+              <span>Mirakurun URL</span>
+              <input id="configMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http://127.0.0.1:40772">
+            </label>
           <label>
             <span>旧Mirakurun URL</span>
             <input id="configSchedulerMirakurunPath" class="config-form-control" type="text" autocomplete="off" placeholder="http+unix://%2Fvar%2Frun%2Fmirakurun.sock/">
@@ -509,13 +510,13 @@
             <span>除外サービス</span>
             <input id="configExcludeServices" class="config-form-control" type="text" autocomplete="off" placeholder="32736, 32737">
           </label>
-          <label class="checkbox-label">
-            <span>公開WUI</span>
-            <input id="configWuiOpenServer" class="config-form-control" type="checkbox">
-          </label>
-        </div>
-        <h4 class="config-form-heading">詳細設定</h4>
-        <div class="config-form config-form-detail">
+            <label class="checkbox-label">
+              <span>公開WUI</span>
+              <input id="configWuiOpenServer" class="config-form-control" type="checkbox">
+            </label>
+          </div>
+          <h4 class="config-form-heading">詳細設定</h4>
+          <div class="config-form config-form-detail">
           <label>
             <span>実行ユーザーID</span>
             <input id="configUid" class="config-form-control" type="text" autocomplete="off" placeholder="chinachu または 1001">
@@ -586,7 +587,7 @@
           </label>
           <label>
             <span>TLSパスフレーズ</span>
-            <input id="configWuiTlsPassphrase" class="config-form-control" type="password" autocomplete="off">
+            <input id="configWuiTlsPassphrase" class="config-form-control" type="password" autocomplete="new-password" spellcheck="false">
           </label>
           <label>
             <span>TLSクライアント証明書要求</span>
@@ -636,7 +637,8 @@
             <span>録画完了コマンド</span>
             <input id="configRecordedCommand" class="config-form-control" type="text" autocomplete="off">
           </label>
-        </div>
+          </div>
+        </form>
       </section>
       <section class="panel config-editor-panel">
         <div class="panel-head">

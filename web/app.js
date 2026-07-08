@@ -773,6 +773,15 @@
     return hash || "dashboard";
   }
 
+  function syncStickyOffsets() {
+    var topbar = document.querySelector(".topbar");
+    if (!topbar) {
+      return;
+    }
+    var height = Math.ceil(topbar.getBoundingClientRect().height);
+    document.documentElement.style.setProperty("--topbar-height", height + "px");
+  }
+
   function setView(name) {
     var found = false;
     if (state.currentView) {
@@ -3466,6 +3475,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    syncStickyOffsets();
+    window.addEventListener("resize", syncStickyOffsets);
+    window.addEventListener("orientationchange", syncStickyOffsets);
     initNavigation();
     initKeyboardShortcuts();
     var refreshButton = byId("refreshButton");
@@ -3582,6 +3594,12 @@
     var resetConfigButton = byId("resetConfigButton");
     if (resetConfigButton) {
       resetConfigButton.addEventListener("click", resetConfigEditor);
+    }
+    var configForm = byId("configForm");
+    if (configForm) {
+      configForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+      });
     }
     var applyConfigFormButton = byId("applyConfigFormButton");
     if (applyConfigFormButton) {
