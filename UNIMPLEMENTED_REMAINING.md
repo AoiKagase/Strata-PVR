@@ -12,7 +12,7 @@ backlog.
 | CLI wrapper and modes | `chinachu`, `app-cli.js` | No known must-implement command is missing. Remaining differences are output-format and JSON-order parity risks. |
 | Scheduler | `app-scheduler.js`, `common/lib/chinachu-common.js` | Core schedule import, rule matching, reserve generation, hooks, pid files, and legacy log lines are implemented. Remaining differences are oracle-test risks. |
 | Operator/recorder | `app-operator.js`, `common/lib/chinachu-common.js` | Core reserve execution, recording state, low-space behavior, abort handling, hooks, and finalization are implemented. Rare signal/log ordering still needs oracle-level validation. |
-| WUI/API server | `app-wui.js`, `api/resource-*.json`, `api/script-*.vm.js` | API resources, static serving, auth/listeners, watch/preview routes, log streams, scheduler force, and mutating actions are covered. Full Socket.IO server push remains the only known functional runtime gap. |
+| WUI/API server | `app-wui.js`, `api/resource-*.json`, `api/script-*.vm.js` | API resources, static serving, auth/listeners, watch/preview routes, log streams, scheduler force, mutating actions, and legacy Socket.IO 0.9 XHR polling server push are covered. Remaining differences are old-client/oracle-test risks. |
 | Legacy browser WUI | `web/index.html`, `web/chinachu.js`, `web/page/**/*.js` | Native Go WUI covers the main user workflows. Remaining differences are old frontend affordances and browser-specific behavior, not core migration blockers unless legacy UI byte-for-byte behavior becomes a target. |
 | Config and samples | `config.sample.json`, `rules.sample.json` | Non-retired runtime fields are parsed and mostly surfaced in WUI forms. Some Node-era integrations are intentionally not implemented. |
 
@@ -20,7 +20,7 @@ backlog.
 
 | Priority | Area | Remaining item | Why it is still functionally required |
 | --- | --- | --- | --- |
-| P0 | WUI realtime | Full Socket.IO server push transport | The legacy WUI server used Socket.IO in `app-wui.js` and emitted `notify-rules`, `notify-reserves`, `notify-recording`, `notify-recorded`, and `notify-schedule` on state changes. The Go shim provides polling, same-origin wakeups, reconnect events, and compatibility client APIs, but it does not reproduce the Socket.IO transport/protocol or exact server-push event ordering. This matters for old WUI assets or third-party clients that depend on real Socket.IO behavior rather than eventual polling. |
+| - | WUI/API server | No known must-implement runtime item remains. | Legacy Socket.IO 0.9 handshake and XHR polling server push are implemented for state-file changes; old-client oracle validation remains a compatibility check rather than a known missing runtime feature. |
 
 ## Compatibility Risks / Needs Oracle Tests
 
@@ -71,5 +71,5 @@ workflows are already available.
 | --- | --- |
 | Native WUI | Manual browser verification of expanded schedule grid, rule/manual-reserve flows, hidden-channel persistence, and MP4 playback buttons. |
 | API/WUI streaming | Browser-level verification of fragmented MP4 playback behavior under realistic `ffmpeg`/`ffprobe` availability. |
-| Legacy Socket.IO clients | Verify behavior with an old `web/` asset set or third-party Socket.IO client before declaring realtime parity complete. |
+| Legacy Socket.IO clients | Verify behavior with an old `web/` asset set or third-party Socket.IO client before declaring byte-for-byte realtime parity complete; the Go server implements Socket.IO 0.9 handshake and XHR polling server push, but does not advertise WebSocket transport. |
 | Migration docs | Keep this file synchronized whenever `MIGRATION_COMPATIBILITY.md` moves an item from partial to implemented or intentionally changed. |

@@ -142,7 +142,9 @@ func NewHandler(paths Paths, cfg *config.Config) http.Handler {
 func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	mux := http.NewServeMux()
 	server := &server{paths: paths, cfg: cfg, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory()}
+	server.socket = newSocketHub(server)
 	mux.HandleFunc("/api/", server.handleAPI)
+	mux.HandleFunc("/socket.io/", server.handleSocketIO)
 	mux.HandleFunc("/", server.handleStatic)
 	var handler http.Handler = mux
 	if auth {
@@ -159,6 +161,7 @@ type server struct {
 	cfg     *config.Config
 	webRoot string
 	metrics *metricHistory
+	socket  *socketHub
 }
 
 type metricHistory struct {
@@ -614,6 +617,216 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentType)
 	}
 	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
+}
+
+func (s *server) handleSocketIO(w http.ResponseWriter, r *http.Request) {
+	clean := path.Clean("/" + r.URL.Path)
+	if clean == "/socket.io/socket.io.js" {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "HEAD, GET")
+			legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = io.WriteString(w, socketIOCompatScript)
+		}
+		return
+	}
+	if s.socket == nil {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	s.socket.handle(w, r, clean)
+}
+
+type socketHub struct {
+	server   *server
+	mu       sync.Mutex
+	nextID   int64
+	sessions map[string]*socketSession
+}
+
+type socketSession struct {
+	last      map[string]socketFileSignature
+	connected bool
+}
+
+type socketFileSignature struct {
+	exists  bool
+	size    int64
+	modTime time.Time
+}
+
+func newSocketHub(s *server) *socketHub {
+	return &socketHub{
+		server:   s,
+		sessions: map[string]*socketSession{},
+	}
+}
+
+func (h *socketHub) handle(w http.ResponseWriter, r *http.Request, cleanPath string) {
+	switch {
+	case cleanPath == "/socket.io/1":
+		h.handleHandshake(w, r)
+	case strings.HasPrefix(cleanPath, "/socket.io/1/xhr-polling/"):
+		h.handleXHRPolling(w, r, strings.TrimPrefix(cleanPath, "/socket.io/1/xhr-polling/"))
+	default:
+		legacyHTTPError(w, r, http.StatusNotFound)
+	}
+}
+
+func (h *socketHub) handleHandshake(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	sessionID := h.newSession()
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = fmt.Fprintf(w, "%s:25:60:xhr-polling", sessionID)
+	}
+}
+
+func (h *socketHub) newSession() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.nextID++
+	id := fmt.Sprintf("%d-%d", time.Now().UnixNano(), h.nextID)
+	h.sessions[id] = &socketSession{last: h.currentSignaturesLocked()}
+	return id
+}
+
+func (h *socketHub) handleXHRPolling(w http.ResponseWriter, r *http.Request, sessionID string) {
+	if r.Method == http.MethodPost {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "1")
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD, POST")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	session := h.session(sessionID)
+	if session == nil {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	packet := h.pollPacket(r.Context(), session)
+	_, _ = io.WriteString(w, socketIOPayload(packet))
+}
+
+func (h *socketHub) session(id string) *socketSession {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.sessions[id]
+}
+
+func (h *socketHub) pollPacket(ctx context.Context, session *socketSession) string {
+	h.mu.Lock()
+	if !session.connected {
+		session.connected = true
+		h.mu.Unlock()
+		return "1::"
+	}
+	h.mu.Unlock()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(25 * time.Second)
+	defer deadline.Stop()
+	for {
+		if events := h.changedEvents(session); len(events) > 0 {
+			return socketIOEventPacket(events[0])
+		}
+		select {
+		case <-ctx.Done():
+			return "8::"
+		case <-deadline.C:
+			return "8::"
+		case <-ticker.C:
+		}
+	}
+}
+
+func (h *socketHub) changedEvents(session *socketSession) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	current := h.currentSignaturesLocked()
+	var events []string
+	for _, watch := range h.watchFilesLocked() {
+		if current[watch.event] != session.last[watch.event] {
+			events = append(events, watch.event)
+		}
+	}
+	session.last = current
+	return events
+}
+
+type socketWatchFile struct {
+	event string
+	path  string
+}
+
+func (h *socketHub) watchFilesLocked() []socketWatchFile {
+	s := h.server
+	return []socketWatchFile{
+		{event: "notify-config", path: s.paths.Config},
+		{event: "notify-rules", path: s.paths.Rules},
+		{event: "notify-schedule", path: s.paths.Schedule},
+		{event: "notify-reserves", path: s.paths.Reserves},
+		{event: "notify-recording", path: s.paths.Recording},
+		{event: "notify-recorded", path: s.paths.Recorded},
+	}
+}
+
+func (h *socketHub) currentSignaturesLocked() map[string]socketFileSignature {
+	signatures := make(map[string]socketFileSignature)
+	for _, watch := range h.watchFilesLocked() {
+		signatures[watch.event] = socketSignature(watch.path)
+	}
+	return signatures
+}
+
+func socketSignature(filePath string) socketFileSignature {
+	if filePath == "" {
+		return socketFileSignature{}
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return socketFileSignature{}
+	}
+	return socketFileSignature{exists: true, size: info.Size(), modTime: info.ModTime()}
+}
+
+func socketIOEventPacket(name string) string {
+	body, err := json.Marshal(map[string]any{"name": name, "args": []any{}})
+	if err != nil {
+		return "8::"
+	}
+	return "5:::" + string(body)
+}
+
+func socketIOPayload(packets ...string) string {
+	var b strings.Builder
+	for _, packet := range packets {
+		b.WriteRune('\ufffd')
+		b.WriteString(strconv.Itoa(len(packet)))
+		b.WriteRune('\ufffd')
+		b.WriteString(packet)
+	}
+	return b.String()
 }
 
 const socketIOCompatScript = `(function(global){

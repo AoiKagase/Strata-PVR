@@ -942,6 +942,60 @@ func TestSocketIOCompatScript(t *testing.T) {
 	}
 }
 
+func TestSocketIOXHRPollingTransport(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := os.MkdirAll(filepath.Dir(paths.Rules), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Rules, []byte("[]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/socket.io/1/", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("handshake status=%d body=%q", res.Code, res.Body.String())
+	}
+	parts := strings.Split(res.Body.String(), ":")
+	if len(parts) != 4 || parts[1] != "25" || parts[2] != "60" || parts[3] != "xhr-polling" {
+		t.Fatalf("unexpected handshake body=%q", res.Body.String())
+	}
+	sessionID := parts[0]
+
+	req = httptest.NewRequest(http.MethodGet, "/socket.io/1/xhr-polling/"+sessionID, nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "1::") {
+		t.Fatalf("connect poll status=%d body=%q", res.Code, res.Body.String())
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(paths.Rules, []byte(`[{"types":["GR"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/socket.io/1/xhr-polling/"+sessionID, nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("event poll status=%d body=%q", res.Code, res.Body.String())
+	}
+	for _, want := range []string{"5:::", `"name":"notify-rules"`, `"args":[]`} {
+		if !strings.Contains(res.Body.String(), want) {
+			t.Fatalf("event poll missing %q: %q", want, res.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/socket.io/1/xhr-polling/"+sessionID, strings.NewReader("5:::{}"))
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "1" {
+		t.Fatalf("post ack status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
