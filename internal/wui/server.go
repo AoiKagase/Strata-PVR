@@ -2999,7 +2999,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	if format == "mp4" {
 		container = "mp4"
 		if videoCodec == "" {
-			videoCodec = "h264"
+			videoCodec = "libx264"
 		}
 		if audioCodec == "" {
 			audioCodec = "aac"
@@ -3057,7 +3057,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 		if videoCodec == "mpeg2video" {
 			videoCodec = "mpeg2_vaapi"
 		}
-		if videoCodec == "h264" {
+		if videoCodec == "h264" || videoCodec == "libx264" {
 			videoCodec = "h264_vaapi"
 		}
 	}
@@ -3090,7 +3090,7 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 			args = append(args, "-bufsize:a", strconv.FormatInt(legacyBitrateBits(audioBitrate)*8, 10))
 		}
 	}
-	if videoCodec == "h264" {
+	if videoCodec == "h264" || videoCodec == "libx264" {
 		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
 	}
 	if videoCodec == "h264_vaapi" {
