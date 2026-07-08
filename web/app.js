@@ -3425,31 +3425,44 @@
     }
   }
 
+  function resetListFilterControls(filterName, ids, renderFn) {
+    var defaults = defaultListFilter(filterName);
+    state.listFilters[filterName] = defaults;
+    if (filterName === "channelPrograms") {
+      state.channelProgramsGenre = "";
+      state.channelProgramsSort = defaults.sort || "startAsc";
+    }
+    [
+      { id: ids.query, value: defaults.query || "" },
+      { id: ids.category, value: defaults.category || defaults.state || "" },
+      { id: ids.sort, value: defaults.sort || "" }
+    ].forEach(function (item) {
+      var control = byId(item.id);
+      if (control) {
+        control.value = item.value;
+      }
+    });
+    saveListFilters();
+    (renderFn || render)();
+  }
+
   function resetListFilter(filterName, ids, renderFn) {
     var button = byId(ids.button);
-    if (!button) {
-      return;
+    if (button) {
+      button.addEventListener("click", function () {
+        resetListFilterControls(filterName, ids, renderFn);
+      });
     }
-    button.addEventListener("click", function () {
-      var defaults = defaultListFilter(filterName);
-      state.listFilters[filterName] = defaults;
-      if (filterName === "channelPrograms") {
-        state.channelProgramsGenre = "";
-        state.channelProgramsSort = defaults.sort || "startAsc";
-      }
-      [
-        { id: ids.query, value: defaults.query || "" },
-        { id: ids.category, value: defaults.category || defaults.state || "" },
-        { id: ids.sort, value: defaults.sort || "" }
-      ].forEach(function (item) {
-        var control = byId(item.id);
-        if (control) {
-          control.value = item.value;
+    var query = byId(ids.query);
+    if (query) {
+      query.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          resetListFilterControls(filterName, ids, renderFn);
+          query.focus();
         }
       });
-      saveListFilters();
-      (renderFn || render)();
-    });
+    }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
