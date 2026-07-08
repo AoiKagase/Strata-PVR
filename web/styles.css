@@ -134,7 +134,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: 36px;
   min-width: 44px;
   padding: 0 8px;
   border: 1px solid #9fb5bd;
@@ -167,9 +167,9 @@ body {
 }
 
 .schedule-nav-controls select {
-  min-height: 28px;
+  min-height: 36px;
   max-width: 118px;
-  padding: 0 22px 0 7px;
+  padding: 0 24px 0 8px;
   font-size: 12px;
 }
 
@@ -178,8 +178,8 @@ body {
 }
 
 .schedule-nav-controls button {
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 0 10px;
   font-size: 12px;
 }
 
@@ -560,7 +560,7 @@ button:disabled {
 .channel-link {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -611,7 +611,7 @@ button:disabled {
 
 .schedule-guide-grid {
   display: grid;
-  grid-template-rows: 48px auto;
+  grid-template-rows: 56px auto;
   align-items: stretch;
 }
 
@@ -641,7 +641,7 @@ button:disabled {
   align-content: center;
   justify-items: center;
   gap: 2px;
-  padding: 3px 5px;
+  padding: 5px;
   border-right: 1px solid #c7d2d8;
   text-align: center;
 }
@@ -658,6 +658,8 @@ button:disabled {
   max-width: 100%;
   color: var(--ink);
   font-size: 11px;
+  justify-content: center;
+  min-height: 32px;
   text-overflow: ellipsis;
   text-decoration: none;
   white-space: nowrap;
@@ -820,8 +822,8 @@ button:disabled {
 }
 
 .channel-actions button {
-  min-height: 28px;
-  padding: 0 7px;
+  min-height: 36px;
+  padding: 0 10px;
   font-size: 11px;
 }
 
@@ -1305,7 +1307,18 @@ button:focus-visible {
   .schedule-nav-controls {
     width: 100%;
     overflow-x: auto;
-    padding: 6px 8px;
+    padding: 8px;
+  }
+
+  .schedule-nav-controls select,
+  .schedule-nav-controls button,
+  .schedule-status-link,
+  .main-nav .schedule-status-link {
+    min-height: 44px;
+  }
+
+  .schedule-nav-controls button {
+    min-width: 44px;
   }
 
   .schedule-status-summary {
@@ -1313,6 +1326,22 @@ button:focus-visible {
     left: 0;
     z-index: 1;
     background: #dfe9ec;
+  }
+
+  .schedule-status-pill {
+    min-height: 44px;
+    display: inline-grid;
+    align-items: center;
+  }
+
+  .schedule-guide-grid {
+    grid-template-rows: 64px auto;
+  }
+
+  .schedule-channel-head .channel-link,
+  .channel-link,
+  .channel-actions button {
+    min-height: 44px;
   }
 }
 
@@ -1345,9 +1374,17 @@ body.view-schedule #scheduleList {
 }
 
 body.view-schedule .schedule-guide-scroll {
-  max-height: calc(100vh - 39px);
+  height: calc(100vh - 108px);
+  max-height: calc(100vh - 108px);
   border-width: 0;
   border-radius: 0;
+}
+
+@media (max-width: 520px) {
+  body.view-schedule .schedule-guide-scroll {
+    height: calc(100vh - 255px);
+    max-height: calc(100vh - 255px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
