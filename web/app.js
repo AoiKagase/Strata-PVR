@@ -45,7 +45,8 @@
     realtimeChannel: null,
     configEditorDirty: false,
     hasLoaded: false,
-    isLoading: false
+    isLoading: false,
+    lastError: null
   };
 
   function byId(id) {
@@ -814,6 +815,23 @@
     window.setTimeout(function () {
       window.scrollTo(0, state.viewScrollPositions[state.currentView] || 0);
     }, 0);
+  }
+
+  function updateOperationalStatus() {
+    var alive = operatorAlive();
+    var statusText = state.lastError ? state.lastError.message : (alive ? "オペレータ稼働中" : "オペレータ停止中");
+    var badge = byId("statusBadge");
+    if (badge) {
+      badge.textContent = statusText;
+      badge.className = state.lastError ? "status-badge error" : (alive ? "status-badge ok" : "status-badge");
+    }
+    var scheduleOperator = byId("scheduleOperatorStatus");
+    if (scheduleOperator) {
+      scheduleOperator.textContent = statusText;
+      scheduleOperator.className = "schedule-status-pill" + (state.lastError ? " error" : (alive ? " ok" : ""));
+    }
+    text(byId("scheduleRecordingSummary"), "録画中 " + state.recording.length);
+    text(byId("scheduleReserveSummary"), "予約 " + state.reserves.length);
   }
 
   function initNavigation() {
@@ -3242,12 +3260,7 @@
     text(byId("channelCount"), String(state.schedule.length));
     text(byId("ruleCount"), String(state.rules.length));
 
-    var badge = byId("statusBadge");
-    if (badge) {
-      var alive = operatorAlive();
-      badge.textContent = alive ? "オペレータ稼働中" : "オペレータ停止中";
-      badge.className = alive ? "status-badge ok" : "status-badge";
-    }
+    updateOperationalStatus();
 
     var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
     var recordedNewestFirst = sortedPrograms(state.recorded, "recorded");
@@ -3278,6 +3291,11 @@
       badge.textContent = message;
       badge.className = "status-badge";
     }
+    var scheduleOperator = byId("scheduleOperatorStatus");
+    if (scheduleOperator) {
+      scheduleOperator.textContent = message;
+      scheduleOperator.className = "schedule-status-pill";
+    }
   }
 
   function setListPlaceholder(id, message, className) {
@@ -3290,13 +3308,38 @@
     root.textContent = message;
   }
 
+  function setRecoverableListPlaceholder(id, message) {
+    var root = byId(id);
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    root.className = "list empty error recoverable-empty";
+    var copy = document.createElement("p");
+    copy.textContent = message;
+    var actions = document.createElement("div");
+    actions.className = "empty-actions";
+    var retry = actionButton("再試行", "データを再読み込み", refresh);
+    var logs = document.createElement("a");
+    logs.className = "small-button empty-link-button";
+    logs.href = "#logs";
+    logs.textContent = "ログを確認";
+    actions.appendChild(retry);
+    actions.appendChild(logs);
+    root.appendChild(copy);
+    root.appendChild(actions);
+  }
+
   function setRefreshLoading(loading) {
-    var button = byId("refreshButton");
-    if (button) {
+    ["refreshButton", "scheduleRefreshButton"].forEach(function (id) {
+      var button = byId(id);
+      if (!button) {
+        return;
+      }
       button.disabled = Boolean(loading);
       button.setAttribute("aria-busy", loading ? "true" : "false");
-      button.textContent = loading ? "更新中" : "更新";
-    }
+      button.textContent = id === "scheduleRefreshButton" ? (loading ? "読込中" : "再読込") : (loading ? "更新中" : "更新");
+    });
     document.body.classList.toggle("is-loading", Boolean(loading));
   }
 
@@ -3332,7 +3375,7 @@
       "recordedListPage",
       "ruleList"
     ].forEach(function (id) {
-      setListPlaceholder(id, "読み込みに失敗しました", "list empty error");
+      setRecoverableListPlaceholder(id, "読み込みに失敗しました");
     });
     text(byId("ruleListFilterSummary"), "0件");
     text(byId("reserveListFilterSummary"), "0件");
@@ -3345,15 +3388,18 @@
   }
 
   function showError(error) {
+    state.lastError = error;
     var badge = byId("statusBadge");
     if (badge) {
       badge.textContent = error.message;
       badge.className = "status-badge error";
     }
+    updateOperationalStatus();
   }
 
   function refresh() {
     state.isLoading = true;
+    state.lastError = null;
     setBusy("読み込み中");
     renderInitialLoadingState();
     Promise.all([
@@ -3378,6 +3424,7 @@
       state.storage = result[7] || null;
       state.hasLoaded = true;
       state.isLoading = false;
+      state.lastError = null;
       setRefreshLoading(false);
       render();
     }).catch(function (error) {
@@ -3397,6 +3444,7 @@
       setLog("schedulerLog", result[0]);
       setLog("operatorLog", result[1]);
       setLog("wuiLog", result[2]);
+      updateOperationalStatus();
     }).catch(showError);
   }
 
@@ -3639,6 +3687,10 @@
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {
       refreshLogsButton.addEventListener("click", refreshLogs);
+    }
+    var scheduleRefreshButton = byId("scheduleRefreshButton");
+    if (scheduleRefreshButton) {
+      scheduleRefreshButton.addEventListener("click", refresh);
     }
     var programDialogClose = byId("programDialogClose");
     if (programDialogClose) {

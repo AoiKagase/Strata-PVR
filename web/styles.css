@@ -95,6 +95,71 @@ body {
   white-space: nowrap;
 }
 
+.schedule-status-summary {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-right: 8px;
+  padding-right: 8px;
+  border-right: 1px solid #b9c9d0;
+  color: #33444c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.schedule-status-pill {
+  min-width: 110px;
+  padding: 5px 8px;
+  border: 1px solid #a66a1b;
+  border-radius: 6px;
+  background: #fff2d6;
+  color: #663600;
+  text-align: center;
+}
+
+.schedule-status-pill.ok {
+  border-color: #0f766e;
+  background: #d9f3ee;
+  color: #075f58;
+}
+
+.schedule-status-pill.error {
+  border-color: #b42318;
+  background: #ffe9e6;
+  color: #8e1b13;
+}
+
+.schedule-status-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 44px;
+  padding: 0 8px;
+  border: 1px solid #9fb5bd;
+  border-radius: 6px;
+  background: #f8fbfc;
+  color: #263a42;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.schedule-status-link:hover {
+  border-color: #08786f;
+  background: #edf9f6;
+  color: #075f58;
+}
+
+.main-nav .schedule-status-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 44px;
+  padding: 0 8px;
+  border-bottom: 1px solid #9fb5bd;
+}
+
 .schedule-nav-controls label {
   color: #52636b;
   font-size: 11px;
@@ -364,6 +429,39 @@ button:disabled {
 
 .list.empty.error {
   color: var(--error);
+}
+
+.recoverable-empty {
+  display: grid;
+  gap: 10px;
+}
+
+.recoverable-empty p {
+  color: var(--error);
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empty-link-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: var(--line);
+  background: #f7fafb;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.empty-link-button:hover {
+  border-color: #8fb8b4;
+  background: #eaf5f3;
 }
 
 .program-row {
@@ -1208,6 +1306,13 @@ button:focus-visible {
     width: 100%;
     overflow-x: auto;
     padding: 6px 8px;
+  }
+
+  .schedule-status-summary {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #dfe9ec;
   }
 }
 

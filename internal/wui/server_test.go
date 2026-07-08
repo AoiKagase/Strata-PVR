@@ -571,7 +571,9 @@ func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T
 		`function programOnAir(program)`,
 		`var label = onAir ? "録画開始" : "予約";`,
 		`オペレータが停止中です。録画を開始するには service operator execute を起動してください`,
-		`badge.textContent = alive ? "オペレータ稼働中" : "オペレータ停止中";`,
+		`function updateOperationalStatus()`,
+		`var statusText = state.lastError ? state.lastError.message : (alive ? "オペレータ稼働中" : "オペレータ停止中");`,
+		`scheduleOperator.textContent = statusText;`,
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("web/app.js missing %q", want)
@@ -780,13 +782,14 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 			`function renderInitialLoadingState()`,
 			`function renderInitialLoadError(error)`,
 			`setListPlaceholder(id, "読み込み中")`,
-			`setListPlaceholder(id, "読み込みに失敗しました", "list empty error")`,
+			`setRecoverableListPlaceholder(id, "読み込みに失敗しました")`,
 			`setRefreshLoading(false)`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.program-row.selected`,
 			`.schedule-card.selected`,
 			`.list.empty.error`,
+			`.recoverable-empty`,
 		},
 	}
 	for path, wants := range files {
