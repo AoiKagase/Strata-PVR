@@ -1859,14 +1859,111 @@
     });
     renderScheduleChannelOptions(channels);
     renderScheduleFilterOptions(channels);
+    syncScheduleFilterControls();
     renderScheduleChannelTools(channels);
     root.innerHTML = "";
     if (!channelGroups.length) {
-      root.className = "list empty";
-      root.textContent = "番組表データがありません";
+      renderScheduleEmpty(root, channels);
       return;
     }
     renderScheduleGuide(root, channelGroups);
+  }
+
+  function selectedOptionLabel(id, fallback) {
+    var select = byId(id);
+    if (select && select.selectedIndex >= 0 && select.options[select.selectedIndex]) {
+      return select.options[select.selectedIndex].textContent;
+    }
+    return fallback || "";
+  }
+
+  function scheduleActiveFilterLabels() {
+    var labels = [];
+    if (state.scheduleChannel) {
+      labels.push("チャンネル: " + selectedOptionLabel("scheduleChannel", state.scheduleChannel));
+    }
+    if (state.scheduleType) {
+      labels.push("種別: " + selectedOptionLabel("scheduleType", state.scheduleType));
+    }
+    if (state.scheduleDay) {
+      labels.push("日付: " + selectedOptionLabel("scheduleDay", state.scheduleDay));
+    }
+    if (state.scheduleGenre) {
+      labels.push("ジャンル: " + selectedOptionLabel("scheduleGenre", state.scheduleGenre));
+    }
+    if (state.scheduleWindowMode && state.scheduleWindowMode !== "all") {
+      labels.push("範囲: " + selectedOptionLabel("scheduleWindow", state.scheduleWindowMode));
+    }
+    if (state.scheduleHiddenChannels.length) {
+      labels.push("非表示: " + state.scheduleHiddenChannels.length + "ch");
+    }
+    return labels;
+  }
+
+  function resetScheduleFilters() {
+    state.scheduleChannel = "";
+    state.scheduleType = "";
+    state.scheduleDay = "";
+    state.scheduleGenre = "";
+    state.scheduleWindowMode = "all";
+    state.scheduleHiddenChannels = [];
+    saveHiddenChannels();
+    state.scheduleGuideScroll = { left: 0, top: 0 };
+    renderSchedule();
+  }
+
+  function syncScheduleFilterControls() {
+    var type = byId("scheduleType");
+    if (type) {
+      type.value = state.scheduleType;
+      if (type.value !== state.scheduleType) {
+        state.scheduleType = "";
+        type.value = "";
+      }
+    }
+    var windowMode = byId("scheduleWindow");
+    if (windowMode) {
+      windowMode.value = state.scheduleWindowMode || "all";
+      if (windowMode.value !== (state.scheduleWindowMode || "all")) {
+        state.scheduleWindowMode = "all";
+        windowMode.value = "all";
+      }
+    }
+  }
+
+  function renderScheduleEmpty(root, channels) {
+    var filters = scheduleActiveFilterLabels();
+    root.className = "list empty contextual-empty";
+    root.innerHTML = "";
+
+    var heading = document.createElement("strong");
+    var copy = document.createElement("p");
+    root.appendChild(heading);
+    root.appendChild(copy);
+
+    if (!channels.length) {
+      heading.textContent = "番組表データがありません";
+      copy.textContent = "Mirakurun または取得処理の状態を確認してから、番組表を再読み込みしてください。";
+      var recovery = document.createElement("div");
+      recovery.className = "empty-actions";
+      recovery.appendChild(actionButton("再読込", "番組表データを再読み込み", refresh));
+      var logs = document.createElement("a");
+      logs.className = "small-button empty-link-button";
+      logs.href = "#logs";
+      logs.textContent = "ログを確認";
+      recovery.appendChild(logs);
+      root.appendChild(recovery);
+      return;
+    }
+
+    heading.textContent = "条件に一致する番組はありません";
+    copy.textContent = filters.length ? "適用中: " + filters.join(" / ") : "現在時刻以降に表示できる番組がありません。";
+    if (filters.length) {
+      var actions = document.createElement("div");
+      actions.className = "empty-actions";
+      actions.appendChild(actionButton("条件を解除", "番組表の絞り込みをすべて解除", resetScheduleFilters));
+      root.appendChild(actions);
+    }
   }
 
   function renderScheduleGuide(root, channelGroups) {

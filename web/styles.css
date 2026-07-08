@@ -427,6 +427,22 @@ button:disabled {
   font-size: 14px;
 }
 
+.contextual-empty {
+  max-width: 680px;
+}
+
+.contextual-empty strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.contextual-empty p {
+  margin-bottom: 12px;
+  color: var(--muted);
+}
+
 .list.empty.error {
   color: var(--error);
 }
