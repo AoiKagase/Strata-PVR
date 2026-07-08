@@ -1744,7 +1744,7 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 	lines := strings.Split(string(data), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
-		if line == "RUNNING SCHEDULER." {
+		if strings.Contains(line, "RUNNING SCHEDULER.") {
 			break
 		}
 		kind, id, ok := parseSchedulerLogProgram(line)

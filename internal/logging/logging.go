@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func AppendLine(path, format string, args ...any) error {
@@ -18,6 +19,7 @@ func AppendLine(path, format string, args ...any) error {
 		return err
 	}
 	defer f.Close()
-	_, err = fmt.Fprintf(f, format+"\n", args...)
+	message := fmt.Sprintf(format, args...)
+	_, err = fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), message)
 	return err
 }
