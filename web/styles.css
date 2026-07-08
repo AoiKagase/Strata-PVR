@@ -350,6 +350,10 @@ button:disabled {
   font-size: 14px;
 }
 
+.list.empty.error {
+  color: var(--error);
+}
+
 .program-row {
   display: grid;
   gap: 4px;

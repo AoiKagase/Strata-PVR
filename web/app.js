@@ -46,7 +46,9 @@
     },
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
-    configEditorDirty: false
+    configEditorDirty: false,
+    hasLoaded: false,
+    isLoading: false
   };
 
   function byId(id) {
@@ -3019,6 +3021,70 @@
     }
   }
 
+  function setListPlaceholder(id, message, className) {
+    var root = byId(id);
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    root.className = className || "list empty";
+    root.textContent = message;
+  }
+
+  function setRefreshLoading(loading) {
+    var button = byId("refreshButton");
+    if (button) {
+      button.disabled = Boolean(loading);
+      button.setAttribute("aria-busy", loading ? "true" : "false");
+      button.textContent = loading ? "更新中" : "更新";
+    }
+    document.body.classList.toggle("is-loading", Boolean(loading));
+  }
+
+  function renderInitialLoadingState() {
+    setRefreshLoading(true);
+    if (state.hasLoaded) {
+      return;
+    }
+    [
+      "recordingList",
+      "onAirList",
+      "reserveList",
+      "reserveListPage",
+      "recordedList",
+      "recordedListPage",
+      "ruleList"
+    ].forEach(function (id) {
+      setListPlaceholder(id, "読み込み中");
+    });
+  }
+
+  function renderInitialLoadError(error) {
+    setRefreshLoading(false);
+    if (state.hasLoaded) {
+      return;
+    }
+    [
+      "recordingList",
+      "onAirList",
+      "reserveList",
+      "reserveListPage",
+      "recordedList",
+      "recordedListPage",
+      "ruleList"
+    ].forEach(function (id) {
+      setListPlaceholder(id, "読み込みに失敗しました", "list empty error");
+    });
+    text(byId("ruleListFilterSummary"), "0件");
+    text(byId("reserveListFilterSummary"), "0件");
+    text(byId("recordedListFilterSummary"), "0件");
+    text(byId("channelProgramsFilterSummary"), "0件");
+    if (error) {
+      setBusy(error.message);
+      showError(error);
+    }
+  }
+
   function showError(error) {
     var badge = byId("statusBadge");
     if (badge) {
@@ -3028,7 +3094,9 @@
   }
 
   function refresh() {
-    setBusy("Loading");
+    state.isLoading = true;
+    setBusy("読み込み中");
+    renderInitialLoadingState();
     Promise.all([
       api("status.json"),
       api("reserves.json"),
@@ -3049,8 +3117,15 @@
       state.rules = result[5] || [];
       state.config = result[6] || {};
       state.storage = result[7] || null;
+      state.hasLoaded = true;
+      state.isLoading = false;
+      setRefreshLoading(false);
       render();
-    }).catch(showError);
+    }).catch(function (error) {
+      state.isLoading = false;
+      renderInitialLoadError(error);
+      showError(error);
+    });
   }
 
   function refreshLogs() {

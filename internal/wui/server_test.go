@@ -650,10 +650,17 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 			`function isActiveProgram(program)`,
 			`card.classList.toggle("selected", isActiveProgram(program))`,
 			`state.activeProgramID = program && program.id ? program.id : ""`,
+			`hasLoaded`,
+			`function renderInitialLoadingState()`,
+			`function renderInitialLoadError(error)`,
+			`setListPlaceholder(id, "読み込み中")`,
+			`setListPlaceholder(id, "読み込みに失敗しました", "list empty error")`,
+			`setRefreshLoading(false)`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.program-row.selected`,
 			`.schedule-card.selected`,
+			`.list.empty.error`,
 		},
 	}
 	for path, wants := range files {
