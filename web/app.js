@@ -536,6 +536,22 @@
     return decorated;
   }
 
+  function isRecordedProgram(program) {
+    if (!program || !program.id) {
+      return false;
+    }
+    return (state.recorded || []).some(function (recorded) {
+      return recorded && recorded.id === program.id;
+    });
+  }
+
+  function programDialogActions(program) {
+    if (isRecordedProgram(program)) {
+      return ["watch-mp4", "download", "delete-recorded", "create-rule-from-program"];
+    }
+    return ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"];
+  }
+
   function renderProgramStateBadges(item, program) {
     var labels = [];
     if (program && program.isRecording) {
@@ -1407,10 +1423,6 @@
         row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
           openURL("/api/recording/" + encodeURIComponent(program.id) + "/preview.png");
         }));
-      } else if (name === "watch-m2ts") {
-        row.appendChild(actionButton("M2TS", "M2TSを開く", function () {
-          openURL(recordedWatchURL(program, "m2ts"));
-        }));
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("視聴", "録画済み番組を視聴", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
@@ -1421,46 +1433,9 @@
             }
           });
         }));
-      } else if (name === "watch-mp4-720p") {
-        row.appendChild(actionButton("720p視聴", "720pで視聴", function () {
-          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-            openURL(recordedWatchURL(program, "mp4", query));
-          }, {
-            initialPreset: "720p",
-            openPlaylist: function () {
-              openURL(recordedWatchURL(program, "xspf"));
-            }
-          });
-        }));
-      } else if (name === "watch-mp4-low") {
-        row.appendChild(actionButton("低画質視聴", "低画質で視聴", function () {
-          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-            openURL(recordedWatchURL(program, "mp4", query));
-          }, {
-            initialPreset: "360p",
-            openPlaylist: function () {
-              openURL(recordedWatchURL(program, "xspf"));
-            }
-          });
-        }));
-      } else if (name === "watch-mp4-custom") {
-        row.appendChild(actionButton("詳細視聴", "再生条件を指定して視聴", function () {
-          openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-            openURL(recordedWatchURL(program, "mp4", query));
-          }, {
-            initialPreset: "custom",
-            openPlaylist: function () {
-              openURL(recordedWatchURL(program, "xspf"));
-            }
-          });
-        }));
       } else if (name === "download") {
-        row.appendChild(actionButton("保存", "録画ファイルを保存", function () {
+        row.appendChild(actionButton("ダウンロード", "録画ファイルを実体ファイル名で保存", function () {
           openURL("/api/recorded/" + encodeURIComponent(program.id) + "/file.m2ts");
-        }));
-      } else if (name === "preview-recorded") {
-        row.appendChild(actionButton("静止画", "録画済みの静止画を開く", function () {
-          openURL("/api/recorded/" + encodeURIComponent(program.id) + "/preview.png");
         }));
       } else if (name === "delete-recorded") {
         row.appendChild(actionButton("削除", "録画済み項目とファイルを削除", function () {
@@ -1511,61 +1486,21 @@
         });
       }, className);
     }
-    if (name === "watch-m2ts") {
-      return actionButton("M2TS", "M2TSを開く", function () {
-        openURL(recordedWatchURL(program, "m2ts"));
-      }, className);
-    }
-    if (name === "watch-mp4-720p") {
-      return actionButton("720p視聴", "720pで視聴", function () {
-        openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openURL(recordedWatchURL(program, "mp4", query));
-        }, {
-          initialPreset: "720p",
-          openPlaylist: function () {
-            openURL(recordedWatchURL(program, "xspf"));
-          }
-        });
-      }, className);
-    }
-    if (name === "watch-mp4-low") {
-      return actionButton("低画質視聴", "低画質で視聴", function () {
-        openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openURL(recordedWatchURL(program, "mp4", query));
-        }, {
-          initialPreset: "360p",
-          openPlaylist: function () {
-            openURL(recordedWatchURL(program, "xspf"));
-          }
-        });
-      }, className);
-    }
-    if (name === "watch-mp4-custom") {
-      return actionButton("詳細視聴", "再生条件を指定して視聴", function () {
-        openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openURL(recordedWatchURL(program, "mp4", query));
-        }, {
-          initialPreset: "custom",
-          openPlaylist: function () {
-            openURL(recordedWatchURL(program, "xspf"));
-          }
-        });
-      }, className);
-    }
     if (name === "download") {
-      return actionButton("保存", "録画ファイルを保存", function () {
+      return actionButton("ダウンロード", "録画ファイルを実体ファイル名で保存", function () {
         openURL("/api/recorded/" + encodeURIComponent(program.id) + "/file.m2ts");
-      }, className);
-    }
-    if (name === "preview-recorded") {
-      return actionButton("静止画", "録画済みの静止画を開く", function () {
-        openURL("/api/recorded/" + encodeURIComponent(program.id) + "/preview.png");
       }, className);
     }
     if (name === "delete-recorded") {
       return actionButton("削除", "録画済み項目とファイルを削除", function () {
         runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
       }, className || "small-button danger-button");
+    }
+    if (name === "create-rule-from-program") {
+      return actionButton("ルール作成", "この番組を元にルールフォームを開く", function () {
+        closeProgramDialog();
+        fillRuleFormFromProgram(program);
+      }, className);
     }
     return null;
   }
@@ -1585,25 +1520,9 @@
     var secondaryButtons = secondaryNames.map(function (name) {
       return recordedActionButton(name, program, "small-button");
     }).filter(Boolean);
-    if (secondaryButtons.length) {
-      var details = document.createElement("details");
-      details.className = "action-menu";
-      var summary = document.createElement("summary");
-      summary.className = "small-button action-menu-summary";
-      summary.textContent = "その他";
-      summary.title = "派生再生、保存、静止画を表示";
-      details.appendChild(summary);
-      var menu = document.createElement("div");
-      menu.className = "action-menu-panel";
-      secondaryButtons.forEach(function (button) {
-        button.addEventListener("click", function () {
-          details.removeAttribute("open");
-        });
-        menu.appendChild(button);
-      });
-      details.appendChild(menu);
-      row.appendChild(details);
-    }
+    secondaryButtons.forEach(function (button) {
+      row.appendChild(button);
+    });
 
     var deleteButton = actions.indexOf("delete-recorded") >= 0 ? recordedActionButton("delete-recorded", program) : null;
     if (deleteButton) {
@@ -2310,7 +2229,7 @@
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
-      renderActions(actions, program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"]);
+      renderActions(actions, program, programDialogActions(program));
     }
     programDialogReturnFocus = rememberFocus();
     if (dialog && dialog.showModal) {
@@ -3758,8 +3677,8 @@
     renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-mp4", "download", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
     renderChannelPrograms();

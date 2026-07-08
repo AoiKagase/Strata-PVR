@@ -2078,7 +2078,7 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 			defer file.Close()
 			w.Header().Set("Content-Type", "video/MP2T")
 			w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
-			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.m2ts"`, id))
+			setAttachmentFileName(w, path, "m2ts")
 			w.WriteHeader(http.StatusOK)
 			if r.Method == http.MethodGet {
 				_, _ = io.Copy(w, file)
@@ -2142,11 +2142,6 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		}
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
-	}
-	if !requirePID {
-		if !s.checkLegacyRecordedWatchProbe(w, r, filePath) {
-			return
-		}
 	}
 	switch apiType {
 	case "xspf":
@@ -2606,6 +2601,10 @@ func setWatchDownloadHeader(w http.ResponseWriter, r *http.Request, filePath, ap
 	if ext == "" {
 		ext = apiType
 	}
+	setAttachmentFileName(w, filePath, ext)
+}
+
+func setAttachmentFileName(w http.ResponseWriter, filePath, ext string) {
 	base := filepath.Base(filePath)
 	if suffix := filepath.Ext(base); suffix != "" {
 		base = strings.TrimSuffix(base, suffix)
@@ -2669,6 +2668,14 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
+	}
+	switch apiType {
+	case "png":
+		w.Header().Set("Content-Type", "image/png")
+	case "jpg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case "txt":
+		w.Header().Set("Content-Type", "text/plain")
 	}
 	w.WriteHeader(http.StatusOK)
 	if apiType == "txt" {

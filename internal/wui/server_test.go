@@ -553,9 +553,9 @@ func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 			t.Fatalf("native dashboard still exposes confusing live watch label/action %q", legacyLabel)
 		}
 	}
-	for _, recordedOnly := range []string{`name === "watch-m2ts"`, `name === "watch-m2ts-offset"`} {
-		if !strings.Contains(source, recordedOnly) {
-			t.Fatalf("recorded M2TS action %q should remain available", recordedOnly)
+	for _, removed := range []string{`name === "watch-m2ts"`, `name === "watch-m2ts-offset"`, `name === "preview-recorded"`} {
+		if strings.Contains(source, removed) {
+			t.Fatalf("native dashboard should not expose redundant recorded action %q", removed)
 		}
 	}
 }
@@ -588,9 +588,8 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			`function renderProgramPreview(program, resource)`,
 			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size="`,
 			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
-			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "download", "preview-recorded", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
+			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`actionButton("静止画", "録画中の静止画を開く"`,
-			`actionButton("静止画", "録画済みの静止画を開く"`,
 			`row.classList.remove("with-preview");`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
@@ -608,6 +607,42 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			if !strings.Contains(source, want) {
 				t.Fatalf("%s missing %q", path, want)
 			}
+		}
+		if path == filepath.Join("..", "..", "web", "app.js") {
+			for _, removed := range []string{"720p視聴", "低画質視聴", "詳細視聴", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "M2TSを開く", "途中M2TSを開く", "preview-recorded", `actionButton("静止画", "録画済みの静止画を開く"`, "action-menu-summary"} {
+				if strings.Contains(source, removed) {
+					t.Fatalf("%s should not expose redundant recorded action %q", path, removed)
+				}
+			}
+		}
+	}
+}
+
+func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function isRecordedProgram(program)`,
+		`function programDialogActions(program)`,
+		`return ["watch-mp4", "download", "delete-recorded", "create-rule-from-program"];`,
+		`if (name === "create-rule-from-program")`,
+		`return actionButton("ルール作成", "この番組を元にルールフォームを開く"`,
+		`renderActions(actions, program, programDialogActions(program));`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+	for _, notWant := range []string{
+		`return ["watch-mp4", "download", "delete-recorded", "reserve"`,
+		`return ["watch-mp4", "download", "delete-recorded", "unreserve"`,
+		`return ["watch-mp4", "download", "delete-recorded", "open-channel-programs"`,
+	} {
+		if strings.Contains(source, notWant) {
+			t.Fatalf("recorded dialog actions should not include %q", notWant)
 		}
 	}
 }
@@ -1697,7 +1732,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	if string(body) != "tsdata" {
 		t.Fatalf("m2ts body = %q", body)
 	}
-	if got := res.Header().Get("Content-Disposition"); !strings.Contains(got, `filename="abc.m2ts"`) {
+	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename*=UTF-8''recorded.m2ts" {
 		t.Fatalf("content-disposition = %q", got)
 	}
 
@@ -2049,7 +2084,7 @@ func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
 	}
 }
 
-func TestAPIRecordedWatchXSPFProbeError(t *testing.T) {
+func TestAPIRecordedWatchXSPFDoesNotRequireProbe(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recorded.m2ts")
@@ -2065,8 +2100,11 @@ func TestAPIRecordedWatchXSPFProbeError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusInternalServerError || res.Body.String() != "500 Internal Server Error\n" {
-		t.Fatalf("probe error status=%d body=%q", res.Code, res.Body.String())
+	if res.Code != http.StatusOK {
+		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "watch.m2ts") {
+		t.Fatalf("xspf target missing: %q", res.Body.String())
 	}
 }
 
@@ -2140,12 +2178,23 @@ func TestAPIProgramPreview(t *testing.T) {
 	}
 	handler := NewHandler(paths, &config.Config{})
 
-	for _, target := range []string{"/api/recorded/recorded/preview.png", "/api/recorded/recorded/preview.jpg", "/api/recording/recording/preview.png", "/api/recording/go-operator/preview.png"} {
-		req := httptest.NewRequest(http.MethodGet, target, nil)
+	for _, tc := range []struct {
+		target      string
+		contentType string
+	}{
+		{"/api/recorded/recorded/preview.png", "image/png"},
+		{"/api/recorded/recorded/preview.jpg", "image/jpeg"},
+		{"/api/recording/recording/preview.png", "image/png"},
+		{"/api/recording/go-operator/preview.png", "image/png"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.target, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
 		if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
-			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
+			t.Fatalf("%s status=%d body=%q", tc.target, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Content-Type"); got != tc.contentType {
+			t.Fatalf("%s Content-Type=%q, want %q", tc.target, got, tc.contentType)
 		}
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.txt?type=png&size=640x360&pos=9", nil)
@@ -2153,6 +2202,9 @@ func TestAPIProgramPreview(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "data:image/png;base64,cHJldmlldy1pbWFnZQ==" {
 		t.Fatalf("preview txt status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "text/plain" {
+		t.Fatalf("preview txt Content-Type=%q", got)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview.png", nil)
