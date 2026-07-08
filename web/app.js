@@ -2512,12 +2512,21 @@
     if (!rule) {
       return;
     }
-    setBusy("処理中");
-    sendJSON("rules.json", "POST", rule).then(function () {
-      state.editingRuleIndex = null;
-      renderRuleEditorState();
-      refresh();
-    }).catch(showError);
+    confirmAction("JSONエディタの内容でルールを追加しますか？", {
+      danger: false,
+      okLabel: "追加",
+      title: "ルール追加の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("処理中");
+      sendJSON("rules.json", "POST", rule).then(function () {
+        state.editingRuleIndex = null;
+        renderRuleEditorState();
+        refresh();
+      }).catch(showError);
+    });
   }
 
   function saveRuleFromEditor() {
@@ -2529,12 +2538,21 @@
     if (!rule) {
       return;
     }
-    setBusy("処理中");
-    sendJSON("rules/" + state.editingRuleIndex + ".json", "PUT", rule).then(function () {
-      state.editingRuleIndex = null;
-      renderRuleEditorState();
-      refresh();
-    }).catch(showError);
+    confirmAction("JSONエディタの内容でルール #" + state.editingRuleIndex + " を保存しますか？", {
+      danger: false,
+      okLabel: "保存",
+      title: "ルール保存の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("処理中");
+      sendJSON("rules/" + state.editingRuleIndex + ".json", "PUT", rule).then(function () {
+        state.editingRuleIndex = null;
+        renderRuleEditorState();
+        refresh();
+      }).catch(showError);
+    });
   }
 
   function readRuleEditor() {
@@ -2887,13 +2905,22 @@
     if (!rule) {
       return;
     }
-    setBusy("処理中");
-    sendJSON("rules.json", "POST", rule).then(function () {
-      clearRuleForm();
-      state.editingRuleFormIndex = null;
-      renderRuleFormState();
-      refresh();
-    }).catch(showError);
+    confirmAction("フォームの内容でルールを追加しますか？", {
+      danger: false,
+      okLabel: "追加",
+      title: "ルール追加の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("処理中");
+      sendJSON("rules.json", "POST", rule).then(function () {
+        clearRuleForm();
+        state.editingRuleFormIndex = null;
+        renderRuleFormState();
+        refresh();
+      }).catch(showError);
+    });
   }
 
   function saveBasicRule() {
@@ -2905,13 +2932,22 @@
     if (!rule) {
       return;
     }
-    setBusy("処理中");
-    sendJSON("rules/" + state.editingRuleFormIndex + ".json", "PUT", rule).then(function () {
-      clearRuleForm();
-      state.editingRuleFormIndex = null;
-      renderRuleFormState();
-      refresh();
-    }).catch(showError);
+    confirmAction("フォームの内容でルール #" + state.editingRuleFormIndex + " を保存しますか？", {
+      danger: false,
+      okLabel: "保存",
+      title: "ルール保存の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("処理中");
+      sendJSON("rules/" + state.editingRuleFormIndex + ".json", "PUT", rule).then(function () {
+        clearRuleForm();
+        state.editingRuleFormIndex = null;
+        renderRuleFormState();
+        refresh();
+      }).catch(showError);
+    });
   }
 
   function resetRuleForm() {

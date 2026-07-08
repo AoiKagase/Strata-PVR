@@ -549,6 +549,10 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 			`録画停止の確認`,
 			`録画済み削除の確認`,
 			`設定保存の確認`,
+			`ルール追加の確認`,
+			`ルール保存の確認`,
+			`JSONエディタの内容でルールを追加しますか？`,
+			`フォームの内容でルールを追加しますか？`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.confirm-dialog .program-dialog-actions`,
