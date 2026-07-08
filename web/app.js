@@ -34,6 +34,10 @@
     editingRuleIndex: null,
     editingRuleFormIndex: null,
     selectedProgram: null,
+    activeProgramID: "",
+    currentView: "",
+    viewScrollPositions: {},
+    scheduleGuideScroll: { left: 0, top: 0 },
     listFilters: {
       recorded: { query: "", category: "" },
       reserves: { query: "", category: "" }
@@ -427,6 +431,9 @@
 
   function setView(name) {
     var found = false;
+    if (state.currentView) {
+      state.viewScrollPositions[state.currentView] = window.pageYOffset || document.documentElement.scrollTop || 0;
+    }
     document.body.className = document.body.className.replace(/\bview-[^\s]+/g, "").trim();
     document.body.classList.add("view-" + name);
     document.querySelectorAll("[data-view]").forEach(function (view) {
@@ -441,6 +448,7 @@
       window.location.hash = "dashboard";
       return;
     }
+    state.currentView = found ? name : "dashboard";
     document.querySelectorAll("[data-view-link]").forEach(function (link) {
       var active = link.getAttribute("data-view-link") === name;
       link.classList.toggle("active", active);
@@ -450,6 +458,9 @@
         link.removeAttribute("aria-current");
       }
     });
+    window.setTimeout(function () {
+      window.scrollTo(0, state.viewScrollPositions[state.currentView] || 0);
+    }, 0);
   }
 
   function initNavigation() {
@@ -918,9 +929,14 @@
     return button;
   }
 
+  function isActiveProgram(program) {
+    return Boolean(program && program.id && state.activeProgramID && program.id === state.activeProgramID);
+  }
+
   function renderProgramRow(program, actions, showChannel) {
     var item = document.createElement("article");
     item.className = "program-row";
+    item.classList.toggle("selected", isActiveProgram(program));
     item.tabIndex = 0;
     item.setAttribute("role", "group");
     item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
@@ -965,6 +981,7 @@
   function renderProgramRowWithChannelLink(program, actions) {
     var item = document.createElement("article");
     item.className = "program-row";
+    item.classList.toggle("selected", isActiveProgram(program));
     item.tabIndex = 0;
     item.setAttribute("role", "group");
     item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
@@ -1240,6 +1257,12 @@
     scroll.className = "schedule-guide-scroll";
     scroll.setAttribute("role", "region");
     scroll.setAttribute("aria-label", "番組表");
+    scroll.addEventListener("scroll", function () {
+      state.scheduleGuideScroll = {
+        left: scroll.scrollLeft,
+        top: scroll.scrollTop
+      };
+    });
 
     var grid = document.createElement("div");
     grid.className = "schedule-guide-grid";
@@ -1295,6 +1318,10 @@
     });
     scroll.appendChild(grid);
     root.appendChild(scroll);
+    window.setTimeout(function () {
+      scroll.scrollLeft = state.scheduleGuideScroll.left || 0;
+      scroll.scrollTop = state.scheduleGuideScroll.top || 0;
+    }, 0);
   }
 
   function renderChannelActions(channelID) {
@@ -1372,6 +1399,7 @@
     var height = Math.max(24, Math.round(((end - program.start) / 60000) * minuteHeight));
     card.style.top = top + "px";
     card.style.height = height + "px";
+    card.classList.toggle("selected", isActiveProgram(program));
     card.title = [programTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
@@ -1411,6 +1439,7 @@
     var actions = byId("programDialogActions");
     var end = programEnd(program);
     state.selectedProgram = program;
+    state.activeProgramID = program && program.id ? program.id : "";
     text(title, programTitle(program));
     text(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), program.category, formatDuration(program.start, end)].filter(Boolean).join(" / "));
     text(description, program.detail || program.description || "番組説明はありません。");

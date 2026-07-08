@@ -591,6 +591,39 @@ func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardVisualStateRetention(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`activeProgramID`,
+			`viewScrollPositions`,
+			`scheduleGuideScroll`,
+			`state.viewScrollPositions[state.currentView]`,
+			`window.scrollTo(0, state.viewScrollPositions[state.currentView] || 0)`,
+			`scroll.scrollLeft = state.scheduleGuideScroll.left || 0`,
+			`scroll.scrollTop = state.scheduleGuideScroll.top || 0`,
+			`function isActiveProgram(program)`,
+			`card.classList.toggle("selected", isActiveProgram(program))`,
+			`state.activeProgramID = program && program.id ? program.id : ""`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-row.selected`,
+			`.schedule-card.selected`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

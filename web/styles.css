@@ -362,6 +362,11 @@ button:disabled {
   border-bottom: 0;
 }
 
+.program-row.selected {
+  background: #eef8f6;
+  box-shadow: inset 3px 0 0 #0f766e;
+}
+
 .program-row strong {
   overflow-wrap: anywhere;
   font-size: 14px;
@@ -552,6 +557,12 @@ button:disabled {
   z-index: 4;
   border-color: #0f766e;
   background: #f7fffd;
+}
+
+.schedule-card.selected {
+  z-index: 5;
+  border-color: #0f766e;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.22);
 }
 
 .schedule-card.category-anime {
