@@ -1740,9 +1740,11 @@
   function renderScheduleCard(program, timelineStart, minuteHeight) {
     program = decorateProgramState(program);
     var card = document.createElement("article");
+    var stateLabel = program.isRecording ? "録画中" : (program.isReserved ? (program.isManualReserved ? "手動予約" : "予約済み") : "");
     card.className = "schedule-card" + categoryClass(program.category);
     card.classList.toggle("recording", Boolean(program.isRecording));
     card.classList.toggle("reserved", Boolean(program.isReserved && !program.isRecording));
+    card.classList.toggle("has-state", Boolean(stateLabel));
     var end = programEnd(program);
     var top = Math.max(0, Math.round(((program.start - timelineStart) / 60000) * minuteHeight));
     var height = Math.max(24, Math.round(((end - program.start) / 60000) * minuteHeight));
@@ -1752,18 +1754,24 @@
     card.title = [programTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
+    card.setAttribute("aria-label", [programTitle(program), stateLabel, "の詳細を開く"].filter(Boolean).join(" "));
 
     var time = document.createElement("span");
     time.className = "schedule-card-time";
     time.textContent = formatClock(program.start) + "-" + formatClock(end);
+
+    if (stateLabel) {
+      var stateBadge = document.createElement("span");
+      stateBadge.className = "schedule-card-state";
+      stateBadge.textContent = stateLabel;
+      card.appendChild(stateBadge);
+    }
 
     var title = document.createElement("strong");
     title.textContent = programTitle(program);
 
     var meta = document.createElement("span");
     meta.className = "schedule-card-meta";
-    var stateLabel = program.isRecording ? "録画中" : (program.isReserved ? (program.isManualReserved ? "手動予約" : "予約済み") : "");
     meta.textContent = [program.category || "未分類", stateLabel].filter(Boolean).join(" / ");
 
     card.appendChild(time);

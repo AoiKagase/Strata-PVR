@@ -764,11 +764,15 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 			`録画中`,
 			`手動予約`,
 			`watch-recording-mp4`,
+			`card.classList.toggle("has-state"`,
 			`card.classList.toggle("recording"`,
+			`schedule-card-state`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.program-state-badge`,
+			`.schedule-card-state`,
 			`.schedule-card.recording`,
+			`.schedule-card.recording .schedule-card-state`,
 			`.schedule-card.reserved`,
 		},
 	}

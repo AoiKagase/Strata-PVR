@@ -620,10 +620,16 @@ button:disabled {
 .schedule-card.recording {
   border-color: #b42318;
   background: #fff1f1;
+  box-shadow:
+    inset 4px 0 0 #b42318,
+    0 1px 3px rgba(180, 35, 24, 0.22);
 }
 
 .schedule-card.reserved {
-  border-style: dashed;
+  border-color: #b7791f;
+  border-style: solid;
+  background: #fff7e6;
+  box-shadow: inset 4px 0 0 #d97706;
 }
 
 .schedule-now-line {
@@ -643,6 +649,29 @@ button:disabled {
   line-height: 1.08;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.schedule-card-state {
+  justify-self: start;
+  max-width: 100%;
+  margin-bottom: 1px;
+  padding: 1px 4px;
+  border: 1px solid #d97706;
+  border-radius: 3px;
+  background: #fff3d6;
+  color: #8a4b05;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-card.recording .schedule-card-state {
+  border-color: #b42318;
+  background: #ffe4e4;
+  color: #8a1f1f;
 }
 
 .schedule-card strong {
