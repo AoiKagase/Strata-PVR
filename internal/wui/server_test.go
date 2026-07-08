@@ -578,6 +578,35 @@ func TestNativeDashboardScheduleDayWindowStartsAtSelectedDay(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardScheduleShowsFullReservableRange(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`scheduleWindowMode: "all"`,
+		`return scheduleWindowHoursByMode.all;`,
+		`channelProgramGroups().forEach(function (group)`,
+		`days[dateKey(program.start)] = true;`,
+		`Object.keys(days).sort().forEach(function (key)`,
+		`state.scheduleWindowMode = scheduleWindow.value || "all";`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+	for _, legacyLimit := range []string{
+		`for (var i = 0; i < 7; i += 1)`,
+		`return scheduleWindowHoursByMode.day;`,
+		`state.scheduleWindowMode = scheduleWindow.value || "day";`,
+	} {
+		if strings.Contains(source, legacyLimit) {
+			t.Fatalf("web/app.js still contains one-week/default-day schedule limit %q", legacyLimit)
+		}
+	}
+}
+
 func TestNativeDashboardConfirmDialog(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {

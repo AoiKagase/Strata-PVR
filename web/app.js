@@ -28,7 +28,7 @@
     scheduleDay: "",
     scheduleGenre: "",
     scheduleHiddenChannels: loadHiddenChannels(),
-    scheduleWindowMode: "day",
+    scheduleWindowMode: "all",
     channelProgramsChannel: "",
     channelProgramsGenre: "",
     channelProgramsSort: "startAsc",
@@ -1385,7 +1385,7 @@
     if (Object.prototype.hasOwnProperty.call(scheduleWindowHoursByMode, state.scheduleWindowMode)) {
       return scheduleWindowHoursByMode[state.scheduleWindowMode];
     }
-    return scheduleWindowHoursByMode.day;
+    return scheduleWindowHoursByMode.all;
   }
 
   function channelProgramGroups() {
@@ -1884,20 +1884,31 @@
       return;
     }
     var current = state.scheduleDay;
+    var days = {};
     select.innerHTML = "";
     var all = document.createElement("option");
     all.value = "";
     all.textContent = "すべて";
     select.appendChild(all);
-    var today = startOfDay(Date.now());
-    for (var i = 0; i < 7; i += 1) {
-      var day = today + i * 86400000;
+    channelProgramGroups().forEach(function (group) {
+      (group.programs || []).forEach(function (program) {
+        if (program && program.start && (!program.end || program.end >= Date.now())) {
+          days[dateKey(program.start)] = true;
+        }
+      });
+    });
+    Object.keys(days).sort().forEach(function (key) {
+      var day = dateKeyStart(key);
       var option = document.createElement("option");
-      option.value = dateKey(day);
+      option.value = key;
       option.textContent = dayLabel(day);
       select.appendChild(option);
-    }
+    });
     select.value = current;
+    if (select.value !== current) {
+      state.scheduleDay = "";
+      select.value = "";
+    }
   }
 
   function renderScheduleGenreOptions(channels) {
@@ -3565,7 +3576,7 @@
     if (scheduleWindow) {
       scheduleWindow.value = state.scheduleWindowMode;
       scheduleWindow.addEventListener("change", function () {
-        state.scheduleWindowMode = scheduleWindow.value || "day";
+        state.scheduleWindowMode = scheduleWindow.value || "all";
         renderSchedule();
       });
     }
