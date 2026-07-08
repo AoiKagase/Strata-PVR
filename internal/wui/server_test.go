@@ -624,6 +624,39 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`programStateIndex`,
+			`function decorateProgramState(program)`,
+			`program.isRecording`,
+			`program.isReserved`,
+			`renderProgramStateBadges(item, program)`,
+			`録画中`,
+			`手動予約`,
+			`watch-recording-mp4`,
+			`card.classList.toggle("recording"`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-state-badge`,
+			`.schedule-card.recording`,
+			`.schedule-card.reserved`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardConfigControlsCoverRuntimeFields(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {
