@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"strata-pvr/internal/config"
@@ -140,7 +141,7 @@ func NewHandler(paths Paths, cfg *config.Config) http.Handler {
 
 func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	mux := http.NewServeMux()
-	server := &server{paths: paths, cfg: cfg, webRoot: findWebRoot(paths.WebRoot)}
+	server := &server{paths: paths, cfg: cfg, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory()}
 	mux.HandleFunc("/api/", server.handleAPI)
 	mux.HandleFunc("/", server.handleStatic)
 	var handler http.Handler = mux
@@ -157,6 +158,117 @@ type server struct {
 	paths   Paths
 	cfg     *config.Config
 	webRoot string
+	metrics *metricHistory
+}
+
+type metricHistory struct {
+	mu       sync.Mutex
+	samples  []metricSample
+	lastCPU  *system.CPUTimes
+	lastTime time.Time
+}
+
+type metricSample struct {
+	Time            time.Time `json:"time"`
+	CPUPercent      *float64  `json:"cpuPercent,omitempty"`
+	MemoryPercent   *float64  `json:"memoryPercent,omitempty"`
+	MemoryUsed      uint64    `json:"memoryUsed"`
+	MemoryTotal     uint64    `json:"memoryTotal"`
+	StorageRecorded uint64    `json:"storageRecorded"`
+	StorageUsed     uint64    `json:"storageUsed"`
+	StorageTotal    uint64    `json:"storageTotal"`
+	StorageAvail    uint64    `json:"storageAvail"`
+}
+
+const (
+	metricHistoryWindow  = 6 * time.Hour
+	metricSampleInterval = 30 * time.Second
+)
+
+func newMetricHistory() *metricHistory {
+	return &metricHistory{samples: []metricSample{}}
+}
+
+func (h *metricHistory) sample(recordedSize int64, storageUsage system.DiskUsage) metricSample {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now()
+	if len(h.samples) > 0 && now.Sub(h.lastTime) < metricSampleInterval {
+		return h.samples[len(h.samples)-1]
+	}
+
+	var cpuPercent *float64
+	if cpuTimes, err := system.GetCPUTimes(); err == nil {
+		if h.lastCPU != nil && cpuTimes.Total > h.lastCPU.Total {
+			totalDelta := cpuTimes.Total - h.lastCPU.Total
+			idleDelta := cpuTimes.Idle - h.lastCPU.Idle
+			if totalDelta > 0 && idleDelta <= totalDelta {
+				value := clampPercent((float64(totalDelta-idleDelta) / float64(totalDelta)) * 100)
+				cpuPercent = &value
+			}
+		}
+		h.lastCPU = &cpuTimes
+	}
+
+	var memoryPercent *float64
+	var memoryUsed uint64
+	var memoryTotal uint64
+	if memoryUsage, err := system.GetMemoryUsage(); err == nil {
+		memoryUsed = memoryUsage.Used
+		memoryTotal = memoryUsage.Total
+		if memoryUsage.Total > 0 {
+			value := clampPercent((float64(memoryUsage.Used) / float64(memoryUsage.Total)) * 100)
+			memoryPercent = &value
+		}
+	}
+
+	sample := metricSample{
+		Time:            now,
+		CPUPercent:      cpuPercent,
+		MemoryPercent:   memoryPercent,
+		MemoryUsed:      memoryUsed,
+		MemoryTotal:     memoryTotal,
+		StorageRecorded: uint64(max(recordedSize, 0)),
+		StorageUsed:     storageUsage.Used,
+		StorageTotal:    storageUsage.Size,
+		StorageAvail:    storageUsage.Avail,
+	}
+	h.samples = append(h.samples, sample)
+	h.lastTime = now
+	h.trimLocked(now)
+	return sample
+}
+
+func (h *metricHistory) recent() []metricSample {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.trimLocked(time.Now())
+	out := make([]metricSample, len(h.samples))
+	copy(out, h.samples)
+	return out
+}
+
+func (h *metricHistory) trimLocked(now time.Time) {
+	cutoff := now.Add(-metricHistoryWindow)
+	keepFrom := 0
+	for keepFrom < len(h.samples) && h.samples[keepFrom].Time.Before(cutoff) {
+		keepFrom++
+	}
+	if keepFrom > 0 {
+		copy(h.samples, h.samples[keepFrom:])
+		h.samples = h.samples[:len(h.samples)-keepFrom]
+	}
+}
+
+func clampPercent(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 type runningServer struct {
@@ -798,6 +910,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleStorage(w, r)
+	case len(parts) == 1 && parts[0] == "metrics":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleMetrics(w, r)
 	case len(parts) == 2 && parts[0] == "log":
 		if !requireAPIType(w, r, apiType, "txt") {
 			return
@@ -1154,10 +1271,43 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recordedSize, usage, err := s.storageUsage()
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
+	}
+	writePrettyJSON(w, http.StatusOK, map[string]any{
+		"recorded": recordedSize,
+		"size":     usage.Size,
+		"used":     usage.Used,
+		"avail":    usage.Avail,
+	})
+}
+
+func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	recordedSize, usage, err := s.storageUsage()
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	sample := s.metrics.sample(recordedSize, usage)
+	writePrettyJSON(w, http.StatusOK, map[string]any{
+		"windowSeconds": int64(metricHistoryWindow.Seconds()),
+		"sampleSeconds": int64(metricSampleInterval.Seconds()),
+		"current":       sample,
+		"samples":       s.metrics.recent(),
+	})
+}
+
+func (s *server) storageUsage() (int64, system.DiskUsage, error) {
+	var recorded []legacy.Program
+	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+		return 0, system.DiskUsage{}, err
 	}
 	var recordedSize int64
 	for _, program := range recorded {
@@ -1175,15 +1325,9 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	usage, err := system.GetDiskUsage(recordedDir)
 	if err != nil {
-		legacyHTTPError(w, r, http.StatusInternalServerError)
-		return
+		return 0, system.DiskUsage{}, err
 	}
-	writePrettyJSON(w, http.StatusOK, map[string]any{
-		"recorded": recordedSize,
-		"size":     usage.Size,
-		"used":     usage.Used,
-		"avail":    usage.Avail,
-	})
+	return recordedSize, usage, nil
 }
 
 func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType string) {
@@ -3161,6 +3305,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"PUT"}, true
 	case len(parts) == 1 && parts[0] == "storage":
 		return []string{"GET"}, true
+	case len(parts) == 1 && parts[0] == "metrics":
+		return []string{"GET"}, true
 	case len(parts) == 2 && parts[0] == "log":
 		return []string{"GET"}, true
 	case len(parts) == 3 && parts[0] == "log" && parts[2] == "stream":
@@ -3221,7 +3367,7 @@ func methodAllowed(method string, allowed []string) bool {
 
 func knownAPIResource(name string) bool {
 	switch name {
-	case "status", "scheduler", "storage", "log", "config", "rules", "schedule", "reserves", "recording", "recorded", "program", "channel":
+	case "status", "scheduler", "storage", "metrics", "log", "config", "rules", "schedule", "reserves", "recording", "recorded", "program", "channel":
 		return true
 	default:
 		return false

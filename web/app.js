@@ -13,6 +13,7 @@
   var mp4DialogReturnFocus = null;
   var confirmDialogReturnFocus = null;
   var pendingConfirmResolve = null;
+  var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
   var state = {
@@ -24,6 +25,7 @@
     rules: [],
     config: {},
     storage: null,
+    metrics: null,
     scheduleChannel: "",
     scheduleType: "",
     scheduleDay: "",
@@ -1324,6 +1326,13 @@
       unit += 1;
     }
     return (unit === 0 ? String(size) : size.toFixed(size >= 10 ? 1 : 2)) + " " + units[unit];
+  }
+
+  function formatPercent(value) {
+    if (typeof value !== "number" || !isFinite(value)) {
+      return "取得不可";
+    }
+    return value.toFixed(value >= 10 ? 1 : 2) + "%";
   }
 
   function formatUptime(seconds) {
@@ -2791,6 +2800,7 @@
       root.appendChild(value);
     });
     renderStorage();
+    renderMetrics();
   }
 
   function renderConfigEditor(force) {
@@ -2826,6 +2836,141 @@
       root.appendChild(key);
       root.appendChild(value);
     });
+  }
+
+  function renderMetrics() {
+    renderStoragePieChart();
+    renderResourceLineChart();
+  }
+
+  function renderStoragePieChart() {
+    var root = byId("storagePieChart");
+    if (!root) {
+      return;
+    }
+    var storage = state.metrics && state.metrics.current || state.storage || {};
+    var used = numberValue(storage.storageUsed, storage.used);
+    var total = numberValue(storage.storageTotal, storage.size);
+    var avail = numberValue(storage.storageAvail, storage.avail);
+    var recorded = Math.max(0, Math.min(used, numberValue(storage.storageRecorded, storage.recorded)));
+    if (!total || total <= 0) {
+      root.innerHTML = '<div class="chart-empty">取得不可</div>';
+      text(byId("storageChartSummary"), "取得不可");
+      return;
+    }
+    var usedPercent = Math.max(0, Math.min(100, used / total * 100));
+    var recordedPercent = Math.max(0, Math.min(100, recorded / total * 100));
+    var otherUsedPercent = Math.max(0, usedPercent - recordedPercent);
+    var freePercent = Math.max(0, 100 - usedPercent);
+    var recordedEnd = recordedPercent;
+    var otherEnd = recordedPercent + otherUsedPercent;
+    root.innerHTML = [
+      '<div class="pie-chart-ring" style="--recorded-end:', recordedEnd.toFixed(2), '; --other-end:', otherEnd.toFixed(2), '"></div>',
+      '<div class="pie-chart-center"><strong>', formatPercent(usedPercent), '</strong><span>使用中</span></div>',
+      '<div class="chart-legend">',
+      '<span><i class="legend-recorded"></i>録画ファイル ', formatBytes(recorded), '</span>',
+      '<span><i class="legend-used"></i>その他 ', formatBytes(Math.max(0, used - recorded)), '</span>',
+      '<span><i class="legend-free"></i>空き ', formatBytes(avail || Math.max(0, total - used)), '</span>',
+      '<span><i class="legend-total"></i>総量 ', formatBytes(total), '</span>',
+      '</div>'
+    ].join("");
+    text(byId("storageChartSummary"), "総量 " + formatBytes(total) + " / 空き " + formatPercent(freePercent));
+  }
+
+  function renderResourceLineChart() {
+    var root = byId("resourceLineChart");
+    if (!root) {
+      return;
+    }
+    var samples = state.metrics && Array.isArray(state.metrics.samples) ? state.metrics.samples : [];
+    if (samples.length < 2) {
+      root.innerHTML = '<div class="chart-empty">履歴を収集中</div>';
+      text(byId("resourceChartSummary"), "直近6時間");
+      return;
+    }
+    var now = Date.now();
+    var windowMS = ((state.metrics && state.metrics.windowSeconds) || 21600) * 1000;
+    var points = samples.map(function (sample) {
+      return {
+        time: Date.parse(sample.time),
+        cpu: optionalNumber(sample.cpuPercent),
+        memory: optionalNumber(sample.memoryPercent)
+      };
+    }).filter(function (point) {
+      return isFinite(point.time) && point.time >= now - windowMS;
+    });
+    if (points.length < 2) {
+      root.innerHTML = '<div class="chart-empty">履歴を収集中</div>';
+      return;
+    }
+    var width = 640;
+    var height = 220;
+    var padLeft = 38;
+    var padRight = 14;
+    var padTop = 18;
+    var padBottom = 28;
+    var minTime = Math.min.apply(null, points.map(function (point) { return point.time; }));
+    var maxTime = Math.max(now, Math.max.apply(null, points.map(function (point) { return point.time; })));
+    if (maxTime <= minTime) {
+      maxTime = minTime + 1;
+    }
+    var cpuPath = linePath(points, "cpu", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
+    var memoryPath = linePath(points, "memory", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
+    var latest = points[points.length - 1];
+    root.innerHTML = [
+      '<svg viewBox="0 0 ', width, ' ', height, '" class="metric-svg" aria-hidden="true">',
+      '<line x1="', padLeft, '" y1="', padTop, '" x2="', padLeft, '" y2="', height - padBottom, '" class="chart-axis"></line>',
+      '<line x1="', padLeft, '" y1="', height - padBottom, '" x2="', width - padRight, '" y2="', height - padBottom, '" class="chart-axis"></line>',
+      chartGridLine(25, width, height, padLeft, padRight, padTop, padBottom),
+      chartGridLine(50, width, height, padLeft, padRight, padTop, padBottom),
+      chartGridLine(75, width, height, padLeft, padRight, padTop, padBottom),
+      cpuPath ? '<path d="' + cpuPath + '" class="chart-line chart-line-cpu"></path>' : "",
+      memoryPath ? '<path d="' + memoryPath + '" class="chart-line chart-line-memory"></path>' : "",
+      '<text x="', padLeft, '" y="', height - 8, '" class="chart-label">-6h</text>',
+      '<text x="', width - padRight, '" y="', height - 8, '" text-anchor="end" class="chart-label">now</text>',
+      '<text x="6" y="', padTop + 4, '" class="chart-label">100%</text>',
+      '</svg>',
+      '<div class="chart-legend">',
+      '<span><i class="legend-cpu"></i>CPU ', formatPercent(latest.cpu), '</span>',
+      '<span><i class="legend-memory"></i>メモリ ', formatPercent(latest.memory), '</span>',
+      '</div>'
+    ].join("");
+    text(byId("resourceChartSummary"), "直近6時間 / " + samples.length + "点");
+  }
+
+  function numberValue() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (typeof value === "number" && isFinite(value)) {
+        return value;
+      }
+    }
+    return 0;
+  }
+
+  function optionalNumber(value) {
+    return typeof value === "number" && isFinite(value) ? value : NaN;
+  }
+
+  function linePath(points, key, minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom) {
+    var plotWidth = width - padLeft - padRight;
+    var plotHeight = height - padTop - padBottom;
+    var path = "";
+    points.forEach(function (point) {
+      var value = point[key];
+      if (typeof value !== "number" || !isFinite(value)) {
+        return;
+      }
+      var x = padLeft + ((point.time - minTime) / (maxTime - minTime)) * plotWidth;
+      var y = padTop + (1 - Math.max(0, Math.min(100, value)) / 100) * plotHeight;
+      path += (path ? " L " : "M ") + x.toFixed(1) + " " + y.toFixed(1);
+    });
+    return path;
+  }
+
+  function chartGridLine(percent, width, height, padLeft, padRight, padTop, padBottom) {
+    var y = padTop + (1 - percent / 100) * (height - padTop - padBottom);
+    return '<line x1="' + padLeft + '" y1="' + y.toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + y.toFixed(1) + '" class="chart-grid"></line>';
   }
 
   function forceScheduler() {
@@ -3752,6 +3897,9 @@
       api("config.json"),
       api("storage.json").catch(function () {
         return null;
+      }),
+      api("metrics.json").catch(function () {
+        return null;
       })
     ]).then(function (result) {
       state.status = result[0] || {};
@@ -3762,6 +3910,7 @@
       state.rules = result[5] || [];
       state.config = result[6] || {};
       state.storage = result[7] || null;
+      state.metrics = result[8] || null;
       state.hasLoaded = true;
       state.isLoading = false;
       state.lastError = null;
@@ -3771,6 +3920,16 @@
       state.isLoading = false;
       renderInitialLoadError(error);
       showError(error);
+    });
+  }
+
+  function refreshMetrics() {
+    api("metrics.json").then(function (result) {
+      state.metrics = result || null;
+      renderMetrics();
+      updateOperationalStatus();
+    }).catch(function () {
+      renderMetrics();
     });
   }
 
@@ -3871,6 +4030,9 @@
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
+    }
+    if (!metricsRefreshTimer) {
+      metricsRefreshTimer = window.setInterval(refreshMetrics, 30000);
     }
     var toggleOnAirPanelButton = byId("toggleOnAirPanelButton");
     if (toggleOnAirPanelButton) {
