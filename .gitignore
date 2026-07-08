@@ -5,3 +5,8 @@
 .tokensave/
 strata-pvr
 strata-pvr.exe
+/data
+/log
+/recorded
+rules.json
+config.json
