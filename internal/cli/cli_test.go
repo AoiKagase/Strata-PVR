@@ -68,7 +68,7 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 		`DAEMON_OPTS="service operator execute"`,
 		"NAME=strata-pvr-operator",
 		"USER=$USER",
-		"PIDFILE=/var/run/chinachu-operator.pid",
+		"PIDFILE=/var/run/strata-pvr-operator.pid",
 		"cd $STRATA_PVR_DIR || exit 1",
 		"test -x $DAEMON || exit 0",
 		`PID=$(su $USER -c "exec $DAEMON $DAEMON_OPTS < /dev/null > /dev/null 2>&1 & echo \$!")`,
@@ -96,7 +96,7 @@ func TestServiceSchedulerInitscript(t *testing.T) {
 		"# Short-Description: starts the Strata PVR scheduler",
 		`DAEMON_OPTS="service scheduler execute"`,
 		"NAME=strata-pvr-scheduler",
-		"PIDFILE=/var/run/chinachu-scheduler.pid",
+		"PIDFILE=/var/run/strata-pvr-scheduler.pid",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("scheduler initscript missing %q: %s", want, text)

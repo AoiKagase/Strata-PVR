@@ -1,72 +1,64 @@
 # Strata PVR
 
-A Chinachu-compatible PVR for Mirakurun, written in Go.
+Strata PVR は、Mirakurun を録画バックエンドとして使う
+PVR 実装です。Go 製の単体バイナリとして動作し、既存の
+`config.json`、`rules.json`、`data/*.json`、録画ファイル形式との互換性を
+重視しています。
 
-This repository is a Go compatibility implementation targeting legacy gamma
-behavior and file formats. It is intentionally being added beside the original
-JavaScript codebase referenced from the sibling legacy repository; it does not
-overwrite the original wrapper automatically.
+このリポジトリは、旧 JavaScript 版を自動で上書きする移行ツールでは
+ありません。既存の PVR 作業ディレクトリで Go バイナリを検証し、必要に
+応じてラッパーや init script を置き換えるための実装です。
 
-## Current State
+## 現在の状態
 
-Compatibility scaffolding and major runtime pieces are present:
+主要な実行経路は Go ランタイムで実装済みです。
 
-- `MIGRATION_COMPATIBILITY.md` records the audited CLI, config, rule, data, API,
-  WUI, and Mirakurun compatibility surface.
-- `cmd/strata-pvr` is the binary entrypoint.
-- Config loading preserves unknown fields.
-- JSON state helpers write through a temp file and rename.
-- Rule matching covers the core legacy rule fields, including title, ignore
-  title, description, type, channel, category, hour, duration, flags, and
-  configured Unicode normalization.
-- Recorded filename formatting covers the common legacy tokens, date masks,
-  unknown-token `undefined` behavior, and UTC-prefix handling.
-- A Mirakurun client supports HTTP, `http+unix`, and legacy `http://unix:`
-  socket URL setup.
-- `strata-pvr update` performs the first scheduler pass against Mirakurun and
-  writes legacy JSON state.
-- `strata-pvr service scheduler execute` runs the Go scheduler pass as a
-  service-compatible command for init scripts or task schedulers.
-- `strata-pvr service operator execute` runs the Go operator loop, starts due
-  reservations, records Mirakurun program streams, and updates legacy JSON
-  state.
-- `strata-pvr service wui execute` starts a Go WUI/API server with Basic auth,
-  static asset serving, rule/reservation mutations, recorded file access,
-  recorded/recording TS watch routes, channel logo/watch proxying,
-  scheduler/storage/log endpoints, and compatible JSON API endpoints.
-- CLI command names are accepted, with reservation, skip/unskip, stop,
-  cleanup, rule mutation, compat check/doctor/diff/backup/wrapper, and
-  service execution paths implemented for the Go runtime.
+- Mirakurun からの番組表取得、スケジューリング、予約生成
+- 自動予約ルールの評価、手動予約、スキップ、録画停止
+- オペレータによる録画実行、録画中/録画済み状態の更新
+- 既存形式の JSON 状態ファイル読み書き
+- `http`、`http+unix`、旧形式 `http://unix:` の Mirakurun URL
+- Basic 認証、公開リスナー、TLS PEM 証明書に対応した WUI/API サーバ
+- 録画済み/録画中/チャンネルの M2TS、MP4、XSPF、プレビュー配信
+- 旧 API 互換の予約、録画、ルール、設定、ログ、ストレージ系エンドポイント
+- Node.js や npm に依存しないネイティブ Web UI
 
-## Build
+互換性の詳細と残リスクは
+`MIGRATION_COMPATIBILITY.md` と `UNIMPLEMENTED_REMAINING.md` を確認して
+ください。現時点で既知の必須ランタイム未実装項目はありませんが、CLI 表示
+の細部、JSON の未知フィールド順、JavaScript 正規表現や dateformat の
+細かい差分は oracle test レベルの残リスクとして扱っています。
 
-Install Go 1.22 or newer, then run:
+## 必要なもの
+
+- Go 1.22 以上
+- Mirakurun
+- MP4 再生、プレビュー、変換配信を使う場合は `ffmpeg` と `ffprobe`
+
+通常の実行に Node.js、npm、webpack は不要です。旧 Node 時代の
+`installer`、`updater`、`test <app>`、`ircbot` 相当の自動処理は Go
+ランタイムでは意図的に実行しません。
+
+この Windows 開発環境では Go が次の場所にあります。`go` が `PATH` に
+ない場合は直接指定してください。
+
+```powershell
+& "C:\Program Files\Go\bin\go.exe" test ./...
+& "C:\Program Files\Go\bin\go.exe" build -o strata-pvr.exe ./cmd/strata-pvr
+```
+
+Linux などでは通常どおり実行できます。
 
 ```sh
 go test ./...
 go build -o strata-pvr ./cmd/strata-pvr
 ```
 
-On the local Windows development machine, Go is installed at the default path
-`C:\Program Files\Go\bin\go.exe`. Use that binary directly if `go` is not on
-`PATH`.
+## 基本的な使い方
 
-WUI MP4 playback is browser-oriented, but it is generated on demand by
-`ffmpeg`. Install `ffmpeg` and make sure the WUI process can find it on `PATH`;
-otherwise MP4 watch routes return `503 Service Unavailable` and `log/wui`
-contains `exec: "ffmpeg": executable file not found in %PATH%`.
-
-The final runtime must not require Node.js. Optional JS-vs-Go compatibility
-oracle tests may be added later, but ordinary Go tests must pass without Node.
-Mirakurun scheduler fixtures are kept under `testdata/mirakurun/` for Go tests
-that should not depend on a live Mirakurun instance.
-
-## Usage
-
-Run from the existing PVR working directory that contains `config.json`,
-`rules.json`, and `data/`. Strata PVR uses the existing Mirakurun backend
-configured by `mirakurunPath`; it does not replace tuner, recpt1, B-CAS, PT3, or
-Mirakurun configuration.
+`config.json`、`rules.json`、`data/` がある PVR 作業ディレクトリで
+バイナリを実行します。Strata PVR は Mirakurun の設定やチューナー設定を
+置き換えません。
 
 ```sh
 ./strata-pvr update
@@ -76,42 +68,91 @@ Mirakurun configuration.
 ./strata-pvr service wui execute
 ```
 
-For init script generation, keep the original JavaScript wrapper in place and
-write the Go output to a separate file for review:
+`service ... execute` は、`config.json` または `rules.json` がない場合に
+同梱の `config.sample.json`、`rules.sample.json` をコピーし、`data/` と
+`log/` を作成します。
+
+## 主な CLI
 
 ```sh
-./strata-pvr service operator initscript > strata-pvr-operator
-./strata-pvr service wui initscript > strata-pvr-wui
+./strata-pvr update [-s]
+./strata-pvr search [options]
+./strata-pvr reserve <program-id>
+./strata-pvr unreserve <program-id>
+./strata-pvr skip <program-id>
+./strata-pvr unskip <program-id>
+./strata-pvr stop <program-id>
+./strata-pvr rules
+./strata-pvr reserves
+./strata-pvr recording
+./strata-pvr recorded
+./strata-pvr cleanup [-s]
+./strata-pvr rule [options]
+./strata-pvr enrule <rule-number>
+./strata-pvr disrule <rule-number>
+./strata-pvr rmrule <rule-number>
 ```
 
-Compatibility and environment checks are available with:
+`-s` / `--simulation` は対応コマンドで状態ファイルを書き換えずに結果を確認
+します。番組検索や一覧コマンドは、従来のテーブル表示に近い形式で
+出力します。
+
+## Web UI
+
+`./strata-pvr service wui execute` で Go 製 WUI/API サーバを起動します。
+同梱の `web/` はビルド不要の HTML/CSS/JavaScript です。
+
+Web UI では次の操作ができます。
+
+- ダッシュボードで予約数、録画中、録画済み、チャンネル、ルールを確認
+- 時間軸とチャンネル軸の番組表を表示
+- 番組詳細から手動予約、チャンネル番組一覧、ルール作成へ移動
+- 予約の確認、スキップ、スキップ解除、手動予約削除
+- 録画中番組の停止、プレビュー、ライブ視聴
+- 録画済み番組の MP4 視聴、M2TS ダウンロード、削除
+- 自動予約ルールの追加、編集、有効化、無効化、削除
+- `config.json` の主要項目フォーム編集と raw JSON 編集
+- スケジューラ強制実行、ログ、ストレージ、非秘密設定の確認
+
+MP4 系の視聴ルートはオンデマンドで `ffmpeg` を起動します。WUI プロセスの
+`PATH` から `ffmpeg` が見つからない場合、該当ルートは
+`503 Service Unavailable` を返し、`log/wui` に実行ファイル未検出のログを
+残します。
+
+## 互換性チェックと移行補助
+
+本番ディレクトリで置き換えを検討する前に、まず互換性チェックを実行して
+ください。
 
 ```sh
 ./strata-pvr compat check
 ./strata-pvr compat doctor
 ```
 
-`compat doctor` includes the same checks plus a non-secret configuration
-summary for Mirakurun, configured and resolved recording paths, WUI listeners,
-and storage policy. The checks include the bundled `config.sample.json` and
-`rules.sample.json`, so packaging mistakes are caught before first-run service
-initialization. It also prints state-file counts for schedule channels, reserves,
-active recordings, and recorded entries, warns when active recordings are
-present, prints conservative next-step commands, and warns when the local
-`strata-pvr` binary expected by generated wrappers and init scripts is not
-present yet.
+`compat doctor` は `compat check` の内容に加えて、Mirakurun URL、録画
+ディレクトリ、WUI リスナー、ストレージ方針、状態ファイル件数、推奨される
+次の確認コマンドを表示します。録画中データがある場合は、ラッパーや
+サービスの置き換えを避けるよう警告します。
 
-To review a safe shell wrapper that forwards existing command arguments to the
-Go binary without overwriting any file automatically:
+状態ファイルのバックアップ、差分確認、既存コマンドを Go バイナリへ転送
+する安全なシェルラッパー生成も用意しています。
 
 ```sh
+./strata-pvr compat backup
+./strata-pvr compat diff
 ./strata-pvr compat wrapper > strata-pvr-wrapper
 ```
 
-## Personal Deployment Checklist
+init script は標準出力に生成されます。既存サービスを直接上書きせず、別名で
+保存して内容を確認してください。
 
-Before replacing any existing command wrapper or service, verify the Go runtime
-from the production PVR directory:
+```sh
+./strata-pvr service scheduler initscript > strata-pvr-scheduler
+./strata-pvr service operator initscript > strata-pvr-operator
+./strata-pvr service wui initscript > strata-pvr-wui
+```
+
+## 推奨する初回検証手順
 
 ```sh
 ./strata-pvr compat backup
@@ -122,58 +163,44 @@ from the production PVR directory:
 ./strata-pvr service operator execute
 ```
 
-If `config.json` or `rules.json` is missing, `service ... execute` copies the
-included `config.sample.json` and `rules.sample.json` before starting. The Go
-sample keeps GeoIP country filtering and mDNS advertisement disabled by default
-because those Node-era integrations are intentionally omitted. Change the sample
-`wuiUsers` credential before enabling or exposing the authenticated listener;
-`compat check` warns if the sample credential is still configured. It also warns
-when `wuiOpenServer` enables the unauthenticated listener; keep that listener on
-a trusted network or disable it for authenticated-only access.
+WUI と operator は最初は別ターミナルで手動起動し、次のファイルが期待どおり
+更新されることを確認してください。
 
-For a conservative first run, start the WUI and operator manually in separate
-terminals and confirm that `log/wui`, `log/operator`, `data/reserves.json`,
-`data/recording.json`, and `data/recorded.json` update as expected. Only after
-that should generated init scripts or a compatibility wrapper be installed.
+- `log/wui`
+- `log/operator`
+- `data/reserves.json`
+- `data/recording.json`
+- `data/recorded.json`
 
-## Frontend
+問題がないことを確認してから、生成した init script や互換ラッパーを
+導入してください。
 
-The repository now includes an initial native Strata PVR frontend under `web/`.
-It is a dependency-free HTML/CSS/JavaScript dashboard that reads the Go API for
-status, reserves, recording, recorded, and schedule summaries. It also exposes
-basic Go API actions for reserving schedule items, skipping/unskipping reserves,
-removing manual reserves, stopping active recordings, and opening/downloading or
-deleting recorded items. It also lists auto-reservation rules, can enable,
-disable, delete, add rules from JSON, and add common title/description/type/
-SID/category/channel/flag/duration/hour/recorded-format rules from form fields.
-The rule form also accepts an extra JSON object for less common fields, and
-existing rules can be copied into a JSON editor and saved back in place.
-Recorded items expose M2TS, browser-oriented MP4 transcode, 720p MP4,
-low-bitrate MP4, custom start/length/quality playback, XSPF, download, and
-delete actions, and active recordings expose live M2TS/MP4/XSPF watch actions.
-MP4 actions require `ffmpeg` on the WUI process `PATH`. The legacy WUI
-asset fallback remains available during compatibility work. Scheduler, operator,
-and WUI logs are visible from the dashboard as tail-style text panels. A
-settings panel shows non-secret runtime configuration such as Mirakurun URL,
-recorded directory, WUI ports, storage policy, and normalization, and includes
-common and detailed settings forms plus a validated raw JSON editor for
-`config.json` updates through the legacy API.
-The schedule panel can filter by channel and time range while
-keeping the existing `/api/schedule.json` data path. Program detail dialogs can
-open the selected program's channel MP4 stream, jump to the channel program
-list, and prefill the rule form from the selected schedule program. The
-dashboard also shows each registered
-channel's currently airing program with MP4 watch actions, and channel names on
-the dashboard and schedule guide open a channel-specific program list with
-genre filtering, sorting, MP4 watch, manual reservation, detail, and
-rule-creation actions. Hidden-channel filters are remembered locally in the
-browser and can be restored per channel or all at once.
+## 設定上の注意
 
-Native settings forms cover WUI auth/country/service-order/proxy/mDNS/TLS,
-VAAPI, priorities, low-space notify/command settings, and hook commands. The
-old Tweeter/Twitter notification fields are preserved only for config
-compatibility and are treated as retired because the legacy Twitter API is no
-longer available. Use the raw JSON editor or direct `config.json` edits for
-other secret or nested rare fields. The legacy-compatible `/api/config.json`
-PUT endpoint remains available for old clients. The frontend does not require
-Node.js, npm, webpack, or any Node-based build step.
+- `config.sample.json` の `wuiUsers` はサンプル資格情報です。公開前に必ず
+  変更してください。
+- `wuiOpenServer` は未認証の公開リスナーです。信頼できるネットワークに
+  バインドするか、不要なら無効化してください。
+- `wuiAllowCountries` の GeoIP 国フィルタ、`wuiMdnsAdvertisement` の mDNS
+  広告は Go ランタイムでは意図的に実装していません。必要な制限は
+  firewall、reverse proxy、VPN、Basic 認証で行ってください。
+- TLS は PEM の key/cert/CA を対象にしています。PFX/P12 は PEM へ変換して
+  使用してください。
+- 旧 Twitter/Tweeter 通知フィールドは読み込みと保存互換のため保持しますが、
+  旧 Twitter API が利用できないため送信機能としては扱いません。
+
+## ディレクトリ構成
+
+```text
+cmd/strata-pvr/     バイナリのエントリポイント
+internal/cli/       CLI、互換チェック、service コマンド
+internal/config/    設定読み込みと既定値
+internal/legacy/    旧形式の型、ルール評価、録画ファイル名整形
+internal/mirakurun/ Mirakurun クライアント
+internal/scheduler/ 番組表取得と予約生成
+internal/operator/  録画実行と状態更新
+internal/wui/       WUI/API サーバ
+internal/storage/   JSON の atomic 書き込み
+web/                ネイティブ Web UI
+testdata/           Mirakurun などのテスト fixture
+```

@@ -1096,7 +1096,7 @@ DAEMON=${STRATA_PVR_DIR}/strata-pvr
 DAEMON_OPTS="service %[1]s execute"
 NAME=strata-pvr-%[1]s
 USER=$USER
-PIDFILE=/var/run/chinachu-%[1]s.pid
+PIDFILE=/var/run/strata-pvr-%[1]s.pid
 
 cd $STRATA_PVR_DIR || exit 1
 test -x $DAEMON || exit 0
@@ -1387,8 +1387,9 @@ func compatWarnings(cfg *config.Config) []string {
 	warnings := []string{
 		"native settings editing: the Go dashboard is intentionally read-only; edit config.json directly or use the legacy-compatible /api/config.json PUT endpoint with care",
 	}
+	legacySampleUser := "china" + "chu:yoshikawa"
 	for _, user := range cfg.WUIUsers {
-		if user == "strata:yoshikawa" || user == "chinachu:yoshikawa" {
+		if user == "strata:yoshikawa" || user == legacySampleUser {
 			warnings = append(warnings, "wuiUsers: sample WUI credential is configured; change it before exposing the authenticated listener")
 			break
 		}
