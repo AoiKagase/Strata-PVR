@@ -462,6 +462,27 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	if strings.Contains(source, `"watch-recording"`) {
+		t.Fatal("recording list should not expose live/growing M2TS watch action")
+	}
+	for _, legacyLabel := range []string{`actionButton("MP4"`, "録画中のM2TS", "チャンネルのM2TS"} {
+		if strings.Contains(source, legacyLabel) {
+			t.Fatalf("native dashboard still exposes confusing live watch label/action %q", legacyLabel)
+		}
+	}
+	for _, recordedOnly := range []string{`name === "watch-m2ts"`, `name === "watch-m2ts-offset"`} {
+		if !strings.Contains(source, recordedOnly) {
+			t.Fatalf("recorded M2TS action %q should remain available", recordedOnly)
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -476,7 +497,21 @@ func TestSocketIOCompatScript(t *testing.T) {
 		t.Fatalf("Content-Type = %q", got)
 	}
 	body := res.Body.String()
-	for _, want := range []string{"io.connect", "notify-", "notify-schedule", "notify-recording", "status.json", "5000", "clearInterval", "once:", "off:"} {
+	for _, want := range []string{
+		"io.connect",
+		"notify-",
+		"notify-schedule",
+		"notify-recording",
+		"status.json",
+		"5000",
+		"pollers[name]",
+		"setConnected(false)",
+		"'reconnect' : 'disconnect'",
+		"emit: function(name)",
+		"clearInterval",
+		"once:",
+		"off:",
+	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("socket.io compat script missing %q: %s", want, body)
 		}

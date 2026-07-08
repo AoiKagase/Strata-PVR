@@ -500,6 +500,7 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 const socketIOCompatScript = `(function(global){
   function later(fn, arg){ if (typeof fn === 'function') { setTimeout(function(){ fn(arg); }, 0); } }
+  function later0(fn){ if (typeof fn === 'function') { setTimeout(fn, 0); } }
   function apiRoot(path) {
     var base = global.location && global.location.pathname ? global.location.pathname.replace(/[^\/]*$/g, '') : '/';
     return base + 'api/' + path;
@@ -531,40 +532,62 @@ const socketIOCompatScript = `(function(global){
   }
   global.io = global.io || {};
   global.io.connect = function(){
-    var timers = [];
+    var pollers = {};
     var handlers = {};
     var snapshots = {};
     var connected = true;
-    function poll(fn, ms) {
-      fn();
-      var timer = setInterval(fn, ms);
-      timers.push(timer);
-      return timer;
-    }
+    var active = true;
+    var socket;
     function fire(name, payload) {
       var list = handlers[name] || [];
       for (var i = 0; i < list.length; i++) { later(list[i], payload); }
     }
-    function pollResource(name, path, ms, always) {
-      poll(function(){
-        if (!connected) { return; }
-        fetchText(path, function(err, body){
-          if (err) { fire('error', err); return; }
-          if (always || snapshots[name] !== body) {
-            snapshots[name] = body;
-            fire(name, parseJSON(body));
-          }
-        });
-      }, ms);
+    function setConnected(value) {
+      if (connected === value) { return; }
+      connected = value;
+      fire(value ? 'reconnect' : 'disconnect');
+      if (value) { fire('connect'); }
     }
-    return {
+    function fetchResource(name, path, always, cb) {
+      fetchText(path, function(err, body){
+        if (err) {
+          fire('error', err);
+          setConnected(false);
+          if (cb) { cb(err); }
+          return;
+        }
+        setConnected(true);
+        if (always || snapshots[name] !== body) {
+          snapshots[name] = body;
+          fire(name, parseJSON(body));
+        }
+        if (cb) { cb(null); }
+      });
+    }
+    function startPollResource(name, path, ms, always) {
+      if (pollers[name]) { return pollers[name]; }
+      var poller = { timer: null, inFlight: false };
+      function tick() {
+        if (!active) { return; }
+        if (poller.inFlight) { return; }
+        poller.inFlight = true;
+        fetchResource(name, path, always, function(){
+          poller.inFlight = false;
+        });
+      }
+      tick();
+      poller.timer = setInterval(tick, ms);
+      pollers[name] = poller;
+      return poller;
+    }
+    socket = {
       on: function(name, cb) {
         if (!handlers[name]) { handlers[name] = []; }
         handlers[name].push(cb);
         if (name === 'connect') { later(cb); return this; }
-        if (name === 'status') { pollResource('status', 'status.json', 5000, true); return this; }
+        if (name === 'status') { startPollResource('status', 'status.json', 5000, true); return this; }
         if (name.indexOf('notify-') === 0) {
-          pollResource(name, resourceForEvent(name) || 'status.json', 5000, false);
+          startPollResource(name, resourceForEvent(name) || 'status.json', 5000, false);
           return this;
         }
         return this;
@@ -583,14 +606,25 @@ const socketIOCompatScript = `(function(global){
         handlers[name] = handlers[name].filter(function(fn){ return fn !== cb; });
         return this;
       },
-      emit: function(){ return this; },
+      emit: function(name){
+        var path = name === 'status' ? 'status.json' : resourceForEvent(name);
+        if (path) { fetchResource(name, path, name === 'status'); }
+        return this;
+      },
       disconnect: function(){
+        active = false;
         connected = false;
-        for (var i = 0; i < timers.length; i++) { clearInterval(timers[i]); }
-        timers = [];
+        for (var name in pollers) {
+          if (Object.prototype.hasOwnProperty.call(pollers, name)) {
+            clearInterval(pollers[name].timer);
+          }
+        }
+        pollers = {};
         fire('disconnect');
       }
     };
+    later0(function(){ fire('connect'); });
+    return socket;
   };
 })(this);
 `

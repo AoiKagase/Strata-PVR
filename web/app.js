@@ -608,12 +608,8 @@
         row.appendChild(actionButton("停止", "録画を停止", function () {
           runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画を停止しますか？");
         }));
-      } else if (name === "watch-recording") {
-        row.appendChild(actionButton("M2TS", "録画中のM2TSを開く", function () {
-          openURL(recordingWatchURL(program, "m2ts"));
-        }));
       } else if (name === "watch-recording-mp4") {
-        row.appendChild(actionButton("MP4", "録画中のMP4変換視聴を開く", function () {
+        row.appendChild(actionButton("視聴", "録画中の番組を変換視聴で開く", function () {
           openMP4Dialog(program.title || program.id || "録画中", function (query) {
             openURL(recordingWatchURL(program, "mp4", query));
           });
@@ -631,25 +627,25 @@
           openURL(recordedWatchURL(program, "m2ts"));
         }));
       } else if (name === "watch-mp4") {
-        row.appendChild(actionButton("MP4", "MP4変換視聴を開く", function () {
+        row.appendChild(actionButton("視聴", "録画済み番組を変換視聴で開く", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
           });
         }));
       } else if (name === "watch-mp4-720p") {
-        row.appendChild(actionButton("MP4 720p", "720p MP4変換視聴を開く", function () {
+        row.appendChild(actionButton("720p視聴", "720p変換視聴を開く", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
           }, "720p");
         }));
       } else if (name === "watch-mp4-low") {
-        row.appendChild(actionButton("MP4低画質", "低ビットレートMP4変換視聴を開く", function () {
+        row.appendChild(actionButton("低画質視聴", "低ビットレート変換視聴を開く", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openURL(recordedWatchURL(program, "mp4", query));
           }, "360p");
         }));
       } else if (name === "watch-mp4-custom") {
-        row.appendChild(actionButton("MP4指定", "再生条件付きMP4変換視聴を開く", function () {
+        row.appendChild(actionButton("詳細視聴", "再生条件付き変換視聴を開く", function () {
           var query = playbackQuery(true);
           if (query === false) {
             return;
@@ -683,7 +679,7 @@
       } else if (name === "watch-channel-mp4") {
         var channelID = programChannelID(program);
         if (channelID) {
-          row.appendChild(actionButton("MP4", "この番組のチャンネルをMP4変換視聴で開く", function () {
+          row.appendChild(actionButton("視聴", "この番組のチャンネルを変換視聴で開く", function () {
             openMP4Dialog(program.title || channelID || "チャンネル", function (query) {
               openURL(channelURL(channelID, "watch", "mp4", query));
             });
@@ -1072,10 +1068,7 @@
     if (!channelID || channelID === "unknown") {
       return row;
     }
-    row.appendChild(actionButton("M2TS", "チャンネルのM2TSを開く", function () {
-      openURL(channelURL(channelID, "watch", "m2ts"));
-    }));
-    row.appendChild(actionButton("MP4", "チャンネルのMP4変換視聴を開く", function () {
+    row.appendChild(actionButton("視聴", "チャンネルを変換視聴で開く", function () {
       openURL(channelURL(channelID, "watch", "mp4"));
     }));
     row.appendChild(actionButton("XSPF", "チャンネルのプレイリストを開く", function () {
@@ -2388,7 +2381,7 @@
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
-    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording", "watch-recording-mp4", "playlist-recording", "preview-recording", "stop"]);
+    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"]);
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
     renderList("reserveListPage", state.reserves, "予約はありません", 100, ["skip", "unskip", "unreserve"]);
     renderList("recordedList", state.recorded.slice().reverse(), "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
