@@ -919,6 +919,22 @@ button:focus-visible {
   font-size: 13px;
 }
 
+.list-filter-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 0 0 12px;
+}
+
+.list-filter-summary {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .config-json-editor {
   min-height: 360px;
   margin-top: 12px;
@@ -1006,6 +1022,14 @@ button:focus-visible {
   .media-controls input,
   .media-controls select {
     max-width: none;
+  }
+
+  .list-filter-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .list-filter-summary {
+    justify-self: start;
   }
 
   .mp4-options {

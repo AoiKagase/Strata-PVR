@@ -32,6 +32,10 @@
     editingRuleIndex: null,
     editingRuleFormIndex: null,
     selectedProgram: null,
+    listFilters: {
+      recorded: { query: "", category: "" },
+      reserves: { query: "", category: "" }
+    },
     configEditorDirty: false
   };
 
@@ -224,6 +228,94 @@
       return String(program && program.type || "");
     }
     return String(program.channel.type || program.channel.channelType || program.type || "");
+  }
+
+  function programCategory(program) {
+    return String(program && (program.category || program.genre || "") || "");
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || "").toLocaleLowerCase("ja").trim();
+  }
+
+  function programSearchText(program) {
+    return [
+      program && program.id,
+      programTitle(program || {}),
+      program && program.title,
+      program && program.fullTitle,
+      program && program.detail,
+      program && program.description,
+      programCategory(program),
+      channelName(program || {}),
+      programChannelID(program || {}),
+      programChannelType(program || {})
+    ].filter(Boolean).join(" ");
+  }
+
+  function filteredPrograms(items, filterName) {
+    var filter = state.listFilters[filterName] || {};
+    var query = normalizeSearchText(filter.query);
+    var category = filter.category || "";
+    return (items || []).filter(function (program) {
+      if (category && programCategory(program) !== category) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return normalizeSearchText(programSearchText(program)).indexOf(query) >= 0;
+    });
+  }
+
+  function listCategories(items) {
+    var seen = {};
+    var values = [];
+    (items || []).forEach(function (program) {
+      var category = programCategory(program);
+      if (category && !seen[category]) {
+        seen[category] = true;
+        values.push(category);
+      }
+    });
+    return values.sort(function (a, b) {
+      return a.localeCompare(b, "ja");
+    });
+  }
+
+  function updateListCategoryOptions(selectID, items, filterName) {
+    var select = byId(selectID);
+    if (!select) {
+      return;
+    }
+    var filter = state.listFilters[filterName] || {};
+    var current = filter.category || "";
+    select.innerHTML = "";
+    var all = document.createElement("option");
+    all.value = "";
+    all.textContent = "全ジャンル";
+    select.appendChild(all);
+    listCategories(items).forEach(function (category) {
+      var option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      select.appendChild(option);
+    });
+    if (current && !Array.prototype.some.call(select.options, function (option) {
+      return option.value === current;
+    })) {
+      filter.category = "";
+      current = "";
+    }
+    select.value = current;
+  }
+
+  function updateListFilterSummary(id, shown, total) {
+    var root = byId(id);
+    if (!root) {
+      return;
+    }
+    root.textContent = shown === total ? total + "件" : shown + " / " + total + "件";
   }
 
   function scheduleChannelID(channel) {
@@ -2381,11 +2473,20 @@
       badge.className = alive ? "status-badge ok" : "status-badge";
     }
 
+    var filteredReserves = filteredPrograms(state.reserves, "reserves");
+    var recordedNewestFirst = state.recorded.slice().reverse();
+    var filteredRecorded = filteredPrograms(recordedNewestFirst, "recorded");
+
+    updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
+    updateListCategoryOptions("recordedListCategory", state.recorded, "recorded");
+    updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
+    updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
+
     renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "playlist-recording", "preview-recording", "stop"]);
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
-    renderList("reserveListPage", state.reserves, "予約はありません", 100, ["skip", "unskip", "unreserve"]);
-    renderList("recordedList", state.recorded.slice().reverse(), "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
-    renderList("recordedListPage", state.recorded.slice().reverse(), "録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
+    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
+    renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
+    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-m2ts", "watch-mp4", "watch-mp4-720p", "watch-mp4-low", "watch-mp4-custom", "watch-m2ts-offset", "playlist", "download", "preview-recorded", "delete-recorded"]);
     renderOnAirList();
     renderSchedule();
     renderChannelPrograms();
@@ -2450,12 +2551,31 @@
     }).catch(showError);
   }
 
+  function bindListFilter(filterName, queryID, categoryID) {
+    var query = byId(queryID);
+    var category = byId(categoryID);
+    if (query) {
+      query.addEventListener("input", function () {
+        state.listFilters[filterName].query = query.value;
+        render();
+      });
+    }
+    if (category) {
+      category.addEventListener("change", function () {
+        state.listFilters[filterName].category = category.value;
+        render();
+      });
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initNavigation();
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
     }
+    bindListFilter("reserves", "reserveListQuery", "reserveListCategory");
+    bindListFilter("recorded", "recordedListQuery", "recordedListCategory");
     var mp4Preset = byId("mp4Preset");
     if (mp4Preset) {
       mp4Preset.addEventListener("change", function () {

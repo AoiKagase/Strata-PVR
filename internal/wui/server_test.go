@@ -462,6 +462,44 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardListFilters(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "index.html"): {
+			`id="reserveListQuery"`,
+			`id="reserveListCategory"`,
+			`id="recordedListQuery"`,
+			`id="recordedListCategory"`,
+			`list-filter-summary`,
+		},
+		filepath.Join("..", "..", "web", "app.js"): {
+			`listFilters`,
+			`filteredPrograms`,
+			`programSearchText`,
+			`updateListCategoryOptions`,
+			`bindListFilter("reserves"`,
+			`bindListFilter("recorded"`,
+			`条件に一致する予約はありません`,
+			`条件に一致する録画済み番組はありません`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.list-filter-controls`,
+			`.list-filter-summary`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

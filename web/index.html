@@ -188,6 +188,19 @@
           <p>手動予約、自動予約、スキップ状態を確認します。</p>
         </div>
       </div>
+      <div class="list-filter-controls" aria-label="予約フィルタ">
+        <label class="control-field" for="reserveListQuery">
+          <span>検索</span>
+          <input id="reserveListQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
+        </label>
+        <label class="control-field" for="reserveListCategory">
+          <span>ジャンル</span>
+          <select id="reserveListCategory">
+            <option value="">全ジャンル</option>
+          </select>
+        </label>
+        <span id="reserveListFilterSummary" class="list-filter-summary">0件</span>
+      </div>
       <div id="reserveListPage" class="list empty">予約はありません</div>
     </section>
 
@@ -197,6 +210,19 @@
           <h2>録画済み</h2>
           <p>録画済み番組の再生、変換、ダウンロード、削除を行います。</p>
         </div>
+      </div>
+      <div class="list-filter-controls" aria-label="録画済みフィルタ">
+        <label class="control-field" for="recordedListQuery">
+          <span>検索</span>
+          <input id="recordedListQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
+        </label>
+        <label class="control-field" for="recordedListCategory">
+          <span>ジャンル</span>
+          <select id="recordedListCategory">
+            <option value="">全ジャンル</option>
+          </select>
+        </label>
+        <span id="recordedListFilterSummary" class="list-filter-summary">0件</span>
       </div>
       <div id="recordedListPage" class="list empty">録画済み番組はありません</div>
     </section>
