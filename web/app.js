@@ -459,6 +459,61 @@
     });
   }
 
+  function isEditableTarget(target) {
+    if (!target) {
+      return false;
+    }
+    var name = (target.tagName || "").toLowerCase();
+    return name === "input" || name === "select" || name === "textarea" || target.isContentEditable;
+  }
+
+  function focusCurrentSearch() {
+    var view = currentView();
+    var focusByView = {
+      "reserves": "reserveListQuery",
+      "recorded": "recordedListQuery",
+      "rules": "ruleTitle",
+      "settings": "configEditor"
+    };
+    var control = byId(focusByView[view]);
+    if (!control && view === "schedule") {
+      control = byId("scheduleChannel");
+    }
+    if (control && typeof control.focus === "function") {
+      control.focus();
+      if (typeof control.select === "function") {
+        control.select();
+      }
+    }
+  }
+
+  function initKeyboardShortcuts() {
+    var viewShortcuts = {
+      "1": "dashboard",
+      "2": "schedule",
+      "3": "reserves",
+      "4": "recorded",
+      "5": "rules",
+      "6": "logs",
+      "7": "settings"
+    };
+    window.addEventListener("keydown", function (event) {
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) {
+        return;
+      }
+      if (viewShortcuts[event.key]) {
+        event.preventDefault();
+        window.location.hash = viewShortcuts[event.key];
+      } else if (event.key === "r" || event.key === "R") {
+        event.preventDefault();
+        refresh();
+      } else if (event.key === "/") {
+        event.preventDefault();
+        focusCurrentSearch();
+      }
+    });
+  }
+
   function closeConfirmDialog(result) {
     var dialog = byId("confirmDialog");
     if (pendingConfirmResolve) {
@@ -866,6 +921,23 @@
   function renderProgramRow(program, actions, showChannel) {
     var item = document.createElement("article");
     item.className = "program-row";
+    item.tabIndex = 0;
+    item.setAttribute("role", "group");
+    item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
+    item.addEventListener("dblclick", function (event) {
+      if (!isEditableTarget(event.target)) {
+        openProgramDialog(program);
+      }
+    });
+    item.addEventListener("keydown", function (event) {
+      if (event.target !== item) {
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openProgramDialog(program);
+      }
+    });
 
     var title = document.createElement("button");
     title.type = "button";
@@ -893,6 +965,23 @@
   function renderProgramRowWithChannelLink(program, actions) {
     var item = document.createElement("article");
     item.className = "program-row";
+    item.tabIndex = 0;
+    item.setAttribute("role", "group");
+    item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
+    item.addEventListener("dblclick", function (event) {
+      if (!isEditableTarget(event.target)) {
+        openProgramDialog(program);
+      }
+    });
+    item.addEventListener("keydown", function (event) {
+      if (event.target !== item) {
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openProgramDialog(program);
+      }
+    });
 
     var title = document.createElement("button");
     title.type = "button";
@@ -2641,6 +2730,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     initNavigation();
+    initKeyboardShortcuts();
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);

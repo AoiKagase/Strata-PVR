@@ -559,6 +559,38 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function initKeyboardShortcuts()`,
+			`isEditableTarget(event.target)`,
+			`"1": "dashboard"`,
+			`"7": "settings"`,
+			`event.key === "/"`,
+			`focusCurrentSearch`,
+			`event.key === "r" || event.key === "R"`,
+			`addEventListener("dblclick"`,
+			`event.key === "Enter" || event.key === " "`,
+			`initKeyboardShortcuts();`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-row:focus-visible`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestSocketIOCompatScript(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
