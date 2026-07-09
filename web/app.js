@@ -2,12 +2,19 @@
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
   var listFiltersStorageKey = "strata-pvr.listFilters";
   var dashboardOnAirVisibleStorageKey = "strata-pvr.dashboardOnAirVisible";
+  var scheduleZoomStorageKey = "strata-pvr.scheduleZoomLevel";
   var scheduleWindowHoursByMode = {
     "day": 24,
     "three-days": 72,
     "all": 0
   };
-  var scheduleMinutePixels = 1.15;
+  var scheduleZoomLevels = [
+    { id: "wide", label: "広域", minutePixels: 0.75 },
+    { id: "standard", label: "標準", minutePixels: 1.15 },
+    { id: "detail", label: "詳細", minutePixels: 2.4 },
+    { id: "precise", label: "精密", minutePixels: 5 }
+  ];
+  var scheduleDefaultZoomLevel = "standard";
   var scheduleMinimumProgramMinutes = 30;
   var programDialogReturnFocus = null;
   var mp4DialogReturnFocus = null;
@@ -34,6 +41,7 @@
     scheduleHiddenChannels: loadHiddenChannels(),
     dashboardOnAirVisible: loadDashboardOnAirVisible(),
     scheduleWindowMode: "all",
+    scheduleZoomLevel: loadScheduleZoomLevel(),
     channelProgramsChannel: "",
     channelProgramsGenre: "",
     channelProgramsSort: "startAsc",
@@ -75,6 +83,42 @@
       return normalizeHiddenChannels(values);
     } catch (error) {
       return [];
+    }
+  }
+
+  function scheduleZoomIndex(level) {
+    for (var i = 0; i < scheduleZoomLevels.length; i += 1) {
+      if (scheduleZoomLevels[i].id === level) {
+        return i;
+      }
+    }
+    return scheduleZoomIndex(scheduleDefaultZoomLevel);
+  }
+
+  function scheduleZoomConfig() {
+    return scheduleZoomLevels[scheduleZoomIndex(state.scheduleZoomLevel)] || scheduleZoomLevels[scheduleZoomIndex(scheduleDefaultZoomLevel)];
+  }
+
+  function scheduleMinutePixels() {
+    return scheduleZoomConfig().minutePixels;
+  }
+
+  function loadScheduleZoomLevel() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(scheduleZoomStorageKey) : "";
+      return scheduleZoomLevels.some(function (level) { return level.id === raw; }) ? raw : scheduleDefaultZoomLevel;
+    } catch (error) {
+      return scheduleDefaultZoomLevel;
+    }
+  }
+
+  function saveScheduleZoomLevel() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(scheduleZoomStorageKey, state.scheduleZoomLevel);
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
     }
   }
 
@@ -1849,6 +1893,55 @@
     return scheduleWindowHoursByMode.all;
   }
 
+  function scheduleCardMinimumHeight(durationHeight) {
+    if (state.scheduleZoomLevel === "precise") {
+      return Math.max(24, durationHeight);
+    }
+    if (state.scheduleZoomLevel === "detail") {
+      return Math.max(12, durationHeight);
+    }
+    return durationHeight;
+  }
+
+  function syncScheduleZoomControls() {
+    var config = scheduleZoomConfig();
+    var index = scheduleZoomIndex(config.id);
+    var label = byId("scheduleZoomLabel");
+    var out = byId("scheduleZoomOutButton");
+    var input = byId("scheduleZoomInButton");
+    if (label) {
+      label.textContent = config.label;
+    }
+    if (out) {
+      out.disabled = index <= 0;
+    }
+    if (input) {
+      input.disabled = index >= scheduleZoomLevels.length - 1;
+    }
+  }
+
+  function setScheduleZoomLevel(nextLevel) {
+    var currentIndex = scheduleZoomIndex(state.scheduleZoomLevel);
+    var nextIndex = scheduleZoomIndex(nextLevel);
+    if (nextIndex === currentIndex) {
+      syncScheduleZoomControls();
+      return;
+    }
+    var scroll = document.querySelector(".schedule-guide-scroll");
+    var minuteOffset = scroll ? scroll.scrollTop / scheduleMinutePixels() : 0;
+    state.scheduleZoomLevel = scheduleZoomLevels[nextIndex].id;
+    saveScheduleZoomLevel();
+    state.scheduleGuideScroll.top = Math.round(minuteOffset * scheduleMinutePixels());
+    renderSchedule();
+    syncScheduleZoomControls();
+  }
+
+  function changeScheduleZoom(delta) {
+    var index = scheduleZoomIndex(state.scheduleZoomLevel);
+    var nextIndex = Math.max(0, Math.min(scheduleZoomLevels.length - 1, index + delta));
+    setScheduleZoomLevel(scheduleZoomLevels[nextIndex].id);
+  }
+
   function channelProgramGroups() {
     var groups = [];
     (state.schedule || []).forEach(function (channel, index) {
@@ -2041,6 +2134,7 @@
     renderScheduleChannelOptions(channels);
     renderScheduleFilterOptions(channels);
     syncScheduleFilterControls();
+    syncScheduleZoomControls();
     root.innerHTML = "";
     if (!channelGroups.length) {
       renderScheduleEmpty(root, channels);
@@ -2149,7 +2243,7 @@
   function renderScheduleGuide(root, channelGroups) {
     var firstStart = null;
     var lastEnd = null;
-    var minuteHeight = scheduleMinutePixels;
+    var minuteHeight = scheduleMinutePixels();
 
     channelGroups.forEach(function (group) {
       group.programs.forEach(function (program) {
@@ -2172,15 +2266,24 @@
     scroll.className = "schedule-guide-scroll";
     scroll.setAttribute("role", "region");
     scroll.setAttribute("aria-label", "番組表");
+    scroll.tabIndex = 0;
     scroll.addEventListener("scroll", function () {
       state.scheduleGuideScroll = {
         left: scroll.scrollLeft,
         top: scroll.scrollTop
       };
     });
+    scroll.addEventListener("wheel", function (event) {
+      if (!event.ctrlKey) {
+        return;
+      }
+      event.preventDefault();
+      changeScheduleZoom(event.deltaY > 0 ? -1 : 1);
+    }, { passive: false });
 
     var grid = document.createElement("div");
     grid.className = "schedule-guide-grid";
+    grid.setAttribute("data-schedule-zoom", state.scheduleZoomLevel);
     grid.style.gridTemplateColumns = "48px repeat(" + channelGroups.length + ", minmax(132px, 1fr))";
     grid.style.minWidth = (48 + channelGroups.length * 132) + "px";
 
@@ -2320,10 +2423,14 @@
     card.classList.toggle("reserved", Boolean(program.isReserved && !program.isRecording));
     card.classList.toggle("has-state", Boolean(stateLabel));
     var end = programEnd(program);
+    var durationMinutes = Math.max(1, (end - program.start) / 60000);
     var top = Math.max(0, Math.round(((program.start - timelineStart) / 60000) * minuteHeight));
-    var height = Math.max(24, Math.round(((end - program.start) / 60000) * minuteHeight));
+    var durationHeight = Math.max(1, Math.round(durationMinutes * minuteHeight));
+    var height = Math.round(scheduleCardMinimumHeight(durationHeight));
     card.style.top = top + "px";
     card.style.height = height + "px";
+    card.classList.toggle("short", durationMinutes < 15);
+    card.classList.toggle("very-short", durationMinutes < 8);
     card.classList.toggle("selected", isActiveProgram(program));
     card.title = [programTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
     card.tabIndex = 0;
@@ -4426,6 +4533,30 @@
         renderSchedule();
       });
     }
+    var scheduleZoomOutButton = byId("scheduleZoomOutButton");
+    if (scheduleZoomOutButton) {
+      scheduleZoomOutButton.addEventListener("click", function () {
+        changeScheduleZoom(-1);
+      });
+    }
+    var scheduleZoomInButton = byId("scheduleZoomInButton");
+    if (scheduleZoomInButton) {
+      scheduleZoomInButton.addEventListener("click", function () {
+        changeScheduleZoom(1);
+      });
+    }
+    document.addEventListener("keydown", function (event) {
+      if (!event.ctrlKey || !document.activeElement || !document.activeElement.closest(".schedule-guide-scroll")) {
+        return;
+      }
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        changeScheduleZoom(1);
+      } else if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        changeScheduleZoom(-1);
+      }
+    });
     var channelProgramsGenre = byId("channelProgramsGenre");
     if (channelProgramsGenre) {
       channelProgramsGenre.addEventListener("change", function () {

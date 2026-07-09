@@ -194,6 +194,35 @@ body {
   font-size: 12px;
 }
 
+.schedule-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.schedule-zoom-controls button {
+  min-width: 36px;
+  padding: 0 8px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.schedule-zoom-label {
+  display: inline-grid;
+  align-items: center;
+  min-height: 36px;
+  min-width: 42px;
+  padding: 0 6px;
+  border: 1px solid #c7d2d8;
+  border-radius: 6px;
+  background: #f8fbfc;
+  color: #33444c;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
 h1,
 h2,
 p {
@@ -936,7 +965,7 @@ summary:focus-visible,
   display: grid;
   align-content: start;
   gap: 0;
-  min-height: 24px;
+  min-height: 0;
   overflow: hidden;
   padding: 3px 5px;
   border: 1px solid oklch(72% 0.028 235);
@@ -944,6 +973,14 @@ summary:focus-visible,
   background: var(--panel-schedule);
   color: var(--ink);
   cursor: pointer;
+}
+
+.schedule-card.short {
+  padding: 2px 4px;
+}
+
+.schedule-card.very-short {
+  padding-block: 0;
 }
 
 .schedule-card:hover {
@@ -1066,6 +1103,37 @@ summary:focus-visible,
   font-size: 10px;
   line-height: 1.08;
   overflow-wrap: anywhere;
+}
+
+.schedule-card.short strong {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.schedule-card.very-short .schedule-card-time,
+.schedule-card.very-short .schedule-card-meta {
+  display: none;
+}
+
+.schedule-guide-grid[data-schedule-zoom="wide"] .schedule-card,
+.schedule-guide-grid[data-schedule-zoom="standard"] .schedule-card {
+  border-radius: 2px;
+}
+
+.schedule-guide-grid[data-schedule-zoom="wide"] .schedule-card.short,
+.schedule-guide-grid[data-schedule-zoom="standard"] .schedule-card.short {
+  padding: 0 4px;
+}
+
+.schedule-guide-grid[data-schedule-zoom="wide"] .schedule-card.short strong,
+.schedule-guide-grid[data-schedule-zoom="standard"] .schedule-card.short strong {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.schedule-guide-grid[data-schedule-zoom="detail"] .schedule-card.short strong,
+.schedule-guide-grid[data-schedule-zoom="precise"] .schedule-card.short strong {
+  font-size: 10px;
 }
 
 .channel-actions {
@@ -1903,10 +1971,27 @@ body.view-schedule .schedule-guide-scroll {
   border-radius: 0;
 }
 
+body.view-schedule .schedule-zoom-controls {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 6;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid #aebfc7;
+  border-radius: 8px;
+  background: #dfe9ec;
+}
+
 @media (max-width: 520px) {
   body.view-schedule .schedule-guide-scroll {
     height: calc(100vh - 255px);
     max-height: calc(100vh - 255px);
+  }
+
+  body.view-schedule .schedule-zoom-controls {
+    left: 8px;
+    bottom: 8px;
   }
 }
 
