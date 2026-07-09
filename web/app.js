@@ -219,6 +219,12 @@
     }
   }
 
+  function toggleClass(node, className, enabled) {
+    if (node) {
+      node.classList.toggle(className, enabled);
+    }
+  }
+
   function iconUse(iconID) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
@@ -1197,6 +1203,7 @@
     text(byId("scheduleRecordingSummary"), "録画中 " + state.recording.length);
     text(byId("scheduleReserveSummary"), "予約 " + state.reserves.length);
     text(byId("scheduleConflictSummary"), "競合 " + conflicts);
+    toggleClass(byId("scheduleConflictSummary"), "has-conflicts", conflicts > 0);
   }
 
   function initNavigation() {
@@ -4873,8 +4880,11 @@
       reserves: programByID(state.reserves),
       recording: programByID(state.recording)
     };
+    var conflicts = reserveConflictCount();
+    var conflictCount = byId("conflictCount");
     text(byId("reserveCount"), String(state.reserves.length));
-    text(byId("conflictCount"), String(reserveConflictCount()));
+    text(conflictCount, String(conflicts));
+    toggleClass(conflictCount ? conflictCount.closest(".metric") : null, "has-conflicts", conflicts > 0);
     text(byId("recordingCount"), String(state.recording.length));
     text(byId("recordedCount"), String(state.recorded.length));
     text(byId("channelCount"), String(state.schedule.length));

@@ -220,8 +220,14 @@ body {
 
 .schedule-conflict-summary {
   padding: 3px 6px;
-  border: 1px solid var(--warn);
+  border: 1px solid #c7d2d8;
   border-radius: 4px;
+  background: #f8fbfc;
+  color: #33444c;
+}
+
+.schedule-conflict-summary.has-conflicts {
+  border-color: var(--warn);
   background: var(--warn-soft);
   color: var(--warn-strong);
 }
@@ -415,17 +421,17 @@ h3 {
   line-height: 1;
 }
 
-.metric-conflict {
+.metric-conflict.has-conflicts {
   border-color: var(--warn);
   background: var(--warn-soft);
 }
 
-.metric-conflict .metric-label,
-.metric-conflict strong {
+.metric-conflict.has-conflicts .metric-label,
+.metric-conflict.has-conflicts strong {
   color: var(--warn-strong);
 }
 
-.metric-conflict:hover {
+.metric-conflict.has-conflicts:hover {
   border-color: var(--warn-strong);
   background: oklch(91% 0.055 75);
 }
