@@ -1,0 +1,26 @@
+[Unit]
+Description=Strata PVR operator
+Documentation=https://github.com/Chinachu/Chinachu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/strata-pvr
+ExecStart=/opt/strata-pvr/strata-pvr service operator execute
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=30s
+
+# Uncomment if you want systemd, rather than Strata PVR config uid/gid, to set
+# the service account. Ensure /opt/strata-pvr, data/, log/, and recorded files
+# are writable by this user.
+# User=strata-pvr
+# Group=strata-pvr
+
+NoNewPrivileges=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

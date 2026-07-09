@@ -1,0 +1,20 @@
+[Unit]
+Description=Strata PVR scheduler
+Documentation=https://github.com/Chinachu/Chinachu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/strata-pvr
+ExecStart=/opt/strata-pvr/strata-pvr service scheduler execute
+TimeoutStartSec=30min
+
+# The scheduler is a short-lived job. Add User=/Group= here only if the working
+# directory, data/, log/, and configured recorded directory are writable by that
+# user.
+# User=strata-pvr
+# Group=strata-pvr
+
+NoNewPrivileges=false
+PrivateTmp=true
