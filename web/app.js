@@ -2443,7 +2443,6 @@
     if (!root) {
       return;
     }
-    syncOnAirPanelVisibility();
     var groups = visibleChannelProgramGroups().sort(function (a, b) {
       return compareScheduleChannelGroups(a, b);
     });
