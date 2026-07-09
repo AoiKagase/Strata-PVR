@@ -1368,6 +1368,25 @@ summary:focus-visible,
   padding: 14px 16px 16px;
 }
 
+.program-copy-actions {
+  flex: 1 0 100%;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.copy-action {
+  border-color: #d3dde2;
+  background: #fbfcfd;
+  color: #33444c;
+}
+
+.copy-action:hover {
+  border-color: #9eb1ba;
+  background: #eef3f5;
+  color: var(--ink);
+}
+
 .mp4-dialog-actions {
   justify-content: flex-end;
 }

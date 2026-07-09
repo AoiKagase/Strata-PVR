@@ -53,6 +53,7 @@
     editingRuleFormIndex: null,
     selectedProgram: null,
     activeProgramID: "",
+    transientStatusTimer: null,
     currentView: "",
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
@@ -986,6 +987,62 @@
     button.title = title || label;
     button.textContent = label;
     button.addEventListener("click", fn);
+    return button;
+  }
+
+  function copyTextToClipboard(value) {
+    var stringValue = String(value || "");
+    if (!stringValue) {
+      return Promise.reject(new Error("コピーする内容がありません"));
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(stringValue);
+    }
+    return new Promise(function (resolve, reject) {
+      var input = document.createElement("textarea");
+      input.value = stringValue;
+      input.setAttribute("readonly", "readonly");
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      input.style.top = "0";
+      document.body.appendChild(input);
+      input.select();
+      try {
+        if (document.execCommand("copy")) {
+          resolve();
+        } else {
+          reject(new Error("コピーに失敗しました"));
+        }
+      } catch (error) {
+        reject(error);
+      } finally {
+        document.body.removeChild(input);
+      }
+    });
+  }
+
+  function setTransientStatus(message, className) {
+    var badge = byId("statusBadge");
+    if (badge) {
+      badge.textContent = message;
+      badge.className = className || "status-badge ok";
+    }
+    window.clearTimeout(state.transientStatusTimer);
+    state.transientStatusTimer = window.setTimeout(function () {
+      state.transientStatusTimer = null;
+      updateOperationalStatus();
+    }, 1600);
+  }
+
+  function copyProgramFieldButton(label, title, value) {
+    var button = actionButton(label, title, function () {
+      copyTextToClipboard(value).then(function () {
+        setTransientStatus(label + "しました", "status-badge ok");
+      }).catch(function (error) {
+        setTransientStatus(error && error.message ? error.message : "コピーに失敗しました", "status-badge error");
+      });
+    });
+    button.className += " copy-action";
     return button;
   }
 
@@ -2047,6 +2104,28 @@
     }
   }
 
+  function renderProgramCopyActions(item, program) {
+    if (!item || !program) {
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "row-actions program-copy-actions";
+    if (program.id) {
+      row.appendChild(copyProgramFieldButton("IDコピー", "番組IDをコピー", program.id));
+    }
+    var title = programTitle(program);
+    if (title) {
+      row.appendChild(copyProgramFieldButton("タイトルコピー", "番組タイトルをコピー", title));
+    }
+    var description = program.detail || program.description || "";
+    if (description) {
+      row.appendChild(copyProgramFieldButton("説明コピー", "番組説明をコピー", description));
+    }
+    if (row.childNodes.length > 0) {
+      item.appendChild(row);
+    }
+  }
+
   function recordedActionButton(name, program, className) {
     if (name === "watch-mp4") {
       return actionButton("視聴", "録画済み番組を視聴", function () {
@@ -2912,6 +2991,7 @@
     if (actions) {
       actions.innerHTML = "";
       renderActions(actions, program, programDialogActions(program));
+      renderProgramCopyActions(actions, program);
     }
     programDialogReturnFocus = rememberFocus();
     if (dialog && dialog.showModal) {
