@@ -54,10 +54,8 @@
     channelProgramsSort: "startAsc",
     editingRuleIndex: null,
     editingRuleFormIndex: null,
-    selectedRuleIndexes: {},
     selectedProgram: null,
     activeProgramID: "",
-    transientStatusTimer: null,
     currentView: "",
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
@@ -135,8 +133,7 @@
     return {
       channelPrograms: { query: "", category: "", sort: "startAsc" },
       rules: { query: "", state: "", sort: "indexAsc" },
-      recorded: { query: "", category: "", sort: "startDesc", title: "", description: "", type: "", programID: "", channelID: "", startHour: "", endHour: "" },
-      schedule: { title: "", description: "", programID: "", channelID: "", startHour: "", endHour: "" },
+      recorded: { query: "", category: "", sort: "startDesc" },
       reserves: { query: "", category: "", sort: "startAsc" }
     };
   }
@@ -743,62 +740,7 @@
       if (category && programCategory(program) !== category) {
         return false;
       }
-      if (!query) {
-        return matchesProgramAdvancedFilter(program, filter);
-      }
-      return normalizeSearchText(programSearchText(program)).indexOf(query) >= 0 && matchesProgramAdvancedFilter(program, filter);
-    });
-  }
-
-  function matchesProgramAdvancedFilter(program, filter) {
-    filter = filter || {};
-    if (!program) {
-      return false;
-    }
-    if (filter.title && normalizeSearchText(programTitle(program)).indexOf(normalizeSearchText(filter.title)) < 0) {
-      return false;
-    }
-    if (filter.description && normalizeSearchText(program.detail || program.description || "").indexOf(normalizeSearchText(filter.description)) < 0) {
-      return false;
-    }
-    if (filter.type && programChannelType(program) !== filter.type) {
-      return false;
-    }
-    if (filter.programID && String(program.id || "") !== String(filter.programID)) {
-      return false;
-    }
-    if (filter.channelID && programChannelID(program) !== filter.channelID) {
-      return false;
-    }
-    return matchesProgramHourFilter(program, filter.startHour, filter.endHour);
-  }
-
-  function matchesProgramHourFilter(program, startHour, endHour) {
-    if (startHour === "" && endHour === "") {
-      return true;
-    }
-    var ruleStart = startHour === "" ? 0 : Number(startHour);
-    var ruleEnd = endHour === "" ? 24 : Number(endHour);
-    if (!Number.isFinite(ruleStart) || !Number.isFinite(ruleEnd)) {
-      return true;
-    }
-    ruleStart = Math.max(0, Math.min(23, Math.floor(ruleStart)));
-    ruleEnd = Math.max(1, Math.min(24, Math.floor(ruleEnd)));
-    var start = new Date(program.start || 0).getHours();
-    var end = new Date(programEnd(program)).getHours();
-    if (start > end) {
-      end += 24;
-    }
-    if (ruleStart > ruleEnd) {
-      return !((ruleStart > start) && (ruleEnd < end));
-    }
-    return !(ruleStart > start || ruleEnd < end);
-  }
-
-  function hasAdvancedProgramFilter(filterName) {
-    var filter = state.listFilters[filterName] || {};
-    return ["title", "description", "type", "programID", "channelID", "startHour", "endHour"].some(function (key) {
-      return Boolean(filter[key]);
+      return !query || normalizeSearchText(programSearchText(program)).indexOf(query) >= 0;
     });
   }
 
@@ -858,51 +800,6 @@
       }
       return a.index - b.index;
     });
-  }
-
-  function selectedRuleIndexes() {
-    return Object.keys(state.selectedRuleIndexes || {}).filter(function (key) {
-      return state.selectedRuleIndexes[key];
-    }).map(function (key) {
-      return Number(key);
-    }).filter(function (index) {
-      return Number.isInteger(index);
-    }).sort(function (a, b) {
-      return a - b;
-    });
-  }
-
-  function clearInvalidRuleSelections() {
-    var selected = state.selectedRuleIndexes || {};
-    Object.keys(selected).forEach(function (key) {
-      var index = Number(key);
-      if (!Number.isInteger(index) || index < 0 || index >= state.rules.length) {
-        delete selected[key];
-      }
-    });
-  }
-
-  function updateRuleBulkActions(visibleEntries) {
-    var selectAll = byId("ruleSelectAll");
-    var summary = byId("ruleBulkSummary");
-    var deleteButton = byId("deleteSelectedRulesButton");
-    var visible = visibleEntries || [];
-    var selected = selectedRuleIndexes();
-    var visibleSelected = visible.filter(function (entry) {
-      return Boolean(state.selectedRuleIndexes[entry.index]);
-    }).length;
-    if (summary) {
-      summary.textContent = selected.length + "件選択";
-    }
-    if (deleteButton) {
-      deleteButton.disabled = selected.length === 0;
-      deleteButton.title = selected.length ? selected.length + "件のルールを削除" : "削除するルールを選択してください";
-    }
-    if (selectAll) {
-      selectAll.disabled = visible.length === 0;
-      selectAll.checked = visible.length > 0 && visibleSelected === visible.length;
-      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
-    }
   }
 
   function listCategories(items) {
@@ -1078,62 +975,6 @@
     button.title = title || label;
     button.textContent = label;
     button.addEventListener("click", fn);
-    return button;
-  }
-
-  function copyTextToClipboard(value) {
-    var stringValue = String(value || "");
-    if (!stringValue) {
-      return Promise.reject(new Error("コピーする内容がありません"));
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(stringValue);
-    }
-    return new Promise(function (resolve, reject) {
-      var input = document.createElement("textarea");
-      input.value = stringValue;
-      input.setAttribute("readonly", "readonly");
-      input.style.position = "fixed";
-      input.style.left = "-9999px";
-      input.style.top = "0";
-      document.body.appendChild(input);
-      input.select();
-      try {
-        if (document.execCommand("copy")) {
-          resolve();
-        } else {
-          reject(new Error("コピーに失敗しました"));
-        }
-      } catch (error) {
-        reject(error);
-      } finally {
-        document.body.removeChild(input);
-      }
-    });
-  }
-
-  function setTransientStatus(message, className) {
-    var badge = byId("statusBadge");
-    if (badge) {
-      badge.textContent = message;
-      badge.className = className || "status-badge ok";
-    }
-    window.clearTimeout(state.transientStatusTimer);
-    state.transientStatusTimer = window.setTimeout(function () {
-      state.transientStatusTimer = null;
-      updateOperationalStatus();
-    }, 1600);
-  }
-
-  function copyProgramFieldButton(label, title, value) {
-    var button = actionButton(label, title, function () {
-      copyTextToClipboard(value).then(function () {
-        setTransientStatus(label + "しました", "status-badge ok");
-      }).catch(function (error) {
-        setTransientStatus(error && error.message ? error.message : "コピーに失敗しました", "status-badge error");
-      });
-    });
-    button.className += " copy-action";
     return button;
   }
 
@@ -2112,28 +1953,6 @@
     }
   }
 
-  function renderProgramCopyActions(item, program) {
-    if (!item || !program) {
-      return;
-    }
-    var row = document.createElement("div");
-    row.className = "row-actions program-copy-actions";
-    if (program.id) {
-      row.appendChild(copyProgramFieldButton("IDコピー", "番組IDをコピー", program.id));
-    }
-    var title = programTitle(program);
-    if (title) {
-      row.appendChild(copyProgramFieldButton("タイトルコピー", "番組タイトルをコピー", title));
-    }
-    var description = program.detail || program.description || "";
-    if (description) {
-      row.appendChild(copyProgramFieldButton("説明コピー", "番組説明をコピー", description));
-    }
-    if (row.childNodes.length > 0) {
-      item.appendChild(row);
-    }
-  }
-
   function recordedActionButton(name, program, className) {
     if (name === "watch-mp4") {
       return actionButton("視聴", "録画済み番組を視聴", function () {
@@ -2741,9 +2560,6 @@
         if (item.channel) {
           item.channel.name = scheduleProgramChannelName(item, displayName);
         }
-        if (!matchesProgramAdvancedFilter(item, state.listFilters.schedule || {})) {
-          return;
-        }
         channelMeta[groupID].programs.push(item);
       });
     });
@@ -2796,9 +2612,6 @@
     }
     if (state.scheduleHiddenChannels.length) {
       labels.push("非表示: " + state.scheduleHiddenChannels.length + "ch");
-    }
-    if (hasAdvancedProgramFilter("schedule")) {
-      labels.push("詳細検索");
     }
     return labels;
   }
@@ -3114,7 +2927,6 @@
     if (actions) {
       actions.innerHTML = "";
       renderActions(actions, program, programDialogActions(program));
-      renderProgramCopyActions(actions, program);
     }
     programDialogReturnFocus = rememberFocus();
     if (dialog && dialog.showModal) {
@@ -3368,13 +3180,10 @@
       return;
     }
     root.innerHTML = "";
-    clearInvalidRuleSelections();
     if (!state.rules || state.rules.length === 0) {
       root.className = "list empty";
       root.textContent = "ルールはありません";
-      state.selectedRuleIndexes = {};
       updateListFilterSummary("ruleListFilterSummary", 0, 0);
-      updateRuleBulkActions([]);
       return;
     }
     var filtered = sortedRuleEntries(filteredRules(state.rules));
@@ -3382,7 +3191,6 @@
     if (!filtered.length) {
       root.className = "list empty";
       root.textContent = "条件に一致するルールはありません";
-      updateRuleBulkActions([]);
       return;
     }
     root.className = "list";
@@ -3391,27 +3199,7 @@
       var index = entry.index;
       var item = document.createElement("article");
       item.className = "program-row rule-row";
-      if (state.selectedRuleIndexes[index]) {
-        item.className += " selected";
-      }
       item.tabIndex = 0;
-
-      var checkboxLabel = document.createElement("label");
-      checkboxLabel.className = "rule-select";
-      checkboxLabel.title = "ルール #" + index + " を選択";
-      var checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = Boolean(state.selectedRuleIndexes[index]);
-      checkbox.setAttribute("aria-label", "ルール #" + index + " を選択");
-      checkbox.addEventListener("change", function () {
-        if (checkbox.checked) {
-          state.selectedRuleIndexes[index] = true;
-        } else {
-          delete state.selectedRuleIndexes[index];
-        }
-        renderRules();
-      });
-      checkboxLabel.appendChild(checkbox);
 
       var body = document.createElement("div");
       body.className = "rule-row-body";
@@ -3450,12 +3238,10 @@
 
       body.appendChild(title);
       body.appendChild(meta);
-      item.appendChild(checkboxLabel);
       item.appendChild(body);
       item.appendChild(row);
       root.appendChild(item);
     });
-    updateRuleBulkActions(filtered);
   }
 
   function settingValue(value) {
@@ -4557,51 +4343,6 @@
     setBusy("ルールフォームを新規作成に戻しました");
   }
 
-  function setVisibleRuleSelection(selected) {
-    sortedRuleEntries(filteredRules(state.rules)).forEach(function (entry) {
-      if (selected) {
-        state.selectedRuleIndexes[entry.index] = true;
-      } else {
-        delete state.selectedRuleIndexes[entry.index];
-      }
-    });
-    renderRules();
-  }
-
-  function deleteSelectedRules() {
-    var indexes = selectedRuleIndexes();
-    if (!indexes.length) {
-      return;
-    }
-    var labels = indexes.slice(0, 12).map(function (index) {
-      return "#" + index;
-    }).join(", ");
-    if (indexes.length > 12) {
-      labels += " ほか";
-    }
-    confirmAction(indexes.length + "件のルールを削除しますか？", {
-      danger: true,
-      meta: labels,
-      okLabel: "削除",
-      title: "ルール一括削除の確認"
-    }).then(function (confirmed) {
-      if (!confirmed) {
-        return;
-      }
-      setBusy("ルール削除中");
-      return indexes.slice().sort(function (a, b) {
-        return b - a;
-      }).reduce(function (promise, index) {
-        return promise.then(function () {
-          return request("rules/" + index + ".json", "DELETE");
-        });
-      }, Promise.resolve()).then(function () {
-        state.selectedRuleIndexes = {};
-        refresh();
-      }).catch(showError);
-    });
-  }
-
   function tailText(value, maxLines) {
     var lines = (value || "").split(/\r?\n/);
     if (lines.length > maxLines) {
@@ -4892,53 +4633,6 @@
     }
   }
 
-  function bindAdvancedProgramFilter(filterName, ids, renderFn) {
-    var filter = state.listFilters[filterName] || defaultListFilter(filterName);
-    var keys = ["title", "description", "type", "programID", "channelID", "startHour", "endHour"];
-    keys.forEach(function (key) {
-      var control = ids[key] ? byId(ids[key]) : null;
-      if (!control) {
-        return;
-      }
-      control.value = filter[key] || "";
-      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", function () {
-        state.listFilters[filterName][key] = control.value.trim ? control.value.trim() : control.value;
-        saveListFilters();
-        (renderFn || render)();
-      });
-      control.addEventListener("keydown", function (event) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          resetAdvancedProgramFilterControls(filterName, ids, renderFn);
-          control.focus();
-        }
-      });
-    });
-    syncAdvancedFilterDisclosure(ids.details, filterName);
-  }
-
-  function syncAdvancedFilterDisclosure(detailsID, filterName) {
-    var details = detailsID ? byId(detailsID) : null;
-    if (details) {
-      details.open = hasAdvancedProgramFilter(filterName);
-    }
-  }
-
-  function resetAdvancedProgramFilterControls(filterName, ids, renderFn) {
-    var defaults = defaultListFilter(filterName);
-    var keys = ["title", "description", "type", "programID", "channelID", "startHour", "endHour"];
-    keys.forEach(function (key) {
-      state.listFilters[filterName][key] = defaults[key] || "";
-      var control = ids[key] ? byId(ids[key]) : null;
-      if (control) {
-        control.value = defaults[key] || "";
-      }
-    });
-    syncAdvancedFilterDisclosure(ids.details, filterName);
-    saveListFilters();
-    (renderFn || render)();
-  }
-
   function resetListFilterControls(filterName, ids, renderFn) {
     var defaults = defaultListFilter(filterName);
     state.listFilters[filterName] = defaults;
@@ -4956,18 +4650,6 @@
         control.value = item.value;
       }
     });
-    if (ids.advanced) {
-      Object.keys(ids.advanced).forEach(function (key) {
-        if (key === "details") {
-          return;
-        }
-        var control = byId(ids.advanced[key]);
-        if (control) {
-          control.value = defaults[key] || "";
-        }
-      });
-      syncAdvancedFilterDisclosure(ids.advanced.details, filterName);
-    }
     saveListFilters();
     (renderFn || render)();
   }
@@ -5014,16 +4696,6 @@
     }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
-    bindAdvancedProgramFilter("recorded", {
-      details: "recordedAdvancedFilter",
-      title: "recordedSearchTitle",
-      description: "recordedSearchDescription",
-      type: "recordedSearchType",
-      programID: "recordedSearchProgramID",
-      channelID: "recordedSearchChannelID",
-      startHour: "recordedSearchStartHour",
-      endHour: "recordedSearchEndHour"
-    });
     resetListFilter("reserves", {
       button: "reserveListFilterReset",
       category: "reserveListCategory",
@@ -5034,17 +4706,7 @@
       button: "recordedListFilterReset",
       category: "recordedListCategory",
       query: "recordedListQuery",
-      sort: "recordedListSort",
-      advanced: {
-        details: "recordedAdvancedFilter",
-        title: "recordedSearchTitle",
-        description: "recordedSearchDescription",
-        type: "recordedSearchType",
-        programID: "recordedSearchProgramID",
-        channelID: "recordedSearchChannelID",
-        startHour: "recordedSearchStartHour",
-        endHour: "recordedSearchEndHour"
-      }
+      sort: "recordedListSort"
     });
     var channelProgramsQuery = byId("channelProgramsQuery");
     if (channelProgramsQuery) {
@@ -5219,16 +4881,6 @@
     if (resetRuleFormButton) {
       resetRuleFormButton.addEventListener("click", resetRuleForm);
     }
-    var ruleSelectAll = byId("ruleSelectAll");
-    if (ruleSelectAll) {
-      ruleSelectAll.addEventListener("change", function () {
-        setVisibleRuleSelection(ruleSelectAll.checked);
-      });
-    }
-    var deleteSelectedRulesButton = byId("deleteSelectedRulesButton");
-    if (deleteSelectedRulesButton) {
-      deleteSelectedRulesButton.addEventListener("click", deleteSelectedRules);
-    }
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {
       refreshLogsButton.addEventListener("click", refreshLogs);
@@ -5236,29 +4888,6 @@
     var scheduleRefreshButton = byId("scheduleRefreshButton");
     if (scheduleRefreshButton) {
       scheduleRefreshButton.addEventListener("click", refresh);
-    }
-    bindAdvancedProgramFilter("schedule", {
-      details: "scheduleAdvancedFilter",
-      title: "scheduleSearchTitle",
-      description: "scheduleSearchDescription",
-      programID: "scheduleSearchProgramID",
-      channelID: "scheduleSearchChannelID",
-      startHour: "scheduleSearchStartHour",
-      endHour: "scheduleSearchEndHour"
-    }, renderSchedule);
-    var scheduleSearchReset = byId("scheduleSearchReset");
-    if (scheduleSearchReset) {
-      scheduleSearchReset.addEventListener("click", function () {
-        resetAdvancedProgramFilterControls("schedule", {
-          details: "scheduleAdvancedFilter",
-          title: "scheduleSearchTitle",
-          description: "scheduleSearchDescription",
-          programID: "scheduleSearchProgramID",
-          channelID: "scheduleSearchChannelID",
-          startHour: "scheduleSearchStartHour",
-          endHour: "scheduleSearchEndHour"
-        }, renderSchedule);
-      });
     }
     var programDialogClose = byId("programDialogClose");
     if (programDialogClose) {

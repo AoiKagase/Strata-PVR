@@ -908,7 +908,6 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 			`setRefreshLoading(false)`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
-			`.program-row.selected`,
 			`.schedule-card.selected`,
 			`.list.empty.error`,
 			`.recoverable-empty`,
