@@ -214,33 +214,10 @@ body {
   color: var(--error-strong);
 }
 
-.schedule-status-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  min-width: 44px;
-  padding: 0 8px;
-  border: 1px solid oklch(73% 0.022 225);
-  border-radius: 6px;
-  background: var(--panel);
-  color: oklch(27% 0.03 230);
-  font-size: 12px;
-  font-weight: 800;
-  text-decoration: none;
-}
-
-.schedule-status-link.icon-button,
 .schedule-nav-controls button.icon-button {
   width: 36px;
   min-width: 36px;
   padding: 0;
-}
-
-.schedule-status-link:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
 }
 
 .schedule-conflict-summary {
@@ -255,14 +232,6 @@ body {
   border-color: var(--warn);
   background: var(--warn-soft);
   color: var(--warn-strong);
-}
-
-.main-nav .schedule-status-link {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 44px;
-  padding: 0 8px;
-  border-bottom: 1px solid oklch(73% 0.022 225);
 }
 
 .schedule-nav-controls label {
@@ -468,6 +437,13 @@ h3 {
   gap: 14px;
 }
 
+.dashboard-grid {
+  grid-template-areas:
+    "on-air on-air"
+    "recording recording"
+    "recorded reserves";
+}
+
 .panel {
   min-height: 260px;
   padding: 16px;
@@ -478,6 +454,42 @@ h3 {
 
 .wide-panel {
   grid-column: 1 / -1;
+}
+
+.dashboard-on-air-panel {
+  grid-area: on-air;
+}
+
+.dashboard-recording-panel {
+  grid-area: recording;
+}
+
+.dashboard-list-panel {
+  min-height: 0;
+}
+
+.dashboard-recorded-panel {
+  grid-area: recorded;
+}
+
+.dashboard-reserve-panel {
+  grid-area: reserves;
+}
+
+.dashboard-reserve-panel .program-row.compact-actions .program-row-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dashboard-reserve-panel .program-row.compact-actions .program-row-meta,
+.dashboard-reserve-panel .program-row.compact-actions .program-state-badges,
+.dashboard-reserve-panel .program-row.compact-actions .row-actions {
+  grid-column: 1;
+}
+
+.dashboard-reserve-panel .program-row.compact-actions .row-actions {
+  grid-row: auto;
+  justify-self: end;
+  align-self: start;
 }
 
 .dashboard-on-air-panel {
@@ -2220,6 +2232,14 @@ body.view-settings .settings-grid {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-grid {
+    grid-template-areas:
+      "on-air"
+      "recording"
+      "recorded"
+      "reserves";
+  }
+
   .status-badge {
     width: 100%;
     text-align: left;
@@ -2354,9 +2374,7 @@ body.view-settings .settings-grid {
   }
 
   .schedule-nav-controls select,
-  .schedule-nav-controls button,
-  .schedule-status-link,
-  .main-nav .schedule-status-link {
+  .schedule-nav-controls button {
     min-height: 44px;
   }
 

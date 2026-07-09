@@ -987,7 +987,7 @@
     }
     state.currentView = found ? name : "dashboard";
     document.querySelectorAll(".management-menu").forEach(function (menu) {
-      menu.open = name === "status" || name === "settings";
+      menu.open = name === "status" || name === "settings" || name === "logs";
     });
     document.querySelectorAll("[data-view-link]").forEach(function (link) {
       var active = link.getAttribute("data-view-link") === name;

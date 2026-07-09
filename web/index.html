@@ -73,13 +73,13 @@
       <a href="#reserves" data-view-link="reserves">予約</a>
       <a href="#recorded" data-view-link="recorded">録画済み</a>
       <a href="#rules" data-view-link="rules">ルール</a>
-      <a href="#logs" data-view-link="logs">ログ</a>
     </div>
     <details class="management-menu">
       <summary class="icon-button" title="管理" aria-label="管理"><svg class="icon"><use href="#icon-settings"></use></svg><span class="screen-reader-only">管理</span></summary>
       <div class="management-menu-list">
         <a href="#status" data-view-link="status">ステータス</a>
         <a href="#settings" data-view-link="settings">設定</a>
+        <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
     <div class="schedule-nav-controls" aria-label="番組表フィルタ">
@@ -89,7 +89,6 @@
         <span id="scheduleReserveSummary">予約 0</span>
         <span id="scheduleConflictSummary" class="schedule-conflict-summary">競合 0</span>
         <button id="scheduleRefreshButton" class="icon-button" type="button" title="再読込" aria-label="再読込"><svg class="icon"><use href="#icon-refresh-cw"></use></svg><span class="screen-reader-only">再読込</span></button>
-        <a class="schedule-status-link icon-button" href="#logs" title="ログ" aria-label="ログ"><svg class="icon"><use href="#icon-file-text"></use></svg><span class="screen-reader-only">ログ</span></a>
       </div>
       <label class="icon-field-label" for="scheduleType" title="種別"><svg class="icon"><use href="#icon-filter"></use></svg><span class="screen-reader-only">種別</span></label>
       <select id="scheduleType">
@@ -153,24 +152,24 @@
           <button id="refreshButton" type="button" title="Refresh">更新</button>
         </div>
       </div>
-      <section class="content-grid">
+      <section class="content-grid dashboard-grid">
         <section class="panel wide-panel dashboard-on-air-panel">
           <h3>放送中の番組</h3>
           <div id="onAirList" class="list empty">現在放送中の番組はありません</div>
         </section>
-        <section class="panel dashboard-summary-panel">
+        <section class="panel wide-panel dashboard-summary-panel dashboard-recording-panel">
           <h3>録画中</h3>
           <div id="recordingList" class="list empty">録画中の番組はありません</div>
         </section>
-        <section class="panel dashboard-summary-panel">
-          <h3>予約</h3>
-          <div id="reserveList" class="list empty">予約はありません</div>
-        </section>
-        <section class="panel wide-panel">
+        <section class="panel dashboard-list-panel dashboard-recorded-panel">
           <div class="panel-head">
             <h3>最近の録画</h3>
           </div>
           <div id="recordedList" class="list empty">録画済み番組はありません</div>
+        </section>
+        <section class="panel dashboard-list-panel dashboard-reserve-panel">
+          <h3>予約</h3>
+          <div id="reserveList" class="list empty">予約はありません</div>
         </section>
       </section>
     </section>
