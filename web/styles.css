@@ -1353,6 +1353,35 @@ summary:focus-visible,
   font-weight: 700;
 }
 
+.program-dialog-preview {
+  padding: 14px 16px 0;
+}
+
+.program-dialog-preview[hidden] {
+  display: none;
+}
+
+.program-dialog-preview-figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.program-dialog-preview-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.program-dialog-preview-figure figcaption {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .program-dialog-description {
   padding: 14px 16px 0;
   color: #33444c;

@@ -644,6 +644,18 @@
     });
   }
 
+  function recordedProgramFor(program) {
+    if (!program || !program.id) {
+      return null;
+    }
+    for (var i = 0; i < state.recorded.length; i += 1) {
+      if (state.recorded[i] && state.recorded[i].id === program.id) {
+        return state.recorded[i];
+      }
+    }
+    return null;
+  }
+
   function programDialogActions(program) {
     if (isRecordedProgram(program)) {
       return ["watch-mp4", "download", "delete-recorded", "create-rule-from-program"];
@@ -2233,6 +2245,50 @@
     return image;
   }
 
+  function renderProgramDialogPreview(root, program) {
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    root.hidden = true;
+    if (!program || !program.id) {
+      return;
+    }
+
+    var resource = "";
+    var previewProgram = program;
+    if (program.isRecording) {
+      resource = "recording";
+    } else {
+      var recorded = recordedProgramFor(program);
+      if (recorded) {
+        resource = "recorded";
+        previewProgram = recorded;
+      }
+    }
+    if (!resource || !previewProgram.recorded) {
+      return;
+    }
+
+    var figure = document.createElement("figure");
+    figure.className = "program-dialog-preview-figure";
+    var image = document.createElement("img");
+    image.className = "program-dialog-preview-image";
+    image.src = programPreviewURL(previewProgram, resource, "480x270") + (resource === "recording" ? "&_=" + Date.now() : "");
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("error", function () {
+      root.innerHTML = "";
+      root.hidden = true;
+    });
+    var caption = document.createElement("figcaption");
+    caption.textContent = resource === "recording" ? "録画中プレビュー" : "録画済みプレビュー";
+    figure.appendChild(image);
+    figure.appendChild(caption);
+    root.appendChild(figure);
+    root.hidden = false;
+  }
+
   function renderProgramRow(program, actions, showChannel, options) {
     program = decorateProgramState(program);
     options = options || {};
@@ -2980,6 +3036,7 @@
     var dialog = byId("programDialog");
     var title = byId("programDialogTitle");
     var meta = byId("programDialogMeta");
+    var preview = byId("programDialogPreview");
     var description = byId("programDialogDescription");
     var actions = byId("programDialogActions");
     var end = programEnd(program);
@@ -2987,6 +3044,7 @@
     state.activeProgramID = program && program.id ? program.id : "";
     text(title, programTitle(program));
     setProgramMeta(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), formatDuration(program.start, end)], program);
+    renderProgramDialogPreview(preview, program);
     text(description, program.detail || program.description || "番組説明はありません。");
     if (actions) {
       actions.innerHTML = "";
