@@ -662,6 +662,9 @@ summary:focus-visible,
 }
 
 .program-row.preview-unavailable {
+  padding-right: 10px;
+  padding-left: 10px;
+  border-radius: 6px;
   background: color-mix(in oklch, var(--error-soft) 42%, white);
 }
 
