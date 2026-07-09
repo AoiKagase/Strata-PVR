@@ -756,6 +756,77 @@ summary:focus-visible,
   font-size: 11px;
 }
 
+.rule-list-controls {
+  margin-top: 16px;
+}
+
+.rule-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin-top: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rule-select-all,
+.rule-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.rule-select input,
+.rule-select-all input {
+  min-height: 0;
+}
+
+.rule-bulk-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.rule-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 6px 0;
+}
+
+.rule-row-body {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rule-row strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rule-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-row .row-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
 .program-category-chip.category-anime {
   border-color: oklch(74% 0.04 292);
   background: oklch(95% 0.018 292);
@@ -2174,6 +2245,17 @@ body.view-settings .settings-grid {
 
   .rule-builder {
     grid-template-columns: 1fr;
+  }
+
+  .rule-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .rule-row .row-actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .settings-list {

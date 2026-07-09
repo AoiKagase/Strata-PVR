@@ -340,32 +340,6 @@
         </div>
       </div>
       <section class="panel">
-        <div class="list-filter-controls" aria-label="ルールフィルタ">
-          <label class="control-field" for="ruleListQuery">
-            <span>検索</span>
-            <input id="ruleListQuery" type="search" autocomplete="off" placeholder="番号、タイトル、条件JSON">
-          </label>
-          <label class="control-field" for="ruleListState">
-            <span>状態</span>
-            <select id="ruleListState">
-              <option value="">すべて</option>
-              <option value="enabled">有効</option>
-              <option value="disabled">無効</option>
-            </select>
-          </label>
-          <label class="control-field" for="ruleListSort">
-            <span>並び順</span>
-            <select id="ruleListSort">
-              <option value="indexAsc">番号 昇順</option>
-              <option value="indexDesc">番号 降順</option>
-              <option value="state">状態</option>
-              <option value="title">条件</option>
-            </select>
-          </label>
-          <button id="ruleListFilterReset" class="filter-clear-button" type="button">クリア</button>
-          <span id="ruleListFilterSummary" class="list-filter-summary">0件</span>
-        </div>
-        <div id="ruleList" class="list empty">ルールはありません</div>
         <div class="rule-builder">
           <div class="rule-form-status" id="ruleFormStatus">新規作成</div>
           <label>
@@ -458,6 +432,40 @@
   "types": ["GR"],
   "reserve_titles": ["title"]
 }</textarea>
+        <div class="list-filter-controls rule-list-controls" aria-label="ルールフィルタ">
+          <label class="control-field" for="ruleListQuery">
+            <span>検索</span>
+            <input id="ruleListQuery" type="search" autocomplete="off" placeholder="番号、タイトル、条件JSON">
+          </label>
+          <label class="control-field" for="ruleListState">
+            <span>状態</span>
+            <select id="ruleListState">
+              <option value="">すべて</option>
+              <option value="enabled">有効</option>
+              <option value="disabled">無効</option>
+            </select>
+          </label>
+          <label class="control-field" for="ruleListSort">
+            <span>並び順</span>
+            <select id="ruleListSort">
+              <option value="indexAsc">番号 昇順</option>
+              <option value="indexDesc">番号 降順</option>
+              <option value="state">状態</option>
+              <option value="title">条件</option>
+            </select>
+          </label>
+          <button id="ruleListFilterReset" class="filter-clear-button" type="button">クリア</button>
+          <span id="ruleListFilterSummary" class="list-filter-summary">0件</span>
+        </div>
+        <div class="rule-bulk-actions" aria-label="ルール一括操作">
+          <label class="rule-select-all">
+            <input id="ruleSelectAll" type="checkbox">
+            <span>表示中を選択</span>
+          </label>
+          <span id="ruleBulkSummary" class="rule-bulk-summary">0件選択</span>
+          <button id="deleteSelectedRulesButton" class="small-button danger-button" type="button" disabled>選択削除</button>
+        </div>
+        <div id="ruleList" class="list empty">ルールはありません</div>
       </section>
     </section>
 

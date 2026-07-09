@@ -51,6 +51,7 @@
     channelProgramsSort: "startAsc",
     editingRuleIndex: null,
     editingRuleFormIndex: null,
+    selectedRuleIndexes: {},
     selectedProgram: null,
     activeProgramID: "",
     transientStatusTimer: null,
@@ -824,6 +825,51 @@
       }
       return a.index - b.index;
     });
+  }
+
+  function selectedRuleIndexes() {
+    return Object.keys(state.selectedRuleIndexes || {}).filter(function (key) {
+      return state.selectedRuleIndexes[key];
+    }).map(function (key) {
+      return Number(key);
+    }).filter(function (index) {
+      return Number.isInteger(index);
+    }).sort(function (a, b) {
+      return a - b;
+    });
+  }
+
+  function clearInvalidRuleSelections() {
+    var selected = state.selectedRuleIndexes || {};
+    Object.keys(selected).forEach(function (key) {
+      var index = Number(key);
+      if (!Number.isInteger(index) || index < 0 || index >= state.rules.length) {
+        delete selected[key];
+      }
+    });
+  }
+
+  function updateRuleBulkActions(visibleEntries) {
+    var selectAll = byId("ruleSelectAll");
+    var summary = byId("ruleBulkSummary");
+    var deleteButton = byId("deleteSelectedRulesButton");
+    var visible = visibleEntries || [];
+    var selected = selectedRuleIndexes();
+    var visibleSelected = visible.filter(function (entry) {
+      return Boolean(state.selectedRuleIndexes[entry.index]);
+    }).length;
+    if (summary) {
+      summary.textContent = selected.length + "件選択";
+    }
+    if (deleteButton) {
+      deleteButton.disabled = selected.length === 0;
+      deleteButton.title = selected.length ? selected.length + "件のルールを削除" : "削除するルールを選択してください";
+    }
+    if (selectAll) {
+      selectAll.disabled = visible.length === 0;
+      selectAll.checked = visible.length > 0 && visibleSelected === visible.length;
+      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
+    }
   }
 
   function listCategories(items) {
@@ -3380,10 +3426,13 @@
       return;
     }
     root.innerHTML = "";
+    clearInvalidRuleSelections();
     if (!state.rules || state.rules.length === 0) {
       root.className = "list empty";
       root.textContent = "ルールはありません";
+      state.selectedRuleIndexes = {};
       updateListFilterSummary("ruleListFilterSummary", 0, 0);
+      updateRuleBulkActions([]);
       return;
     }
     var filtered = sortedRuleEntries(filteredRules(state.rules));
@@ -3391,6 +3440,7 @@
     if (!filtered.length) {
       root.className = "list empty";
       root.textContent = "条件に一致するルールはありません";
+      updateRuleBulkActions([]);
       return;
     }
     root.className = "list";
@@ -3398,8 +3448,31 @@
       var rule = entry.rule;
       var index = entry.index;
       var item = document.createElement("article");
-      item.className = "program-row";
+      item.className = "program-row rule-row";
+      if (state.selectedRuleIndexes[index]) {
+        item.className += " selected";
+      }
       item.tabIndex = 0;
+
+      var checkboxLabel = document.createElement("label");
+      checkboxLabel.className = "rule-select";
+      checkboxLabel.title = "ルール #" + index + " を選択";
+      var checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = Boolean(state.selectedRuleIndexes[index]);
+      checkbox.setAttribute("aria-label", "ルール #" + index + " を選択");
+      checkbox.addEventListener("change", function () {
+        if (checkbox.checked) {
+          state.selectedRuleIndexes[index] = true;
+        } else {
+          delete state.selectedRuleIndexes[index];
+        }
+        renderRules();
+      });
+      checkboxLabel.appendChild(checkbox);
+
+      var body = document.createElement("div");
+      body.className = "rule-row-body";
 
       var title = document.createElement("strong");
       title.textContent = "#" + index + (rule.isDisabled ? " 無効" : " 有効");
@@ -3433,11 +3506,14 @@
         });
       }));
 
-      item.appendChild(title);
-      item.appendChild(meta);
+      body.appendChild(title);
+      body.appendChild(meta);
+      item.appendChild(checkboxLabel);
+      item.appendChild(body);
       item.appendChild(row);
       root.appendChild(item);
     });
+    updateRuleBulkActions(filtered);
   }
 
   function settingValue(value) {
@@ -4539,6 +4615,51 @@
     setBusy("ルールフォームを新規作成に戻しました");
   }
 
+  function setVisibleRuleSelection(selected) {
+    sortedRuleEntries(filteredRules(state.rules)).forEach(function (entry) {
+      if (selected) {
+        state.selectedRuleIndexes[entry.index] = true;
+      } else {
+        delete state.selectedRuleIndexes[entry.index];
+      }
+    });
+    renderRules();
+  }
+
+  function deleteSelectedRules() {
+    var indexes = selectedRuleIndexes();
+    if (!indexes.length) {
+      return;
+    }
+    var labels = indexes.slice(0, 12).map(function (index) {
+      return "#" + index;
+    }).join(", ");
+    if (indexes.length > 12) {
+      labels += " ほか";
+    }
+    confirmAction(indexes.length + "件のルールを削除しますか？", {
+      danger: true,
+      meta: labels,
+      okLabel: "削除",
+      title: "ルール一括削除の確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("ルール削除中");
+      return indexes.slice().sort(function (a, b) {
+        return b - a;
+      }).reduce(function (promise, index) {
+        return promise.then(function () {
+          return request("rules/" + index + ".json", "DELETE");
+        });
+      }, Promise.resolve()).then(function () {
+        state.selectedRuleIndexes = {};
+        refresh();
+      }).catch(showError);
+    });
+  }
+
   function tailText(value, maxLines) {
     var lines = (value || "").split(/\r?\n/);
     if (lines.length > maxLines) {
@@ -5171,6 +5292,16 @@
     var resetRuleFormButton = byId("resetRuleFormButton");
     if (resetRuleFormButton) {
       resetRuleFormButton.addEventListener("click", resetRuleForm);
+    }
+    var ruleSelectAll = byId("ruleSelectAll");
+    if (ruleSelectAll) {
+      ruleSelectAll.addEventListener("change", function () {
+        setVisibleRuleSelection(ruleSelectAll.checked);
+      });
+    }
+    var deleteSelectedRulesButton = byId("deleteSelectedRulesButton");
+    if (deleteSelectedRulesButton) {
+      deleteSelectedRulesButton.addEventListener("click", deleteSelectedRules);
     }
     var refreshLogsButton = byId("refreshLogsButton");
     if (refreshLogsButton) {
