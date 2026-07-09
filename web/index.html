@@ -143,6 +143,36 @@
           </label>
         </div>
       </div>
+      <details class="advanced-filter-panel" id="scheduleAdvancedFilter">
+        <summary>詳細検索</summary>
+        <div class="advanced-filter-grid" aria-label="番組詳細検索">
+          <label class="control-field" for="scheduleSearchTitle">
+            <span>タイトル</span>
+            <input id="scheduleSearchTitle" type="search" autocomplete="off" placeholder="タイトル">
+          </label>
+          <label class="control-field" for="scheduleSearchDescription">
+            <span>説明</span>
+            <input id="scheduleSearchDescription" type="search" autocomplete="off" placeholder="説明文">
+          </label>
+          <label class="control-field" for="scheduleSearchProgramID">
+            <span>番組ID</span>
+            <input id="scheduleSearchProgramID" type="search" autocomplete="off" placeholder="program id">
+          </label>
+          <label class="control-field" for="scheduleSearchChannelID">
+            <span>チャンネルID</span>
+            <input id="scheduleSearchChannelID" type="search" autocomplete="off" placeholder="channel id">
+          </label>
+          <label class="control-field" for="scheduleSearchStartHour">
+            <span>何時から</span>
+            <input id="scheduleSearchStartHour" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0">
+          </label>
+          <label class="control-field" for="scheduleSearchEndHour">
+            <span>何時まで</span>
+            <input id="scheduleSearchEndHour" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="24">
+          </label>
+          <button id="scheduleSearchReset" class="filter-clear-button" type="button">詳細条件をクリア</button>
+        </div>
+      </details>
       <div id="scheduleList" class="list empty">番組表データがありません</div>
       <div class="schedule-zoom-controls" aria-label="番組表ズーム">
         <button id="scheduleZoomOutButton" type="button" title="時間間隔を狭くする" aria-label="番組表を縮小">-</button>
@@ -253,6 +283,45 @@
           </label>
           <button id="recordedListFilterReset" class="filter-clear-button" type="button">クリア</button>
           <span id="recordedListFilterSummary" class="list-filter-summary">0件</span>
+          <details class="advanced-filter-panel list-filter-advanced" id="recordedAdvancedFilter">
+            <summary>詳細検索</summary>
+            <div class="advanced-filter-grid" aria-label="録画済み詳細検索">
+              <label class="control-field" for="recordedSearchTitle">
+                <span>タイトル</span>
+                <input id="recordedSearchTitle" type="search" autocomplete="off" placeholder="タイトル">
+              </label>
+              <label class="control-field" for="recordedSearchDescription">
+                <span>説明</span>
+                <input id="recordedSearchDescription" type="search" autocomplete="off" placeholder="説明文">
+              </label>
+              <label class="control-field" for="recordedSearchType">
+                <span>種別</span>
+                <select id="recordedSearchType">
+                  <option value="">すべて</option>
+                  <option value="GR">GR</option>
+                  <option value="BS">BS</option>
+                  <option value="CS">CS</option>
+                  <option value="EX">EX</option>
+                </select>
+              </label>
+              <label class="control-field" for="recordedSearchProgramID">
+                <span>番組ID</span>
+                <input id="recordedSearchProgramID" type="search" autocomplete="off" placeholder="program id">
+              </label>
+              <label class="control-field" for="recordedSearchChannelID">
+                <span>チャンネルID</span>
+                <input id="recordedSearchChannelID" type="search" autocomplete="off" placeholder="channel id">
+              </label>
+              <label class="control-field" for="recordedSearchStartHour">
+                <span>何時から</span>
+                <input id="recordedSearchStartHour" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0">
+              </label>
+              <label class="control-field" for="recordedSearchEndHour">
+                <span>何時まで</span>
+                <input id="recordedSearchEndHour" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="24">
+              </label>
+            </div>
+          </details>
         </div>
       <div id="recordedCleanupStatus" class="cleanup-status" role="status" aria-live="polite" hidden></div>
       <div id="recordedListPage" class="list empty">録画済み番組はありません</div>

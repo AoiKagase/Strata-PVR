@@ -130,7 +130,8 @@
     return {
       channelPrograms: { query: "", category: "", sort: "startAsc" },
       rules: { query: "", state: "", sort: "indexAsc" },
-      recorded: { query: "", category: "", sort: "startDesc" },
+      recorded: { query: "", category: "", sort: "startDesc", title: "", description: "", type: "", programID: "", channelID: "", startHour: "", endHour: "" },
+      schedule: { title: "", description: "", programID: "", channelID: "", startHour: "", endHour: "" },
       reserves: { query: "", category: "", sort: "startAsc" }
     };
   }
@@ -696,9 +697,61 @@
         return false;
       }
       if (!query) {
-        return true;
+        return matchesProgramAdvancedFilter(program, filter);
       }
-      return normalizeSearchText(programSearchText(program)).indexOf(query) >= 0;
+      return normalizeSearchText(programSearchText(program)).indexOf(query) >= 0 && matchesProgramAdvancedFilter(program, filter);
+    });
+  }
+
+  function matchesProgramAdvancedFilter(program, filter) {
+    filter = filter || {};
+    if (!program) {
+      return false;
+    }
+    if (filter.title && normalizeSearchText(programTitle(program)).indexOf(normalizeSearchText(filter.title)) < 0) {
+      return false;
+    }
+    if (filter.description && normalizeSearchText(program.detail || program.description || "").indexOf(normalizeSearchText(filter.description)) < 0) {
+      return false;
+    }
+    if (filter.type && programChannelType(program) !== filter.type) {
+      return false;
+    }
+    if (filter.programID && String(program.id || "") !== String(filter.programID)) {
+      return false;
+    }
+    if (filter.channelID && programChannelID(program) !== filter.channelID) {
+      return false;
+    }
+    return matchesProgramHourFilter(program, filter.startHour, filter.endHour);
+  }
+
+  function matchesProgramHourFilter(program, startHour, endHour) {
+    if (startHour === "" && endHour === "") {
+      return true;
+    }
+    var ruleStart = startHour === "" ? 0 : Number(startHour);
+    var ruleEnd = endHour === "" ? 24 : Number(endHour);
+    if (!Number.isFinite(ruleStart) || !Number.isFinite(ruleEnd)) {
+      return true;
+    }
+    ruleStart = Math.max(0, Math.min(23, Math.floor(ruleStart)));
+    ruleEnd = Math.max(1, Math.min(24, Math.floor(ruleEnd)));
+    var start = new Date(program.start || 0).getHours();
+    var end = new Date(programEnd(program)).getHours();
+    if (start > end) {
+      end += 24;
+    }
+    if (ruleStart > ruleEnd) {
+      return !((ruleStart > start) && (ruleEnd < end));
+    }
+    return !(ruleStart > start || ruleEnd < end);
+  }
+
+  function hasAdvancedProgramFilter(filterName) {
+    var filter = state.listFilters[filterName] || {};
+    return ["title", "description", "type", "programID", "channelID", "startHour", "endHour"].some(function (key) {
+      return Boolean(filter[key]);
     });
   }
 
@@ -2473,9 +2526,14 @@
         var item = cloneProgram(program);
         if (!item.channel && channel.channel) {
           item.channel = channel.channel;
+        } else if (!item.channel) {
+          item.channel = { id: channelID || groupID, name: displayName, type: scheduleChannelType(channel) };
         }
         if (item.channel) {
           item.channel.name = scheduleProgramChannelName(item, displayName);
+        }
+        if (!matchesProgramAdvancedFilter(item, state.listFilters.schedule || {})) {
+          return;
         }
         channelMeta[groupID].programs.push(item);
       });
@@ -2530,6 +2588,9 @@
     if (state.scheduleHiddenChannels.length) {
       labels.push("非表示: " + state.scheduleHiddenChannels.length + "ch");
     }
+    if (hasAdvancedProgramFilter("schedule")) {
+      labels.push("詳細検索");
+    }
     return labels;
   }
 
@@ -2540,6 +2601,8 @@
     state.scheduleGenre = "";
     state.scheduleWindowMode = "all";
     state.scheduleHiddenChannels = [];
+    state.listFilters.schedule = defaultListFilter("schedule");
+    saveListFilters();
     saveHiddenChannels();
     state.scheduleGuideScroll = { left: 0, top: 0 };
     renderSchedule();
@@ -4522,6 +4585,53 @@
     }
   }
 
+  function bindAdvancedProgramFilter(filterName, ids, renderFn) {
+    var filter = state.listFilters[filterName] || defaultListFilter(filterName);
+    var keys = ["title", "description", "type", "programID", "channelID", "startHour", "endHour"];
+    keys.forEach(function (key) {
+      var control = ids[key] ? byId(ids[key]) : null;
+      if (!control) {
+        return;
+      }
+      control.value = filter[key] || "";
+      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", function () {
+        state.listFilters[filterName][key] = control.value.trim ? control.value.trim() : control.value;
+        saveListFilters();
+        (renderFn || render)();
+      });
+      control.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          resetAdvancedProgramFilterControls(filterName, ids, renderFn);
+          control.focus();
+        }
+      });
+    });
+    syncAdvancedFilterDisclosure(ids.details, filterName);
+  }
+
+  function syncAdvancedFilterDisclosure(detailsID, filterName) {
+    var details = detailsID ? byId(detailsID) : null;
+    if (details) {
+      details.open = hasAdvancedProgramFilter(filterName);
+    }
+  }
+
+  function resetAdvancedProgramFilterControls(filterName, ids, renderFn) {
+    var defaults = defaultListFilter(filterName);
+    var keys = ["title", "description", "type", "programID", "channelID", "startHour", "endHour"];
+    keys.forEach(function (key) {
+      state.listFilters[filterName][key] = defaults[key] || "";
+      var control = ids[key] ? byId(ids[key]) : null;
+      if (control) {
+        control.value = defaults[key] || "";
+      }
+    });
+    syncAdvancedFilterDisclosure(ids.details, filterName);
+    saveListFilters();
+    (renderFn || render)();
+  }
+
   function resetListFilterControls(filterName, ids, renderFn) {
     var defaults = defaultListFilter(filterName);
     state.listFilters[filterName] = defaults;
@@ -4539,6 +4649,18 @@
         control.value = item.value;
       }
     });
+    if (ids.advanced) {
+      Object.keys(ids.advanced).forEach(function (key) {
+        if (key === "details") {
+          return;
+        }
+        var control = byId(ids.advanced[key]);
+        if (control) {
+          control.value = defaults[key] || "";
+        }
+      });
+      syncAdvancedFilterDisclosure(ids.advanced.details, filterName);
+    }
     saveListFilters();
     (renderFn || render)();
   }
@@ -4585,6 +4707,16 @@
     }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
+    bindAdvancedProgramFilter("recorded", {
+      details: "recordedAdvancedFilter",
+      title: "recordedSearchTitle",
+      description: "recordedSearchDescription",
+      type: "recordedSearchType",
+      programID: "recordedSearchProgramID",
+      channelID: "recordedSearchChannelID",
+      startHour: "recordedSearchStartHour",
+      endHour: "recordedSearchEndHour"
+    });
     resetListFilter("reserves", {
       button: "reserveListFilterReset",
       category: "reserveListCategory",
@@ -4595,7 +4727,17 @@
       button: "recordedListFilterReset",
       category: "recordedListCategory",
       query: "recordedListQuery",
-      sort: "recordedListSort"
+      sort: "recordedListSort",
+      advanced: {
+        details: "recordedAdvancedFilter",
+        title: "recordedSearchTitle",
+        description: "recordedSearchDescription",
+        type: "recordedSearchType",
+        programID: "recordedSearchProgramID",
+        channelID: "recordedSearchChannelID",
+        startHour: "recordedSearchStartHour",
+        endHour: "recordedSearchEndHour"
+      }
     });
     var channelProgramsQuery = byId("channelProgramsQuery");
     if (channelProgramsQuery) {
@@ -4822,6 +4964,29 @@
     var scheduleRefreshButton = byId("scheduleRefreshButton");
     if (scheduleRefreshButton) {
       scheduleRefreshButton.addEventListener("click", refresh);
+    }
+    bindAdvancedProgramFilter("schedule", {
+      details: "scheduleAdvancedFilter",
+      title: "scheduleSearchTitle",
+      description: "scheduleSearchDescription",
+      programID: "scheduleSearchProgramID",
+      channelID: "scheduleSearchChannelID",
+      startHour: "scheduleSearchStartHour",
+      endHour: "scheduleSearchEndHour"
+    }, renderSchedule);
+    var scheduleSearchReset = byId("scheduleSearchReset");
+    if (scheduleSearchReset) {
+      scheduleSearchReset.addEventListener("click", function () {
+        resetAdvancedProgramFilterControls("schedule", {
+          details: "scheduleAdvancedFilter",
+          title: "scheduleSearchTitle",
+          description: "scheduleSearchDescription",
+          programID: "scheduleSearchProgramID",
+          channelID: "scheduleSearchChannelID",
+          startHour: "scheduleSearchStartHour",
+          endHour: "scheduleSearchEndHour"
+        }, renderSchedule);
+      });
     }
     var programDialogClose = byId("programDialogClose");
     if (programDialogClose) {
