@@ -1832,6 +1832,7 @@
   var pendingMP4Open = null;
   var pendingMP4PlaylistOpen = null;
   var pendingM2TSOpen = null;
+  var pendingVLCOpen = null;
 
   function applyMP4Preset(name) {
     var preset = mp4Presets[name];
@@ -1933,6 +1934,7 @@
     pendingMP4Open = openWithQuery;
     pendingMP4PlaylistOpen = typeof options.openPlaylist === "function" ? options.openPlaylist : null;
     pendingM2TSOpen = typeof options.openM2TS === "function" ? options.openM2TS : null;
+    pendingVLCOpen = mobileVLCSupported() && typeof options.openVLC === "function" ? options.openVLC : null;
     text(byId("mp4DialogMeta"), meta || "");
     ["mp4Start", "mp4Duration"].forEach(function (id) {
       var input = byId(id);
@@ -1953,8 +1955,25 @@
     if (m2tsButton) {
       m2tsButton.hidden = !pendingM2TSOpen;
     }
+    var vlcButton = byId("mp4VLCButton");
+    if (vlcButton) {
+      vlcButton.hidden = !pendingVLCOpen;
+    }
     dialog.showModal();
     focusFirstDialogControl(dialog);
+  }
+
+  function mobileVLCSupported() {
+    return /Android|iPhone|iPad|iPod/.test(navigator.userAgent || "");
+  }
+
+  function openMobileVLC(url) {
+    var absolute = new URL(url, window.location.href);
+    if (/Android/.test(navigator.userAgent || "")) {
+      window.location.href = "intent://" + absolute.host + absolute.pathname + absolute.search + "#Intent;package=org.videolan.vlc;type=video;scheme=" + absolute.protocol.replace(":", "") + ";end";
+      return;
+    }
+    window.location.href = "vlc-x-callback://x-callback-url/stream?url=" + encodeURIComponent(absolute.toString());
   }
 
   function submitMP4Dialog() {
@@ -1966,6 +1985,7 @@
     pendingMP4Open = null;
     pendingMP4PlaylistOpen = null;
     pendingM2TSOpen = null;
+    pendingVLCOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
@@ -1981,6 +2001,7 @@
     pendingMP4Open = null;
     pendingMP4PlaylistOpen = null;
     pendingM2TSOpen = null;
+    pendingVLCOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
@@ -1996,11 +2017,29 @@
     pendingMP4Open = null;
     pendingMP4PlaylistOpen = null;
     pendingM2TSOpen = null;
+    pendingVLCOpen = null;
     var dialog = byId("mp4Dialog");
     if (dialog) {
       dialog.close();
     }
     openM2TS();
+  }
+
+  function submitVLCOpen() {
+    var query = mp4QueryFromDialog();
+    if (query === false || !pendingVLCOpen) {
+      return;
+    }
+    var openVLC = pendingVLCOpen;
+    pendingMP4Open = null;
+    pendingMP4PlaylistOpen = null;
+    pendingM2TSOpen = null;
+    pendingVLCOpen = null;
+    var dialog = byId("mp4Dialog");
+    if (dialog) {
+      dialog.close();
+    }
+    openVLC(query);
   }
 
   function formatBytes(value) {
@@ -2094,6 +2133,9 @@
             },
             openPlaylist: function () {
               openURL(recordingWatchURL(program, "xspf"));
+            },
+            openVLC: function (query) {
+              openMobileVLC(recordingWatchURL(program, "mp4", query));
             }
           });
         }));
@@ -2113,6 +2155,9 @@
             },
             openPlaylist: function () {
               openURL(recordedWatchURL(program, "xspf"));
+            },
+            openVLC: function (query) {
+              openMobileVLC(recordedWatchURL(program, "mp4", query));
             }
           });
         }));
@@ -2138,6 +2183,9 @@
               },
               openPlaylist: function () {
                 openURL(channelURL(channelID, "watch", "xspf"));
+              },
+              openVLC: function (query) {
+                openMobileVLC(channelURL(channelID, "watch", "mp4", query));
               }
             });
           }));
@@ -2197,6 +2245,9 @@
           },
           openPlaylist: function () {
             openURL(recordedWatchURL(program, "xspf"));
+          },
+          openVLC: function (query) {
+            openMobileVLC(recordedWatchURL(program, "mp4", query));
           }
         });
       }, className);
@@ -2532,6 +2583,9 @@
           },
           openPlaylist: function () {
             openURL(channelURL(group.id, "watch", "xspf"));
+          },
+          openVLC: function (query) {
+            openMobileVLC(channelURL(group.id, "watch", "mp4", query));
           }
         });
       }, "small-button"));
@@ -3046,6 +3100,9 @@
         },
         openPlaylist: function () {
           openURL(channelURL(channelID, "watch", "xspf"));
+        },
+        openVLC: function (query) {
+          openMobileVLC(channelURL(channelID, "watch", "mp4", query));
         }
       });
     }));
@@ -5139,6 +5196,10 @@
     if (mp4M2TSButton) {
       mp4M2TSButton.addEventListener("click", submitM2TSOpen);
     }
+    var mp4VLCButton = byId("mp4VLCButton");
+    if (mp4VLCButton) {
+      mp4VLCButton.addEventListener("click", submitVLCOpen);
+    }
     var mp4DialogClose = byId("mp4DialogClose");
     if (mp4DialogClose) {
       mp4DialogClose.addEventListener("click", function () {
@@ -5160,6 +5221,7 @@
         pendingMP4Open = null;
         pendingMP4PlaylistOpen = null;
         pendingM2TSOpen = null;
+        pendingVLCOpen = null;
         var playlistButton = byId("mp4XSPFButton");
         if (playlistButton) {
           playlistButton.hidden = true;
@@ -5167,6 +5229,10 @@
         var m2tsButton = byId("mp4M2TSButton");
         if (m2tsButton) {
           m2tsButton.hidden = true;
+        }
+        var vlcButton = byId("mp4VLCButton");
+        if (vlcButton) {
+          vlcButton.hidden = true;
         }
         restoreFocus(mp4DialogReturnFocus);
         mp4DialogReturnFocus = null;
