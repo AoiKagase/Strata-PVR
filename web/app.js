@@ -44,7 +44,7 @@
     scheduleGenre: "",
     scheduleHiddenChannels: loadHiddenChannels(),
     dashboardOnAirVisible: loadDashboardOnAirVisible(),
-    scheduleWindowMode: "all",
+    scheduleWindowMode: "day",
     scheduleZoomLevel: loadScheduleZoomLevel(),
     channelProgramsChannel: "",
     channelProgramsGenre: "",
@@ -4838,7 +4838,7 @@
     if (scheduleWindow) {
       scheduleWindow.value = state.scheduleWindowMode;
       scheduleWindow.addEventListener("change", function () {
-        state.scheduleWindowMode = scheduleWindow.value || "all";
+        state.scheduleWindowMode = scheduleWindow.value || "day";
         renderSchedule();
       });
     }
