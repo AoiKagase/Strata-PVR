@@ -82,7 +82,8 @@
         <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
-    <div class="schedule-nav-controls" aria-label="番組表フィルタ">
+    <button id="scheduleMenuButton" class="schedule-menu-button icon-button" type="button" title="番組表メニュー" aria-label="番組表メニュー" aria-expanded="false" aria-controls="scheduleNavControls"><svg class="icon"><use href="#icon-list"></use></svg><span class="screen-reader-only">番組表メニュー</span></button>
+    <div id="scheduleNavControls" class="schedule-nav-controls" aria-label="番組表フィルタ">
       <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
         <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
         <span id="scheduleRecordingSummary">録画中 0</span>
@@ -115,33 +116,6 @@
   </nav>
 
   <main class="workspace">
-    <section class="overview" aria-label="Overview">
-      <a class="metric" href="#reserves">
-        <span class="metric-label">予約</span>
-        <strong id="reserveCount">0</strong>
-      </a>
-      <a class="metric metric-conflict" href="#reserves">
-        <span class="metric-label">競合</span>
-        <strong id="conflictCount">0</strong>
-      </a>
-      <a class="metric" href="#dashboard">
-        <span class="metric-label">録画中</span>
-        <strong id="recordingCount">0</strong>
-      </a>
-      <a class="metric" href="#recorded">
-        <span class="metric-label">録画済み</span>
-        <strong id="recordedCount">0</strong>
-      </a>
-      <a class="metric" href="#schedule">
-        <span class="metric-label">チャンネル</span>
-        <strong id="channelCount">0</strong>
-      </a>
-      <a class="metric" href="#rules">
-        <span class="metric-label">ルール</span>
-        <strong id="ruleCount">0</strong>
-      </a>
-    </section>
-
     <section class="view active" data-view="dashboard">
       <div class="view-head">
         <div>
@@ -682,6 +656,7 @@
       </section>
     </section>
   </main>
+  <button id="scheduleMenuBackdrop" class="schedule-menu-backdrop" type="button" aria-label="番組表メニューを閉じる" hidden></button>
 
   <dialog id="programDialog" class="program-dialog" aria-labelledby="programDialogTitle">
     <div class="program-dialog-head">

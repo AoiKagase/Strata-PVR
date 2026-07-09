@@ -27,6 +27,7 @@
   var playerFallbackDuration = 0;
   var playerKnownDuration = 0;
   var pendingConfirmResolve = null;
+  var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
@@ -47,6 +48,7 @@
     scheduleHiddenChannels: loadHiddenChannels(),
     scheduleWindowMode: "day",
     scheduleZoomLevel: loadScheduleZoomLevel(),
+    scheduleChannelTouched: false,
     editingRuleFormIndex: null,
     selectedProgram: null,
     activeProgramID: "",
@@ -966,6 +968,48 @@
     document.documentElement.style.setProperty("--topbar-height", height + "px");
   }
 
+  function isMobileScheduleLayout() {
+    return window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
+  }
+
+  function setScheduleMenuOpen(open) {
+    var expanded = Boolean(open);
+    document.body.classList.toggle("schedule-menu-open", expanded);
+    var button = byId("scheduleMenuButton");
+    var backdrop = byId("scheduleMenuBackdrop");
+    if (button) {
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+    if (backdrop) {
+      backdrop.hidden = !expanded;
+    }
+  }
+
+  function closeScheduleMenu() {
+    setScheduleMenuOpen(false);
+  }
+
+  function firstScheduleChannelID(channels) {
+    for (var i = 0; i < channels.length; i += 1) {
+      var id = scheduleChannelID(channels[i]);
+      var groupID = id || scheduleChannelName(channels[i]) || "unknown";
+      if (id && state.scheduleHiddenChannels.indexOf(groupID) < 0 && state.scheduleHiddenChannels.indexOf(id) < 0) {
+        return id;
+      }
+    }
+    return "";
+  }
+
+  function ensureMobileScheduleChannelDefault(channels) {
+    if (!isMobileScheduleLayout() || state.scheduleChannel || state.scheduleChannelTouched) {
+      return;
+    }
+    var id = firstScheduleChannelID(channels || []);
+    if (id) {
+      state.scheduleChannel = id;
+    }
+  }
+
   function setView(name) {
     var found = false;
     if (state.currentView) {
@@ -986,6 +1030,9 @@
       return;
     }
     state.currentView = found ? name : "dashboard";
+    if (state.currentView !== "schedule") {
+      closeScheduleMenu();
+    }
     document.querySelectorAll(".management-menu").forEach(function (menu) {
       menu.open = name === "status" || name === "settings" || name === "logs";
     });
@@ -2434,6 +2481,7 @@
       return;
     }
     var channels = state.schedule || [];
+    ensureMobileScheduleChannelDefault(channels);
     var channelOrder = [];
     var channelMeta = {};
     var channelGroups = [];
@@ -2548,6 +2596,7 @@
 
   function resetScheduleFilters() {
     state.scheduleChannel = "";
+    state.scheduleChannelTouched = false;
     state.scheduleType = "";
     state.scheduleDay = "";
     state.scheduleGenre = "";
@@ -4040,16 +4089,6 @@
       reserves: programByID(state.reserves),
       recording: programByID(state.recording)
     };
-    var conflicts = reserveConflictCount();
-    var conflictCount = byId("conflictCount");
-    text(byId("reserveCount"), String(state.reserves.length));
-    text(conflictCount, String(conflicts));
-    toggleClass(conflictCount ? conflictCount.closest(".metric") : null, "has-conflicts", conflicts > 0);
-    text(byId("recordingCount"), String(state.recording.length));
-    text(byId("recordedCount"), String(state.recorded.length));
-    text(byId("channelCount"), String(state.schedule.length));
-    text(byId("ruleCount"), String(state.rules.length));
-
     updateOperationalStatus();
 
     var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
@@ -4350,6 +4389,11 @@
     syncStickyOffsets();
     window.addEventListener("resize", syncStickyOffsets);
     window.addEventListener("orientationchange", syncStickyOffsets);
+    window.addEventListener("resize", function () {
+      if (!isMobileScheduleLayout()) {
+        closeScheduleMenu();
+      }
+    });
     initNavigation();
     initKeyboardShortcuts();
     var refreshButton = byId("refreshButton");
@@ -4570,10 +4614,51 @@
     var scheduleChannel = byId("scheduleChannel");
     if (scheduleChannel) {
       scheduleChannel.addEventListener("change", function () {
+        state.scheduleChannelTouched = true;
         state.scheduleChannel = scheduleChannel.value;
         renderSchedule();
+        if (isMobileScheduleLayout()) {
+          closeScheduleMenu();
+        }
       });
     }
+    var scheduleMenuButton = byId("scheduleMenuButton");
+    if (scheduleMenuButton) {
+      scheduleMenuButton.addEventListener("click", function () {
+        setScheduleMenuOpen(!document.body.classList.contains("schedule-menu-open"));
+      });
+    }
+    var scheduleMenuBackdrop = byId("scheduleMenuBackdrop");
+    if (scheduleMenuBackdrop) {
+      scheduleMenuBackdrop.addEventListener("click", closeScheduleMenu);
+    }
+    document.addEventListener("touchstart", function (event) {
+      if (!isMobileScheduleLayout() || state.currentView !== "schedule" || event.touches.length !== 1) {
+        scheduleMenuTouchStart = null;
+        return;
+      }
+      var touch = event.touches[0];
+      scheduleMenuTouchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        open: document.body.classList.contains("schedule-menu-open")
+      };
+    }, { passive: true });
+    document.addEventListener("touchend", function (event) {
+      if (!scheduleMenuTouchStart || !event.changedTouches.length) {
+        return;
+      }
+      var touch = event.changedTouches[0];
+      var dx = touch.clientX - scheduleMenuTouchStart.x;
+      var dy = touch.clientY - scheduleMenuTouchStart.y;
+      var horizontal = Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4;
+      if (horizontal && !scheduleMenuTouchStart.open && scheduleMenuTouchStart.x <= 28 && dx > 0) {
+        setScheduleMenuOpen(true);
+      } else if (horizontal && scheduleMenuTouchStart.open && dx < 0) {
+        closeScheduleMenu();
+      }
+      scheduleMenuTouchStart = null;
+    }, { passive: true });
     var scheduleType = byId("scheduleType");
     if (scheduleType) {
       scheduleType.addEventListener("change", function () {
