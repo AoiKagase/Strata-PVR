@@ -1518,6 +1518,15 @@
     window.location.href = url;
   }
 
+  function playerWindowURL(url, meta) {
+    var params = new URLSearchParams();
+    params.set("src", url);
+    if (meta) {
+      params.set("title", meta);
+    }
+    return "/player.html?" + params.toString();
+  }
+
   function cloneQuery(query) {
     var clone = {};
     Object.keys(query || {}).forEach(function (key) {
@@ -1627,7 +1636,8 @@
     var video = byId("playerVideo");
     var openLink = byId("playerOpenLink");
     if (openLink) {
-      openLink.href = url;
+      var metaNode = byId("playerDialogMeta");
+      openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "");
     }
     if (!video) {
       return;

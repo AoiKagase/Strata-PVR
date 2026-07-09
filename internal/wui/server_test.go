@@ -620,6 +620,33 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function playerWindowURL(url, meta)`,
+			`return "/player.html?" + params.toString();`,
+			`openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "");`,
+		},
+		filepath.Join("..", "..", "web", "player.html"): {
+			`<video id="externalPlayer" controls autoplay playsinline>`,
+			`var src = params.get("src");`,
+			`video.src = new URL(src, window.location.href).toString();`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardShowsProgramCategoryChips(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {
