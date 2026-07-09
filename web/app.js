@@ -215,6 +215,30 @@
     }
   }
 
+  function iconUse(iconID) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("aria-hidden", "true");
+    use.setAttribute("href", "#icon-" + iconID);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  function setIconOnlyControl(control, iconID, label) {
+    if (!control) {
+      return;
+    }
+    control.innerHTML = "";
+    control.appendChild(iconUse(iconID));
+    var hidden = document.createElement("span");
+    hidden.className = "screen-reader-only";
+    hidden.textContent = label;
+    control.appendChild(hidden);
+    control.setAttribute("aria-label", label);
+    control.title = label;
+  }
+
   function rememberFocus() {
     return document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   }
@@ -1577,8 +1601,7 @@
     }
     var duration = playerFiniteDuration(video);
     if (playButton) {
-      playButton.textContent = video.paused ? "再生" : "停止";
-      playButton.setAttribute("aria-label", video.paused ? "再生" : "一時停止");
+      setIconOnlyControl(playButton, video.paused ? "play" : "pause", video.paused ? "再生" : "一時停止");
     }
     if (seek) {
       seek.disabled = duration <= 0;
@@ -1590,8 +1613,7 @@
       time.textContent = duration > 0 ? formatPlayerTime(video.currentTime) + " / " + formatPlayerTime(duration) : "LIVE";
     }
     if (muteButton) {
-      muteButton.textContent = video.muted || video.volume === 0 ? "消音" : "音量";
-      muteButton.setAttribute("aria-label", video.muted || video.volume === 0 ? "ミュート解除" : "ミュート");
+      setIconOnlyControl(muteButton, video.muted || video.volume === 0 ? "volume-x" : "volume-2", video.muted || video.volume === 0 ? "ミュート解除" : "ミュート");
     }
     if (volume && document.activeElement !== volume) {
       volume.value = String(video.muted ? 0 : video.volume);
@@ -4834,7 +4856,11 @@
       }
       button.disabled = Boolean(loading);
       button.setAttribute("aria-busy", loading ? "true" : "false");
-      button.textContent = id === "scheduleRefreshButton" ? (loading ? "読込中" : "再読込") : (loading ? "更新中" : "更新");
+      if (id === "scheduleRefreshButton") {
+        setIconOnlyControl(button, "refresh-cw", loading ? "読込中" : "再読込");
+      } else {
+        button.textContent = loading ? "更新中" : "更新";
+      }
     });
     document.body.classList.toggle("is-loading", Boolean(loading));
   }

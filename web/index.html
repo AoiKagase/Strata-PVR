@@ -8,6 +8,53 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-calendar" viewBox="0 0 24 24">
+      <path d="M8 2v4"></path><path d="M16 2v4"></path><path d="M3 10h18"></path><rect x="3" y="4" width="18" height="18" rx="2"></rect>
+    </symbol>
+    <symbol id="icon-eye" viewBox="0 0 24 24">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle>
+    </symbol>
+    <symbol id="icon-eye-off" viewBox="0 0 24 24">
+      <path d="m3 3 18 18"></path><path d="M10.6 10.6a3 3 0 0 0 4.2 4.2"></path><path d="M9.9 4.2A10.6 10.6 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-3.1 4.3"></path><path d="M6.6 6.6C3.6 8.6 2 12 2 12s3.5 8 10 8a10.8 10.8 0 0 0 4.1-.8"></path>
+    </symbol>
+    <symbol id="icon-external-link" viewBox="0 0 24 24">
+      <path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path>
+    </symbol>
+    <symbol id="icon-file-text" viewBox="0 0 24 24">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path>
+    </symbol>
+    <symbol id="icon-filter" viewBox="0 0 24 24">
+      <path d="M4 5h16"></path><path d="M7 12h10"></path><path d="M10 19h4"></path>
+    </symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24">
+      <path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path>
+    </symbol>
+    <symbol id="icon-maximize" viewBox="0 0 24 24">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+    </symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24">
+      <path d="M8 5v14"></path><path d="M16 5v14"></path>
+    </symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <polygon points="6 3 20 12 6 21 6 3"></polygon>
+    </symbol>
+    <symbol id="icon-refresh-cw" viewBox="0 0 24 24">
+      <path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"></path><path d="M21 3v5h-5"></path>
+    </symbol>
+    <symbol id="icon-rotate-ccw" viewBox="0 0 24 24">
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path>
+    </symbol>
+    <symbol id="icon-tag" viewBox="0 0 24 24">
+      <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"></path><path d="M7.5 7.5h.01"></path>
+    </symbol>
+    <symbol id="icon-volume-2" viewBox="0 0 24 24">
+      <path d="M11 5 6 9H3v6h3l5 4z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 5a10 10 0 0 1 0 14"></path>
+    </symbol>
+    <symbol id="icon-volume-x" viewBox="0 0 24 24">
+      <path d="M11 5 6 9H3v6h3l5 4z"></path><path d="m16 9 5 5"></path><path d="m21 9-5 5"></path>
+    </symbol>
+  </svg>
   <header class="topbar">
     <div>
       <h1>Strata PVR</h1>
@@ -33,10 +80,10 @@
         <span id="scheduleRecordingSummary">録画中 0</span>
         <span id="scheduleReserveSummary">予約 0</span>
         <span id="scheduleConflictSummary" class="schedule-conflict-summary">競合 0</span>
-        <button id="scheduleRefreshButton" type="button">再読込</button>
-        <a class="schedule-status-link" href="#logs">ログ</a>
+        <button id="scheduleRefreshButton" class="icon-button" type="button" title="再読込" aria-label="再読込"><svg class="icon"><use href="#icon-refresh-cw"></use></svg><span class="screen-reader-only">再読込</span></button>
+        <a class="schedule-status-link icon-button" href="#logs" title="ログ" aria-label="ログ"><svg class="icon"><use href="#icon-file-text"></use></svg><span class="screen-reader-only">ログ</span></a>
       </div>
-      <label for="scheduleType">種別</label>
+      <label class="icon-field-label" for="scheduleType" title="種別"><svg class="icon"><use href="#icon-filter"></use></svg><span class="screen-reader-only">種別</span></label>
       <select id="scheduleType">
         <option value="">すべて</option>
         <option value="GR">GR</option>
@@ -44,19 +91,19 @@
         <option value="CS">CS</option>
         <option value="EX">EX</option>
       </select>
-      <label for="scheduleDay">日付</label>
+      <label class="icon-field-label" for="scheduleDay" title="日付"><svg class="icon"><use href="#icon-calendar"></use></svg><span class="screen-reader-only">日付</span></label>
       <select id="scheduleDay"></select>
-      <label for="scheduleGenre">ジャンル</label>
+      <label class="icon-field-label" for="scheduleGenre" title="ジャンル"><svg class="icon"><use href="#icon-tag"></use></svg><span class="screen-reader-only">ジャンル</span></label>
       <select id="scheduleGenre">
         <option value="">全ジャンル</option>
       </select>
-      <label for="scheduleHiddenChannel">隠すCh</label>
+      <label class="icon-field-label" for="scheduleHiddenChannel" title="隠すチャンネル"><svg class="icon"><use href="#icon-eye-off"></use></svg><span class="screen-reader-only">隠すチャンネル</span></label>
       <select id="scheduleHiddenChannel">
         <option value="">選択</option>
       </select>
-      <button id="scheduleHideChannelButton" type="button" title="選択したチャンネルを番組表から非表示にする">非表示</button>
-      <button id="scheduleShowChannelButton" type="button" title="選択したチャンネルを番組表に戻す">再表示</button>
-      <button id="scheduleClearHiddenButton" type="button" title="非表示チャンネルをすべて戻す">全表示</button>
+      <button id="scheduleHideChannelButton" class="icon-button" type="button" title="選択したチャンネルを番組表から非表示にする" aria-label="選択したチャンネルを番組表から非表示にする"><svg class="icon"><use href="#icon-eye-off"></use></svg><span class="screen-reader-only">非表示</span></button>
+      <button id="scheduleShowChannelButton" class="icon-button" type="button" title="選択したチャンネルを番組表に戻す" aria-label="選択したチャンネルを番組表に戻す"><svg class="icon"><use href="#icon-eye"></use></svg><span class="screen-reader-only">再表示</span></button>
+      <button id="scheduleClearHiddenButton" class="icon-button" type="button" title="非表示チャンネルをすべて戻す" aria-label="非表示チャンネルをすべて戻す"><svg class="icon"><use href="#icon-rotate-ccw"></use></svg><span class="screen-reader-only">全表示</span></button>
     </div>
   </nav>
 
@@ -853,10 +900,10 @@
     <div class="player-shell">
       <video id="playerVideo" class="embedded-player" autoplay playsinline tabindex="0" aria-label="視聴プレイヤー"></video>
       <div class="player-controls" id="playerControls">
-        <button class="player-control-button" type="button" id="playerPlayButton" aria-label="再生">再生</button>
+        <button class="player-control-button icon-button" type="button" id="playerPlayButton" aria-label="再生"><svg class="icon"><use href="#icon-play"></use></svg><span class="screen-reader-only">再生</span></button>
         <input id="playerSeek" class="player-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="再生位置">
         <span id="playerTime" class="player-time">0:00 / --:--</span>
-        <button class="player-control-button" type="button" id="playerMuteButton" aria-label="ミュート">音量</button>
+        <button class="player-control-button icon-button" type="button" id="playerMuteButton" aria-label="ミュート"><svg class="icon"><use href="#icon-volume-2"></use></svg><span class="screen-reader-only">ミュート</span></button>
         <input id="playerVolume" class="player-volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="音量">
         <label class="player-quality" for="playerQuality">
           <span>画質</span>
@@ -869,8 +916,8 @@
             <option value="custom">現在の指定</option>
           </select>
         </label>
-        <button class="player-control-button" type="button" id="playerFullscreenButton">全画面</button>
-        <a class="player-control-link" id="playerOpenLink" href="#" target="_blank" rel="noopener">別画面</a>
+        <button class="player-control-button icon-button" type="button" id="playerFullscreenButton" title="全画面" aria-label="全画面"><svg class="icon"><use href="#icon-maximize"></use></svg><span class="screen-reader-only">全画面</span></button>
+        <a class="player-control-link icon-button" id="playerOpenLink" href="#" target="_blank" rel="noopener" title="別画面で開く" aria-label="別画面で開く"><svg class="icon"><use href="#icon-external-link"></use></svg><span class="screen-reader-only">別画面</span></a>
       </div>
     </div>
   </dialog>

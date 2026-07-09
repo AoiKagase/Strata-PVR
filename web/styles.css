@@ -53,6 +53,40 @@ body {
   white-space: nowrap;
 }
 
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.icon-field-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 24px;
+  color: #52636b;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -169,6 +203,13 @@ body {
   font-size: 12px;
   font-weight: 800;
   text-decoration: none;
+}
+
+.schedule-status-link.icon-button,
+.schedule-nav-controls button.icon-button {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
 }
 
 .schedule-status-link:hover {
@@ -1570,6 +1611,13 @@ summary:focus-visible,
   font-size: 12px;
   font-weight: 800;
   text-decoration: none;
+}
+
+.player-control-button.icon-button,
+.player-control-link.icon-button {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
 }
 
 .player-control-button:hover,
