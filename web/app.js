@@ -1740,7 +1740,7 @@
       return;
     }
     var nextTime = (Number(seek.value) / 1000) * duration;
-    if (playerSeekable && playerSourceBuilder && playerNativeDuration(video) <= 0) {
+    if (playerSeekable && playerSourceBuilder && playerPrefersConfiguredDuration()) {
       var nextQuery = cloneQuery(playerBaseQuery);
       var baseStart = playerQueryLimit() > 0 ? playerQueryStart() : 0;
       var limit = playerQueryLimit();
