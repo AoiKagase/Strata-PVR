@@ -2323,15 +2323,22 @@
     return "/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size=" + encodeURIComponent(size || "160x90");
   }
 
+  function programPreviewUnavailable(program, resource) {
+    return resource === "recorded" && Boolean(program && program.isRemoved);
+  }
+
   function renderProgramPreview(program, resource) {
     if (!program || !program.recorded || (resource !== "recording" && resource !== "recorded")) {
       return null;
     }
+    if (programPreviewUnavailable(program, resource)) {
+      return null;
+    }
     var image = document.createElement("img");
     image.className = "program-preview-image";
-    image.src = programPreviewURL(program, resource, "160x90");
     image.alt = "";
     image.loading = "lazy";
+    image.src = programPreviewURL(program, resource, "160x90");
     image.addEventListener("error", function () {
       var row = image.closest(".program-row");
       if (row) {
@@ -2511,12 +2518,19 @@
     renderActions(body, program, actions);
 
     if (options.preview) {
-      var preview = renderProgramPreview(program, options.previewResource || "recording");
+      var previewResource = options.previewResource || "recording";
+      var previewUnavailable = programPreviewUnavailable(program, previewResource);
+      var preview = renderProgramPreview(program, previewResource);
       if (preview) {
         item.appendChild(preview);
+      } else {
+        item.classList.remove("with-preview");
       }
     }
     item.appendChild(body);
+    if (previewUnavailable) {
+      renderRecordedPreviewWarning(item);
+    }
     return item;
   }
 
@@ -4920,6 +4934,28 @@
     });
   }
 
+  function refreshOperationalData() {
+    Promise.all([
+      api("status.json"),
+      api("reserves.json"),
+      api("recording.json"),
+      api("storage.json").catch(function () {
+        return state.storage;
+      }),
+      api("metrics.json").catch(function () {
+        return state.metrics;
+      })
+    ]).then(function (result) {
+      state.status = result[0] || {};
+      state.reserves = result[1] || [];
+      state.recording = result[2] || [];
+      state.storage = result[3] || null;
+      state.metrics = result[4] || null;
+      state.lastError = null;
+      render();
+    }).catch(showError);
+  }
+
   function refreshMetrics() {
     api("metrics.json").then(function (result) {
       state.metrics = result || null;
@@ -5579,7 +5615,7 @@
     }, renderChannelPrograms);
     subscribeRealtimeRefresh();
     refresh();
-    setInterval(refresh, 30000);
+    setInterval(refreshOperationalData, 30000);
     setInterval(refreshLogs, 60000);
     refreshLogs();
   });

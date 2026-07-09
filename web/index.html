@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Strata PVR WUI</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -121,6 +122,7 @@
     </section>
 
     <section class="view" data-view="schedule" hidden>
+      <h2 class="screen-reader-only">番組表</h2>
       <div class="view-head">
         <div>
           <h2>番組表</h2>
@@ -849,7 +851,7 @@
       <button class="small-button" type="button" id="playerDialogClose">閉じる</button>
     </div>
     <div class="player-shell">
-      <video id="playerVideo" class="embedded-player" autoplay playsinline tabindex="0"></video>
+      <video id="playerVideo" class="embedded-player" autoplay playsinline tabindex="0" aria-label="視聴プレイヤー"></video>
       <div class="player-controls" id="playerControls">
         <button class="player-control-button" type="button" id="playerPlayButton" aria-label="再生">再生</button>
         <input id="playerSeek" class="player-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="再生位置">

@@ -43,6 +43,16 @@ body {
   line-height: 1.5;
 }
 
+.screen-reader-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -2285,8 +2295,18 @@ body.view-settings .settings-grid {
 
   .schedule-nav-controls {
     width: 100%;
+    display: grid;
+    grid-template-columns: repeat(6, max-content);
+    gap: 6px;
     overflow-x: auto;
     padding: 8px;
+  }
+
+  .schedule-status-summary {
+    grid-column: 1 / -1;
+    margin-right: 0;
+    padding-right: 0;
+    border-right: 0;
   }
 
   .schedule-nav-controls select,
@@ -2405,6 +2425,10 @@ body.view-schedule .schedule-zoom-controls {
 }
 
 @media (max-width: 520px) {
+  body.view-schedule .schedule-nav-controls {
+    display: grid;
+  }
+
   body.view-schedule .schedule-guide-scroll {
     height: calc(100vh - 255px);
     max-height: calc(100vh - 255px);
