@@ -2245,15 +2245,58 @@
     return image;
   }
 
+  function clearProgramDialogPreview(root) {
+    if (!root) {
+      return;
+    }
+    var objectURL = root.getAttribute("data-object-url");
+    if (objectURL) {
+      URL.revokeObjectURL(objectURL);
+      root.removeAttribute("data-object-url");
+    }
+    root.removeAttribute("data-preview-id");
+    root.innerHTML = "";
+    root.hidden = true;
+  }
+
+  function renderProgramDialogPreviewAlert(root, message) {
+    clearProgramDialogPreview(root);
+    var alert = document.createElement("div");
+    alert.className = "program-dialog-alert";
+    alert.setAttribute("role", "status");
+    alert.textContent = message;
+    root.appendChild(alert);
+    root.hidden = false;
+  }
+
+  function appendProgramDialogPreviewImage(root, resource, src) {
+    var figure = document.createElement("figure");
+    figure.className = "program-dialog-preview-figure";
+    var image = document.createElement("img");
+    image.className = "program-dialog-preview-image";
+    image.src = src;
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("error", function () {
+      clearProgramDialogPreview(root);
+    });
+    var caption = document.createElement("figcaption");
+    caption.textContent = resource === "recording" ? "録画中プレビュー" : "録画済みプレビュー";
+    figure.appendChild(image);
+    figure.appendChild(caption);
+    root.appendChild(figure);
+    root.hidden = false;
+  }
+
   function renderProgramDialogPreview(root, program) {
     if (!root) {
       return;
     }
-    root.innerHTML = "";
-    root.hidden = true;
+    clearProgramDialogPreview(root);
     if (!program || !program.id) {
       return;
     }
+    root.setAttribute("data-preview-id", program.id);
 
     var resource = "";
     var previewProgram = program;
@@ -2270,23 +2313,38 @@
       return;
     }
 
-    var figure = document.createElement("figure");
-    figure.className = "program-dialog-preview-figure";
-    var image = document.createElement("img");
-    image.className = "program-dialog-preview-image";
-    image.src = programPreviewURL(previewProgram, resource, "480x270") + (resource === "recording" ? "&_=" + Date.now() : "");
-    image.alt = "";
-    image.loading = "lazy";
-    image.addEventListener("error", function () {
-      root.innerHTML = "";
-      root.hidden = true;
+    var previewURL = programPreviewURL(previewProgram, resource, "480x270") + (resource === "recording" ? "&_=" + Date.now() : "");
+    if (resource === "recording") {
+      appendProgramDialogPreviewImage(root, resource, previewURL);
+      return;
+    }
+
+    fetch(previewURL).then(function (response) {
+      if (root.getAttribute("data-preview-id") !== program.id) {
+        return null;
+      }
+      if (response.status === 410) {
+        renderProgramDialogPreviewAlert(root, "録画ファイルが見つかりません。移動または削除されている可能性があります。");
+        return null;
+      }
+      if (!response.ok) {
+        clearProgramDialogPreview(root);
+        return null;
+      }
+      return response.blob();
+    }).then(function (blob) {
+      if (!blob || root.getAttribute("data-preview-id") !== program.id) {
+        return;
+      }
+      clearProgramDialogPreview(root);
+      var objectURL = URL.createObjectURL(blob);
+      root.setAttribute("data-object-url", objectURL);
+      appendProgramDialogPreviewImage(root, resource, objectURL);
+    }).catch(function () {
+      if (root.getAttribute("data-preview-id") === program.id) {
+        clearProgramDialogPreview(root);
+      }
     });
-    var caption = document.createElement("figcaption");
-    caption.textContent = resource === "recording" ? "録画中プレビュー" : "録画済みプレビュー";
-    figure.appendChild(image);
-    figure.appendChild(caption);
-    root.appendChild(figure);
-    root.hidden = false;
   }
 
   function renderProgramRow(program, actions, showChannel, options) {
@@ -5139,6 +5197,7 @@
         }
       });
       programDialog.addEventListener("close", function () {
+        clearProgramDialogPreview(byId("programDialogPreview"));
         state.selectedProgram = null;
         restoreFocus(programDialogReturnFocus);
         programDialogReturnFocus = null;

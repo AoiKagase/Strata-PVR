@@ -1382,6 +1382,17 @@ summary:focus-visible,
   font-weight: 700;
 }
 
+.program-dialog-alert {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--error-strong) 34%, white);
+  border-radius: 6px;
+  background: var(--error-soft);
+  color: var(--error-strong);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .program-dialog-description {
   padding: 14px 16px 0;
   color: #33444c;
