@@ -31,6 +31,7 @@
         <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
         <span id="scheduleRecordingSummary">録画中 0</span>
         <span id="scheduleReserveSummary">予約 0</span>
+        <span id="scheduleConflictSummary" class="schedule-conflict-summary">競合 0</span>
         <button id="scheduleRefreshButton" type="button">再読込</button>
         <a class="schedule-status-link" href="#logs">ログ</a>
       </div>
@@ -63,6 +64,10 @@
       <a class="metric" href="#reserves">
         <span class="metric-label">予約</span>
         <strong id="reserveCount">0</strong>
+      </a>
+      <a class="metric metric-conflict" href="#reserves">
+        <span class="metric-label">競合</span>
+        <strong id="conflictCount">0</strong>
       </a>
       <a class="metric" href="#dashboard">
         <span class="metric-label">録画中</span>

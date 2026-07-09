@@ -167,6 +167,14 @@ body {
   color: var(--accent-strong);
 }
 
+.schedule-conflict-summary {
+  padding: 3px 6px;
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn-strong);
+}
+
 .main-nav .schedule-status-link {
   display: inline-flex;
   flex: 0 0 auto;
@@ -354,6 +362,21 @@ h3 {
   color: #0b3436;
   font-size: 36px;
   line-height: 1;
+}
+
+.metric-conflict {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.metric-conflict .metric-label,
+.metric-conflict strong {
+  color: var(--warn-strong);
+}
+
+.metric-conflict:hover {
+  border-color: var(--warn-strong);
+  background: oklch(91% 0.055 75);
 }
 
 .content-grid {
@@ -777,16 +800,34 @@ summary:focus-visible,
   gap: 4px;
 }
 
-.program-row .program-state-badge {
+.program-state-badge {
   width: fit-content;
   padding: 2px 6px;
-  border: 1px solid #d28b8b;
+  border: 1px solid var(--reserved);
   border-radius: 3px;
-  background: #fff1f1;
-  color: #8a1f1f;
+  background: var(--reserved-soft);
+  color: var(--reserved-strong);
   font-size: 11px;
   font-weight: 750;
   line-height: 1.2;
+}
+
+.program-state-badge.recording {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error-strong);
+}
+
+.program-state-badge.conflict {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn-strong);
+}
+
+.program-state-badge.skip {
+  border-color: oklch(70% 0.016 245);
+  background: oklch(94% 0.01 245);
+  color: oklch(34% 0.022 245);
 }
 
 .inline-channel-row {
@@ -1056,6 +1097,17 @@ summary:focus-visible,
   box-shadow: 0 0 0 2px oklch(55% 0.12 210 / 0.13);
 }
 
+.schedule-card.conflict {
+  border: 2px solid var(--warn);
+  background: var(--warn-soft);
+  box-shadow: 0 0 0 2px oklch(62% 0.13 75 / 0.16);
+}
+
+.schedule-card.skip {
+  border-color: oklch(70% 0.016 245);
+  background: oklch(94% 0.01 245);
+}
+
 .schedule-now-line {
   position: absolute;
   left: 0;
@@ -1096,6 +1148,18 @@ summary:focus-visible,
   border-color: var(--error);
   background: var(--error-strong);
   color: oklch(97% 0.015 28);
+}
+
+.schedule-card.conflict .schedule-card-state {
+  border-color: var(--warn);
+  background: var(--warn-strong);
+  color: oklch(98% 0.01 75);
+}
+
+.schedule-card.skip .schedule-card-state {
+  border-color: oklch(62% 0.014 245);
+  background: oklch(37% 0.02 245);
+  color: oklch(96% 0.006 245);
 }
 
 .schedule-card strong {

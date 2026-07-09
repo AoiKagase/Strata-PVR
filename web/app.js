@@ -549,6 +549,7 @@
     body.className = "program-dialog-meta-text";
     body.textContent = (parts || []).filter(Boolean).join(" / ");
     root.appendChild(body);
+    renderProgramStateBadges(root, program);
   }
 
   function normalizeSearchText(value) {
@@ -593,6 +594,12 @@
     return now >= program.start && now <= programEnd(program);
   }
 
+  function reserveConflictCount() {
+    return (state.reserves || []).filter(function (program) {
+      return program && program.isConflict;
+    }).length;
+  }
+
   function decorateProgramState(program) {
     if (!program || !program.id) {
       return program;
@@ -612,6 +619,7 @@
       decorated.isReserved = true;
       decorated.isManualReserved = Boolean(reserve.isManualReserved);
       decorated.isSkip = Boolean(reserve.isSkip);
+      decorated.isConflict = Boolean(reserve.isConflict);
       decorated._reserveState = reserve;
     }
     if (active) {
@@ -641,16 +649,30 @@
     return ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"];
   }
 
-  function renderProgramStateBadges(item, program) {
+  function programStateLabels(program) {
     var labels = [];
     if (program && program.isRecording) {
-      labels.push("録画中");
+      labels.push({ text: "録画中", type: "recording" });
     } else if (program && program.isReserved) {
-      labels.push(program.isManualReserved ? "手動予約" : "予約済み");
+      labels.push({ text: program.isManualReserved ? "手動予約" : "予約済み", type: "reserved" });
+    }
+    if (program && program.isConflict) {
+      labels.push({ text: "競合", type: "conflict" });
     }
     if (program && program.isSkip) {
-      labels.push("スキップ");
+      labels.push({ text: "スキップ", type: "skip" });
     }
+    return labels;
+  }
+
+  function programStateLabelText(program) {
+    return programStateLabels(program).map(function (label) {
+      return label.text;
+    }).join(" / ");
+  }
+
+  function renderProgramStateBadges(item, program) {
+    var labels = programStateLabels(program);
     if (!labels.length) {
       return;
     }
@@ -658,8 +680,8 @@
     badges.className = "program-state-badges";
     labels.forEach(function (label) {
       var badge = document.createElement("span");
-      badge.className = "program-state-badge";
-      badge.textContent = label;
+      badge.className = "program-state-badge " + label.type;
+      badge.textContent = label.text;
       badges.appendChild(badge);
     });
     item.appendChild(badges);
@@ -965,6 +987,7 @@
   function updateOperationalStatus() {
     var alive = operatorAlive();
     var statusText = state.lastError ? state.lastError.message : (alive ? "オペレータ稼働中" : "オペレータ停止中");
+    var conflicts = reserveConflictCount();
     var badge = byId("statusBadge");
     if (badge) {
       badge.textContent = statusText;
@@ -977,6 +1000,7 @@
     }
     text(byId("scheduleRecordingSummary"), "録画中 " + state.recording.length);
     text(byId("scheduleReserveSummary"), "予約 " + state.reserves.length);
+    text(byId("scheduleConflictSummary"), "競合 " + conflicts);
   }
 
   function initNavigation() {
@@ -2682,10 +2706,12 @@
   function renderScheduleCard(program, timelineStart, minuteHeight) {
     program = decorateProgramState(program);
     var card = document.createElement("article");
-    var stateLabel = program.isRecording ? "録画中" : (program.isReserved ? (program.isManualReserved ? "手動予約" : "予約済み") : "");
+    var stateLabel = programStateLabelText(program);
     card.className = "schedule-card" + categoryClass(program.category);
     card.classList.toggle("recording", Boolean(program.isRecording));
     card.classList.toggle("reserved", Boolean(program.isReserved && !program.isRecording));
+    card.classList.toggle("conflict", Boolean(program.isConflict));
+    card.classList.toggle("skip", Boolean(program.isSkip));
     card.classList.toggle("has-state", Boolean(stateLabel));
     var end = programEnd(program);
     var durationMinutes = Math.max(1, (end - program.start) / 60000);
@@ -4181,6 +4207,7 @@
       recording: programByID(state.recording)
     };
     text(byId("reserveCount"), String(state.reserves.length));
+    text(byId("conflictCount"), String(reserveConflictCount()));
     text(byId("recordingCount"), String(state.recording.length));
     text(byId("recordedCount"), String(state.recorded.length));
     text(byId("channelCount"), String(state.schedule.length));
