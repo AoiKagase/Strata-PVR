@@ -25,6 +25,7 @@
   var playerSeekable = false;
   var playerSeeking = false;
   var playerFallbackDuration = 0;
+  var playerKnownDuration = 0;
   var pendingConfirmResolve = null;
   var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -1622,12 +1623,22 @@
     return finitePositiveSeconds(playerBaseQuery && playerBaseQuery.t);
   }
 
+  function playerConfiguredDuration() {
+    return playerQueryLimit() || playerFallbackDuration;
+  }
+
   function playerFiniteDuration(video) {
     var nativeDuration = playerNativeDuration(video);
     if (nativeDuration > 0) {
+      playerKnownDuration = nativeDuration;
       return nativeDuration;
     }
-    return playerQueryLimit() || playerFallbackDuration;
+    var configuredDuration = playerConfiguredDuration();
+    if (configuredDuration > 0) {
+      playerKnownDuration = configuredDuration;
+      return configuredDuration;
+    }
+    return playerKnownDuration;
   }
 
   function playerCurrentTime(video, duration) {
@@ -1691,6 +1702,7 @@
     video.load();
     video.src = url;
     playerBaseQuery = cloneQuery(query || {});
+    playerKnownDuration = playerConfiguredDuration();
     updatePlayerControls();
     video.play().catch(function () {
       // Browsers may block autoplay; controls remain available for manual start.
@@ -1837,6 +1849,7 @@
     playerSourceBuilder = typeof options.sourceBuilder === "function" ? options.sourceBuilder : null;
     playerSeekable = Boolean(options.seekable);
     playerFallbackDuration = finitePositiveSeconds(options.duration);
+    playerKnownDuration = playerFallbackDuration;
     updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
     setPlayerSource(url, options.query || null);
@@ -1877,6 +1890,7 @@
     playerSeekable = false;
     playerSeeking = false;
     playerFallbackDuration = 0;
+    playerKnownDuration = 0;
     updatePlayerQualityControl(null, false);
     updatePlayerControls();
   }
