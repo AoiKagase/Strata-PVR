@@ -1223,6 +1223,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleRecorded(w, r)
+	case len(parts) == 2 && parts[0] == "recorded" && parts[1] == "cleanup":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleRecordedCleanup(w, r)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "file":
 		if !requireAPIType(w, r, apiType, "json", "m2ts") {
 			return
@@ -1895,36 +1900,90 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPut {
-		kept := recorded[:0]
-		removed := false
-		for _, program := range recorded {
-			if program.Recorded == "" {
-				removed = true
-				continue
-			}
-			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
-				kept = append(kept, program)
-			} else {
-				removed = true
-			}
-		}
-		recorded = kept
-		if removed {
-			if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
-				legacyHTTPError(w, r, http.StatusInternalServerError)
-				return
-			}
-		}
-		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
+		result, err := s.runRecordedCleanup(recorded, true)
+		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
+		recorded = result.Recorded
 	}
 	if r.Method == http.MethodPut {
 		writePrettyJSON(w, http.StatusOK, recorded)
 		return
 	}
 	writeCompactJSON(w, http.StatusOK, recorded)
+}
+
+type recordedCleanupItem struct {
+	Action   string `json:"action"`
+	ID       string `json:"id"`
+	Recorded string `json:"recorded"`
+}
+
+type recordedCleanupResult struct {
+	Total    int                   `json:"total"`
+	Removed  int                   `json:"removed"`
+	Kept     int                   `json:"kept"`
+	Backup   string                `json:"backup,omitempty"`
+	Items    []recordedCleanupItem `json:"items"`
+	Recorded []legacy.Program      `json:"-"`
+}
+
+func (s *server) handleRecordedCleanup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
+		w.Header().Set("Allow", "HEAD, GET, PUT")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	var recorded []legacy.Program
+	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	result, err := s.runRecordedCleanup(recorded, r.Method == http.MethodPut)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writePrettyJSON(w, http.StatusOK, result)
+}
+
+func (s *server) runRecordedCleanup(recorded []legacy.Program, apply bool) (recordedCleanupResult, error) {
+	result := recordedCleanupResult{
+		Total: len(recorded),
+		Items: make([]recordedCleanupItem, 0, len(recorded)),
+	}
+	kept := make([]legacy.Program, 0, len(recorded))
+	for _, program := range recorded {
+		item := recordedCleanupItem{
+			Action:   "keep",
+			ID:       program.ID,
+			Recorded: program.Recorded,
+		}
+		if program.Recorded == "" {
+			item.Action = "remove"
+			result.Removed++
+		} else if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
+			kept = append(kept, program)
+			result.Kept++
+		} else {
+			item.Action = "remove"
+			result.Removed++
+		}
+		result.Items = append(result.Items, item)
+	}
+	result.Recorded = kept
+	if apply && result.Removed > 0 {
+		backup, err := storage.BackupFile(s.paths.Recorded)
+		if err != nil {
+			return result, err
+		}
+		result.Backup = backup
+		if err := storage.WriteJSONAtomic(s.paths.Recorded, kept, false); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
 }
 
 func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -3570,6 +3629,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 	case len(parts) == 3 && parts[0] == "recording" && (parts[2] == "preview" || parts[2] == "watch"):
 		return []string{"GET"}, true
 	case len(parts) == 1 && parts[0] == "recorded":
+		return []string{"GET", "PUT"}, true
+	case len(parts) == 2 && parts[0] == "recorded" && parts[1] == "cleanup":
 		return []string{"GET", "PUT"}, true
 	case len(parts) == 2 && parts[0] == "recorded":
 		return []string{"GET", "DELETE"}, true

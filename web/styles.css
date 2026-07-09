@@ -1917,6 +1917,38 @@ body.view-settings .settings-grid {
   white-space: nowrap;
 }
 
+.cleanup-status {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-strong);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cleanup-status[hidden] {
+  display: none;
+}
+
+.cleanup-status.success {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success-strong);
+}
+
+.cleanup-status.warning {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn-strong);
+}
+
+.cleanup-status.error {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error-strong);
+}
+
 .config-json-editor {
   min-height: 360px;
   margin-top: 12px;

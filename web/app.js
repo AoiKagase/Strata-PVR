@@ -1213,6 +1213,78 @@
     });
   }
 
+  function setRecordedCleanupStatus(message, kind) {
+    var status = byId("recordedCleanupStatus");
+    if (!status) {
+      return;
+    }
+    status.hidden = !message;
+    status.className = "cleanup-status" + (kind ? " " + kind : "");
+    status.textContent = message || "";
+  }
+
+  function summarizeRecordedCleanup(result, applied) {
+    var removed = result && Number(result.removed || 0);
+    var kept = result && Number(result.kept || 0);
+    var total = result && Number(result.total || 0);
+    if (!removed) {
+      return "削除対象はありません。録画済み " + total + "件を確認しました。";
+    }
+    var removedItems = ((result && result.items) || []).filter(function (item) {
+      return item && item.action === "remove";
+    }).slice(0, 3).map(function (item) {
+      return item.id || item.recorded || "IDなし";
+    });
+    var suffix = removedItems.length ? " 対象: " + removedItems.join(", ") + (removed > removedItems.length ? " ほか" : "") : "";
+    return (applied ? "クリーンアップしました。" : "クリーンアップ対象があります。") +
+      " 削除対象 " + removed + "件 / 残す項目 " + kept + "件。" + suffix;
+  }
+
+  function cleanupRecorded() {
+    var button = byId("recordedCleanupButton");
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    setBusy("録画済みクリーンアップ確認中");
+    setRecordedCleanupStatus("録画ファイルの存在を確認しています。", "");
+    return request("recorded/cleanup.json", "GET").then(function (result) {
+      if (!result.removed) {
+        setBusy("録画済みクリーンアップ対象なし");
+        setRecordedCleanupStatus(summarizeRecordedCleanup(result, false), "success");
+        return;
+      }
+      setRecordedCleanupStatus(summarizeRecordedCleanup(result, false), "warning");
+      return confirmAction(
+        result.removed + "件の録画済み項目を削除しますか？",
+        {
+          danger: true,
+          meta: "実ファイルが見つからない録画済み項目だけを削除します。録画ファイル自体は削除しません。",
+          okLabel: "クリーンアップ",
+          title: "録画済みクリーンアップの確認"
+        }
+      ).then(function (confirmed) {
+        if (!confirmed) {
+          setBusy("録画済みクリーンアップをキャンセル");
+          return;
+        }
+        setBusy("録画済みクリーンアップ中");
+        return request("recorded/cleanup.json", "PUT").then(function (applied) {
+          setRecordedCleanupStatus(summarizeRecordedCleanup(applied, true), "success");
+          return refresh();
+        });
+      });
+    }).catch(function (error) {
+      setRecordedCleanupStatus(error.message, "error");
+      showError(error);
+    }).finally(function () {
+      if (button) {
+        button.disabled = false;
+        button.setAttribute("aria-busy", "false");
+      }
+    });
+  }
+
   function programConfirmMeta(program) {
     return [programTitle(program), channelName(program), program && program.id].filter(Boolean).join(" / ");
   }
@@ -4499,6 +4571,10 @@
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
       refreshButton.addEventListener("click", refresh);
+    }
+    var recordedCleanupButton = byId("recordedCleanupButton");
+    if (recordedCleanupButton) {
+      recordedCleanupButton.addEventListener("click", cleanupRecorded);
     }
     if (!metricsRefreshTimer) {
       metricsRefreshTimer = window.setInterval(refreshMetrics, 30000);

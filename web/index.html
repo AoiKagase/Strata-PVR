@@ -226,6 +226,9 @@
           <h2>録画済み</h2>
           <p>録画済み番組の再生、変換、ダウンロード、削除を行います。</p>
         </div>
+        <div class="panel-actions">
+          <button id="recordedCleanupButton" type="button" title="実ファイルが見つからない録画済み項目を整理">クリーンアップ</button>
+        </div>
       </div>
       <div class="list-filter-controls" aria-label="録画済みフィルタ">
         <label class="control-field" for="recordedListQuery">
@@ -251,6 +254,7 @@
           <button id="recordedListFilterReset" class="filter-clear-button" type="button">クリア</button>
           <span id="recordedListFilterSummary" class="list-filter-summary">0件</span>
         </div>
+      <div id="recordedCleanupStatus" class="cleanup-status" role="status" aria-live="polite" hidden></div>
       <div id="recordedListPage" class="list empty">録画済み番組はありません</div>
     </section>
 

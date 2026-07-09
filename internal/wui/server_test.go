@@ -1697,6 +1697,80 @@ func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	existingPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(existingPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recorded := []legacy.Program{
+		{ID: "exists", Recorded: filepath.ToSlash(existingPath)},
+		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
+		{ID: "empty"},
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/cleanup.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("cleanup dry-run status = %d body=%s", res.Code, res.Body.String())
+	}
+	var dryRun recordedCleanupResult
+	if err := json.Unmarshal(res.Body.Bytes(), &dryRun); err != nil {
+		t.Fatal(err)
+	}
+	if dryRun.Total != 3 || dryRun.Kept != 1 || dryRun.Removed != 2 || dryRun.Backup != "" {
+		t.Fatalf("unexpected dry-run result: %#v", dryRun)
+	}
+	var afterDryRun []legacy.Program
+	if err := storage.ReadJSON(paths.Recorded, &afterDryRun, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(afterDryRun) != 3 {
+		t.Fatalf("dry-run should not modify recorded list: %#v", afterDryRun)
+	}
+	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("dry-run should not create backups: %#v", backups)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/recorded/cleanup.json", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("cleanup apply status = %d body=%s", res.Code, res.Body.String())
+	}
+	var applied recordedCleanupResult
+	if err := json.Unmarshal(res.Body.Bytes(), &applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied.Removed != 2 || applied.Kept != 1 || applied.Backup == "" {
+		t.Fatalf("unexpected apply result: %#v", applied)
+	}
+	backups, err = filepath.Glob(paths.Recorded + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
+	}
+	var got []legacy.Program
+	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "exists" {
+		t.Fatalf("cleanup should keep only existing recording: %#v", got)
+	}
+}
+
 func TestAPIRecordedDeleteBacksUpBeforeRemoval(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
