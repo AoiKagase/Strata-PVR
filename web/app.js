@@ -24,6 +24,8 @@
   var playerBaseQuery = null;
   var playerSeekable = false;
   var playerSeeking = false;
+  var playerTimelineStart = 0;
+  var playerTimelineDuration = 0;
   var playerFallbackDuration = 0;
   var playerKnownDuration = 0;
   var pendingConfirmResolve = null;
@@ -1624,6 +1626,9 @@
   }
 
   function playerConfiguredDuration() {
+    if (playerSeekable && playerTimelineDuration > 0) {
+      return playerTimelineDuration;
+    }
     return playerQueryLimit() || playerFallbackDuration;
   }
 
@@ -1650,13 +1655,14 @@
   }
 
   function playerCurrentTime(video, duration) {
+    var offset = Math.max(0, playerQueryStart() - playerTimelineStart);
     if (!video || !isFinite(video.currentTime) || video.currentTime < 0) {
-      return playerQueryLimit() ? 0 : Math.min(playerQueryStart(), duration || 0);
+      return Math.min(offset, duration || 0);
     }
-    if (playerQueryLimit() > 0 || !playerPrefersConfiguredDuration()) {
+    if (!playerPrefersConfiguredDuration()) {
       return video.currentTime;
     }
-    return Math.min(duration || 0, playerQueryStart() + video.currentTime);
+    return Math.min(duration || 0, offset + video.currentTime);
   }
 
   function updatePlayerControls() {
@@ -1742,11 +1748,9 @@
     var nextTime = (Number(seek.value) / 1000) * duration;
     if (playerSeekable && playerSourceBuilder && playerPrefersConfiguredDuration()) {
       var nextQuery = cloneQuery(playerBaseQuery);
-      var baseStart = playerQueryLimit() > 0 ? playerQueryStart() : 0;
-      var limit = playerQueryLimit();
-      nextQuery.ss = String(Math.max(0, Math.floor(baseStart + nextTime)));
-      if (limit > 0) {
-        nextQuery.t = String(Math.max(1, Math.floor(limit - nextTime)));
+      nextQuery.ss = String(Math.max(0, Math.floor(playerTimelineStart + nextTime)));
+      if (duration > 0) {
+        nextQuery.t = String(Math.max(1, Math.floor(duration - nextTime)));
       }
       setPlayerSource(playerSourceBuilder(nextQuery), nextQuery);
       updatePlayerQualityControl(nextQuery, true);
@@ -1830,15 +1834,15 @@
       return;
     }
     var video = byId("playerVideo");
-    var elapsed = video && isFinite(video.currentTime) ? Math.floor(video.currentTime) : 0;
+    var duration = playerFiniteDuration(video);
+    var elapsed = Math.floor(playerCurrentTime(video, duration));
     var nextQuery = applyQualityToQuery(playerBaseQuery, quality);
-    if (playerSeekable && elapsed > 0) {
-      var baseStart = playerBaseQuery && playerBaseQuery.ss ? Number(playerBaseQuery.ss) : 0;
-      if (!isFinite(baseStart) || baseStart < 0) {
-        baseStart = 0;
-      }
+    if (playerSeekable && elapsed >= 0) {
       nextQuery = nextQuery || {};
-      nextQuery.ss = String(baseStart + elapsed);
+      nextQuery.ss = String(playerTimelineStart + elapsed);
+      if (duration > 0) {
+        nextQuery.t = String(Math.max(1, duration - elapsed));
+      }
     }
     setPlayerSource(playerSourceBuilder(nextQuery), nextQuery);
     updatePlayerQualityControl(nextQuery, true);
@@ -1856,7 +1860,12 @@
     text(byId("playerDialogMeta"), meta || "");
     playerSourceBuilder = typeof options.sourceBuilder === "function" ? options.sourceBuilder : null;
     playerSeekable = Boolean(options.seekable);
+    playerTimelineStart = playerSeekable ? finitePositiveSeconds(options.query && options.query.ss) : 0;
+    playerTimelineDuration = playerSeekable ? finitePositiveSeconds(options.query && options.query.t) : 0;
     playerFallbackDuration = finitePositiveSeconds(options.duration);
+    if (playerSeekable && playerTimelineDuration <= 0) {
+      playerTimelineDuration = playerFallbackDuration;
+    }
     playerKnownDuration = playerFallbackDuration;
     updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
@@ -1897,6 +1906,8 @@
     playerBaseQuery = null;
     playerSeekable = false;
     playerSeeking = false;
+    playerTimelineStart = 0;
+    playerTimelineDuration = 0;
     playerFallbackDuration = 0;
     playerKnownDuration = 0;
     updatePlayerQualityControl(null, false);
