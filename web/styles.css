@@ -123,6 +123,31 @@ body {
   gap: 2px;
 }
 
+.management-menu {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+
+.management-menu summary {
+  list-style: none;
+}
+
+.management-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.management-menu-list {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.management-menu[open] .management-menu-list {
+  display: flex;
+}
+
 .main-nav a {
   display: block;
   flex: 0 0 auto;
@@ -460,16 +485,6 @@ h3 {
 
 .dashboard-summary-panel {
   min-height: 220px;
-}
-
-#toggleOnAirPanelButton:not(.active) {
-  border-color: var(--line);
-  background: #f4f8fa;
-  color: var(--ink);
-}
-
-#toggleOnAirPanelButton:not(.active):hover {
-  background: #e8eef1;
 }
 
 .live-channel-list:not(.empty) {
@@ -2051,10 +2066,6 @@ body.view-settings .settings-grid {
   font-weight: 700;
 }
 
-.config-editor-panel {
-  margin-top: 12px;
-}
-
 .config-form-panel {
   margin-top: 12px;
 }
@@ -2173,11 +2184,6 @@ body.view-settings .settings-grid {
   border-color: var(--error);
   background: var(--error-soft);
   color: var(--error-strong);
-}
-
-.config-json-editor {
-  min-height: 360px;
-  margin-top: 12px;
 }
 
 .settings-list div {

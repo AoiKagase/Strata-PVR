@@ -74,9 +74,14 @@
       <a href="#recorded" data-view-link="recorded">録画済み</a>
       <a href="#rules" data-view-link="rules">ルール</a>
       <a href="#logs" data-view-link="logs">ログ</a>
-      <a href="#status" data-view-link="status">ステータス</a>
-      <a href="#settings" data-view-link="settings">設定</a>
     </div>
+    <details class="management-menu">
+      <summary class="icon-button" title="管理" aria-label="管理"><svg class="icon"><use href="#icon-settings"></use></svg><span class="screen-reader-only">管理</span></summary>
+      <div class="management-menu-list">
+        <a href="#status" data-view-link="status">ステータス</a>
+        <a href="#settings" data-view-link="settings">設定</a>
+      </div>
+    </details>
     <div class="schedule-nav-controls" aria-label="番組表フィルタ">
       <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
         <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
@@ -145,7 +150,6 @@
           <p>現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。</p>
         </div>
         <div class="panel-actions">
-          <button id="toggleOnAirPanelButton" type="button" aria-pressed="true">放送中の番組</button>
           <button id="refreshButton" type="button" title="Refresh">更新</button>
         </div>
       </div>
@@ -318,8 +322,6 @@
         </div>
         <div class="panel-actions">
           <button id="forceSchedulerButton" type="button" title="スケジューラを実行">スケジューラ実行</button>
-          <button id="addRuleButton" type="button" title="ルールを追加">JSON追加</button>
-          <button id="saveRuleButton" type="button" title="編集中のルールを保存">JSON保存</button>
         </div>
       </div>
       <section class="panel">
@@ -411,10 +413,6 @@
           <button id="saveBasicRuleButton" type="button" title="フォームの内容で編集中のルールを保存" disabled>フォーム保存</button>
           <button id="resetRuleFormButton" type="button" title="フォーム編集を解除" disabled>フォーム解除</button>
         </div>
-        <textarea id="ruleEditor" class="json-editor" spellcheck="false" aria-label="ルールJSON">{
-  "types": ["GR"],
-  "reserve_titles": ["title"]
-}</textarea>
         <div class="list-filter-controls rule-list-controls" aria-label="ルールフィルタ">
           <label class="control-field" for="ruleListQuery">
             <span>検索</span>
@@ -523,8 +521,7 @@
           <p>よく使う設定を編集します。空欄の項目は config.json から削除されます。</p>
           </div>
           <div class="row-actions">
-            <button id="applyConfigFormButton" type="button" title="フォームの内容を設定JSONへ反映">JSONへ反映</button>
-            <button id="saveConfigFormButton" type="button" title="フォームの内容で設定JSONを保存">フォーム保存</button>
+            <button id="saveConfigFormButton" type="button" title="フォームの内容で設定を保存">フォーム保存</button>
           </div>
         </div>
         <form id="configForm" class="config-form-shell" autocomplete="off" novalidate>
@@ -718,19 +715,6 @@
           </label>
           </div>
         </form>
-      </section>
-      <section class="panel config-editor-panel">
-        <div class="panel-head">
-          <div>
-            <h3>設定JSON</h3>
-            <p>保存すると config.json を更新します。反映には再起動が必要な項目があります。</p>
-          </div>
-          <div class="row-actions">
-            <button id="resetConfigButton" type="button" title="現在の設定を再読み込み">再読込</button>
-            <button id="saveConfigButton" type="button" title="設定JSONを保存">設定保存</button>
-          </div>
-        </div>
-        <textarea id="configEditor" class="json-editor config-json-editor" spellcheck="false" aria-label="設定JSON"></textarea>
       </section>
     </section>
   </main>

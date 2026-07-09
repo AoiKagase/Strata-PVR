@@ -1,7 +1,6 @@
 (function () {
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
   var listFiltersStorageKey = "strata-pvr.listFilters";
-  var dashboardOnAirVisibleStorageKey = "strata-pvr.dashboardOnAirVisible";
   var scheduleZoomStorageKey = "strata-pvr.scheduleZoomLevel";
   var scheduleWindowHoursByMode = {
     "day": 24,
@@ -46,13 +45,11 @@
     scheduleDay: "",
     scheduleGenre: "",
     scheduleHiddenChannels: loadHiddenChannels(),
-    dashboardOnAirVisible: loadDashboardOnAirVisible(),
     scheduleWindowMode: "day",
     scheduleZoomLevel: loadScheduleZoomLevel(),
     channelProgramsChannel: "",
     channelProgramsGenre: "",
     channelProgramsSort: "startAsc",
-    editingRuleIndex: null,
     editingRuleFormIndex: null,
     selectedProgram: null,
     activeProgramID: "",
@@ -62,7 +59,6 @@
     listFilters: loadListFilters(),
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
-    configEditorDirty: false,
     hasLoaded: false,
     isLoading: false,
     lastError: null
@@ -184,25 +180,6 @@
       if (window.localStorage) {
         state.scheduleHiddenChannels = normalizeHiddenChannels(state.scheduleHiddenChannels);
         window.localStorage.setItem(hiddenChannelsStorageKey, JSON.stringify(state.scheduleHiddenChannels));
-      }
-    } catch (error) {
-      // localStorage can be unavailable in private or embedded contexts.
-    }
-  }
-
-  function loadDashboardOnAirVisible() {
-    try {
-      var raw = window.localStorage ? window.localStorage.getItem(dashboardOnAirVisibleStorageKey) : "";
-      return raw !== "false";
-    } catch (error) {
-      return true;
-    }
-  }
-
-  function saveDashboardOnAirVisible() {
-    try {
-      if (window.localStorage) {
-        window.localStorage.setItem(dashboardOnAirVisibleStorageKey, state.dashboardOnAirVisible ? "true" : "false");
       }
     } catch (error) {
       // localStorage can be unavailable in private or embedded contexts.
@@ -1012,6 +989,9 @@
       return;
     }
     state.currentView = found ? name : "dashboard";
+    document.querySelectorAll(".management-menu").forEach(function (menu) {
+      menu.open = name === "status" || name === "settings";
+    });
     document.querySelectorAll("[data-view-link]").forEach(function (link) {
       var active = link.getAttribute("data-view-link") === name;
       link.classList.toggle("active", active);
@@ -1068,7 +1048,7 @@
       "reserves": "reserveListQuery",
       "recorded": "recordedListQuery",
       "rules": "ruleListQuery",
-      "settings": "configEditor"
+      "settings": "configMirakurunPath"
     };
     var control = byId(focusByView[view]);
     if (!control && view === "schedule") {
@@ -2480,24 +2460,6 @@
     });
   }
 
-  function syncOnAirPanelVisibility() {
-    var panel = document.querySelector(".dashboard-on-air-panel");
-    if (panel) {
-      panel.hidden = !state.dashboardOnAirVisible;
-    }
-    var button = byId("toggleOnAirPanelButton");
-    if (button) {
-      button.classList.toggle("active", state.dashboardOnAirVisible);
-      button.setAttribute("aria-pressed", state.dashboardOnAirVisible ? "true" : "false");
-    }
-  }
-
-  function toggleOnAirPanel() {
-    state.dashboardOnAirVisible = !state.dashboardOnAirVisible;
-    saveDashboardOnAirVisible();
-    syncOnAirPanelVisibility();
-  }
-
   function renderSchedule() {
     var root = byId("scheduleList");
     if (!root) {
@@ -3215,15 +3177,6 @@
       row.appendChild(actionButton(rule.isDisabled ? "有効化" : "無効化", "ルールの有効状態を切り替え", function () {
         runAction("rules/" + index + "/" + (rule.isDisabled ? "enable" : "disable") + ".json", "PUT");
       }));
-      row.appendChild(actionButton("JSON編集", "このルールをエディタに読み込む", function () {
-        var editor = byId("ruleEditor");
-        if (editor) {
-          editor.value = JSON.stringify(rule, null, 2);
-          state.editingRuleIndex = index;
-          renderRuleEditorState();
-          editor.focus();
-        }
-      }));
       row.appendChild(actionButton("フォーム編集", "このルールをフォームに読み込む", function () {
         fillRuleFormFromRule(rule, index);
       }));
@@ -3286,9 +3239,6 @@
   }
 
   function renderConfigForm() {
-    if (state.configEditorDirty) {
-      return;
-    }
     var cfg = state.config || {};
     setControlValue("configMirakurunPath", cfg.mirakurunPath);
     setControlValue("configSchedulerMirakurunPath", cfg.schedulerMirakurunPath);
@@ -3384,7 +3334,6 @@
       root.appendChild(value);
     });
     renderConfigForm();
-    renderConfigEditor();
   }
 
   function renderStatus() {
@@ -3421,18 +3370,6 @@
     });
     renderStorage();
     renderMetrics();
-  }
-
-  function renderConfigEditor(force) {
-    var editor = byId("configEditor");
-    if (!editor) {
-      return;
-    }
-    if (!force && state.configEditorDirty) {
-      return;
-    }
-    editor.value = JSON.stringify(state.config || {}, null, 2);
-    state.configEditorDirty = false;
   }
 
   function renderStorage() {
@@ -3599,29 +3536,6 @@
     runAction("scheduler/force.json", "PUT", "スケジューラを実行しますか？");
   }
 
-  function readConfigEditorObject() {
-    var editor = byId("configEditor");
-    if (!editor) {
-      return null;
-    }
-    try {
-      var config = JSON.parse(editor.value);
-      if (!config || Array.isArray(config) || typeof config !== "object") {
-        showError(new Error("設定JSONはオブジェクトにしてください"));
-        return null;
-      }
-      return config;
-    } catch (error) {
-      showError(new Error("設定JSONが正しくありません"));
-      return null;
-    }
-  }
-
-  function readConfigEditor() {
-    var config = readConfigEditorObject();
-    return config ? JSON.stringify(config, null, 2) : null;
-  }
-
   function controlString(id) {
     var control = byId(id);
     return control ? control.value.trim() : "";
@@ -3744,12 +3658,12 @@
     return true;
   }
 
-  function applyConfigFormToEditor(silent) {
-    var config = readConfigEditorObject();
+  function readConfigForm() {
+    var config = {};
+    Object.keys(state.config || {}).forEach(function (key) {
+      config[key] = state.config[key];
+    });
     var openServer = byId("configWuiOpenServer");
-    if (!config) {
-      return null;
-    }
     setOptionalString(config, "mirakurunPath", "configMirakurunPath");
     setOptionalString(config, "schedulerMirakurunPath", "configSchedulerMirakurunPath");
     setOptionalString(config, "recordedDir", "configRecordedDir");
@@ -3829,19 +3743,11 @@
     setOptionalString(config, "epgEndCommand", "configEpgEndCommand");
     setOptionalString(config, "conflictCommand", "configConflictCommand");
     setOptionalString(config, "recordedCommand", "configRecordedCommand");
-    var editor = byId("configEditor");
-    if (editor) {
-      editor.value = JSON.stringify(config, null, 2);
-      state.configEditorDirty = true;
-    }
-    if (!silent) {
-      setBusy("フォームの内容を設定JSONに反映しました");
-    }
     return config;
   }
 
   function saveConfigFromForm() {
-    var config = applyConfigFormToEditor(true);
+    var config = readConfigForm();
     if (!config) {
       return;
     }
@@ -3856,110 +3762,10 @@
       setBusy("設定保存中");
       sendConfigJSON(JSON.stringify(config, null, 2)).then(function (savedConfig) {
         state.config = savedConfig || {};
-        state.configEditorDirty = false;
         render();
         setBusy("設定を保存しました");
       }).catch(showError);
     });
-  }
-
-  function saveConfigFromEditor() {
-    var raw = readConfigEditor();
-    if (!raw) {
-      return;
-    }
-    confirmAction("config.json を保存しますか？", {
-      danger: false,
-      okLabel: "保存",
-      title: "設定保存の確認"
-    }).then(function (confirmed) {
-      if (!confirmed) {
-        return;
-      }
-      setBusy("設定保存中");
-      sendConfigJSON(raw).then(function (config) {
-        state.config = config || {};
-        state.configEditorDirty = false;
-        render();
-        setBusy("設定を保存しました");
-      }).catch(showError);
-    });
-  }
-
-  function resetConfigEditor() {
-    state.configEditorDirty = false;
-    renderConfigForm();
-    renderConfigEditor(true);
-    setBusy("設定JSONを再読み込みしました");
-  }
-
-  function addRuleFromEditor() {
-    var rule = readRuleEditor();
-    if (!rule) {
-      return;
-    }
-    confirmAction("JSONエディタの内容でルールを追加しますか？", {
-      danger: false,
-      okLabel: "追加",
-      title: "ルール追加の確認"
-    }).then(function (confirmed) {
-      if (!confirmed) {
-        return;
-      }
-      setBusy("処理中");
-      sendJSON("rules.json", "POST", rule).then(function () {
-        state.editingRuleIndex = null;
-        renderRuleEditorState();
-        refresh();
-      }).catch(showError);
-    });
-  }
-
-  function saveRuleFromEditor() {
-    if (state.editingRuleIndex === null || state.editingRuleIndex === undefined) {
-      showError(new Error("ルールが選択されていません"));
-      return;
-    }
-    var rule = readRuleEditor();
-    if (!rule) {
-      return;
-    }
-    confirmAction("JSONエディタの内容でルール #" + state.editingRuleIndex + " を保存しますか？", {
-      danger: false,
-      okLabel: "保存",
-      title: "ルール保存の確認"
-    }).then(function (confirmed) {
-      if (!confirmed) {
-        return;
-      }
-      setBusy("処理中");
-      sendJSON("rules/" + state.editingRuleIndex + ".json", "PUT", rule).then(function () {
-        state.editingRuleIndex = null;
-        renderRuleEditorState();
-        refresh();
-      }).catch(showError);
-    });
-  }
-
-  function readRuleEditor() {
-    var editor = byId("ruleEditor");
-    if (!editor) {
-      return null;
-    }
-    try {
-      return JSON.parse(editor.value);
-    } catch (error) {
-      showError(new Error("ルールJSONが正しくありません"));
-      return null;
-    }
-  }
-
-  function renderRuleEditorState() {
-    var saveButton = byId("saveRuleButton");
-    if (saveButton) {
-      saveButton.disabled = state.editingRuleIndex === null || state.editingRuleIndex === undefined;
-      saveButton.title = saveButton.disabled ? "先にルールのJSON編集を選択してください" : "ルール #" + state.editingRuleIndex + " を保存";
-    }
   }
 
   function splitList(value) {
@@ -4392,7 +4198,6 @@
     renderRules();
     renderSettings();
     renderStatus();
-    renderRuleEditorState();
     renderRuleFormState();
   }
 
@@ -4690,10 +4495,6 @@
     if (!metricsRefreshTimer) {
       metricsRefreshTimer = window.setInterval(refreshMetrics, 30000);
     }
-    var toggleOnAirPanelButton = byId("toggleOnAirPanelButton");
-    if (toggleOnAirPanelButton) {
-      toggleOnAirPanelButton.addEventListener("click", toggleOnAirPanel);
-    }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     resetListFilter("reserves", {
@@ -4826,48 +4627,15 @@
     if (forceSchedulerButton) {
       forceSchedulerButton.addEventListener("click", forceScheduler);
     }
-    var configEditor = byId("configEditor");
-    if (configEditor) {
-      configEditor.addEventListener("input", function () {
-        state.configEditorDirty = true;
-      });
-    }
-    var saveConfigButton = byId("saveConfigButton");
-    if (saveConfigButton) {
-      saveConfigButton.addEventListener("click", saveConfigFromEditor);
-    }
-    var resetConfigButton = byId("resetConfigButton");
-    if (resetConfigButton) {
-      resetConfigButton.addEventListener("click", resetConfigEditor);
-    }
     var configForm = byId("configForm");
     if (configForm) {
       configForm.addEventListener("submit", function (event) {
         event.preventDefault();
       });
     }
-    var applyConfigFormButton = byId("applyConfigFormButton");
-    if (applyConfigFormButton) {
-      applyConfigFormButton.addEventListener("click", function () {
-        applyConfigFormToEditor(false);
-      });
-    }
     var saveConfigFormButton = byId("saveConfigFormButton");
     if (saveConfigFormButton) {
       saveConfigFormButton.addEventListener("click", saveConfigFromForm);
-    }
-    Array.prototype.forEach.call(document.querySelectorAll(".config-form-control"), function (control) {
-      control.addEventListener("change", function () {
-        applyConfigFormToEditor(true);
-      });
-    });
-    var addRuleButton = byId("addRuleButton");
-    if (addRuleButton) {
-      addRuleButton.addEventListener("click", addRuleFromEditor);
-    }
-    var saveRuleButton = byId("saveRuleButton");
-    if (saveRuleButton) {
-      saveRuleButton.addEventListener("click", saveRuleFromEditor);
     }
     var addBasicRuleButton = byId("addBasicRuleButton");
     if (addBasicRuleButton) {

@@ -801,7 +801,6 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 			`設定保存の確認`,
 			`ルール追加の確認`,
 			`ルール保存の確認`,
-			`JSONエディタの内容でルールを追加しますか？`,
 			`フォームの内容でルールを追加しますか？`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
