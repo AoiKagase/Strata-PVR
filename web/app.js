@@ -24,6 +24,7 @@
   var playerBaseQuery = null;
   var playerSeekable = false;
   var playerSeeking = false;
+  var playerFallbackDuration = 0;
   var pendingConfirmResolve = null;
   var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -1590,11 +1591,53 @@
     return prefix + ":" + String(rest).padStart(2, "0");
   }
 
-  function playerFiniteDuration(video) {
-    if (!video || !isFinite(video.duration) || video.duration <= 0) {
+  function finitePositiveSeconds(value) {
+    var number = Number(value);
+    return isFinite(number) && number > 0 ? number : 0;
+  }
+
+  function programDurationSeconds(program) {
+    if (!program) {
       return 0;
     }
-    return video.duration;
+    var seconds = finitePositiveSeconds(program.seconds);
+    if (seconds > 0) {
+      return seconds;
+    }
+    if (program.start && program.end && program.end > program.start) {
+      return Math.round((program.end - program.start) / 1000);
+    }
+    return 0;
+  }
+
+  function playerNativeDuration(video) {
+    return video && isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+  }
+
+  function playerQueryStart() {
+    return finitePositiveSeconds(playerBaseQuery && playerBaseQuery.ss);
+  }
+
+  function playerQueryLimit() {
+    return finitePositiveSeconds(playerBaseQuery && playerBaseQuery.t);
+  }
+
+  function playerFiniteDuration(video) {
+    var nativeDuration = playerNativeDuration(video);
+    if (nativeDuration > 0) {
+      return nativeDuration;
+    }
+    return playerQueryLimit() || playerFallbackDuration;
+  }
+
+  function playerCurrentTime(video, duration) {
+    if (!video || !isFinite(video.currentTime) || video.currentTime < 0) {
+      return playerQueryLimit() ? 0 : Math.min(playerQueryStart(), duration || 0);
+    }
+    if (playerNativeDuration(video) > 0 || playerQueryLimit() > 0) {
+      return video.currentTime;
+    }
+    return Math.min(duration || 0, playerQueryStart() + video.currentTime);
   }
 
   function updatePlayerControls() {
@@ -1609,17 +1652,18 @@
       return;
     }
     var duration = playerFiniteDuration(video);
+    var currentTime = playerCurrentTime(video, duration);
     if (playButton) {
       setIconOnlyControl(playButton, video.paused ? "play" : "pause", video.paused ? "再生" : "一時停止");
     }
     if (seek) {
       seek.disabled = duration <= 0;
       if (!playerSeeking) {
-        seek.value = duration > 0 ? String(Math.min(1000, Math.max(0, Math.round((video.currentTime / duration) * 1000)))) : "0";
+        seek.value = duration > 0 ? String(Math.min(1000, Math.max(0, Math.round((currentTime / duration) * 1000)))) : "0";
       }
     }
     if (time) {
-      time.textContent = duration > 0 ? formatPlayerTime(video.currentTime) + " / " + formatPlayerTime(duration) : "LIVE";
+      time.textContent = duration > 0 ? formatPlayerTime(currentTime) + " / " + formatPlayerTime(duration) : "LIVE";
     }
     if (muteButton) {
       setIconOnlyControl(muteButton, video.muted || video.volume === 0 ? "volume-x" : "volume-2", video.muted || video.volume === 0 ? "ミュート解除" : "ミュート");
@@ -1675,7 +1719,20 @@
     if (!video || !seek || duration <= 0) {
       return;
     }
-    video.currentTime = (Number(seek.value) / 1000) * duration;
+    var nextTime = (Number(seek.value) / 1000) * duration;
+    if (playerSeekable && playerSourceBuilder && playerNativeDuration(video) <= 0) {
+      var nextQuery = cloneQuery(playerBaseQuery);
+      var baseStart = playerQueryLimit() > 0 ? playerQueryStart() : 0;
+      var limit = playerQueryLimit();
+      nextQuery.ss = String(Math.max(0, Math.floor(baseStart + nextTime)));
+      if (limit > 0) {
+        nextQuery.t = String(Math.max(1, Math.floor(limit - nextTime)));
+      }
+      setPlayerSource(playerSourceBuilder(nextQuery), nextQuery);
+      updatePlayerQualityControl(nextQuery, true);
+      return;
+    }
+    video.currentTime = nextTime;
     updatePlayerControls();
   }
 
@@ -1779,16 +1836,18 @@
     text(byId("playerDialogMeta"), meta || "");
     playerSourceBuilder = typeof options.sourceBuilder === "function" ? options.sourceBuilder : null;
     playerSeekable = Boolean(options.seekable);
+    playerFallbackDuration = finitePositiveSeconds(options.duration);
     updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
     setPlayerSource(url, options.query || null);
     video.focus();
   }
 
-  function openAdjustablePlayer(meta, buildURL, query, seekable) {
+  function openAdjustablePlayer(meta, buildURL, query, seekable, duration) {
     openPlayerDialog(meta, buildURL(query), {
       query: query,
       seekable: seekable,
+      duration: duration,
       sourceBuilder: buildURL
     });
   }
@@ -1817,6 +1876,7 @@
     playerBaseQuery = null;
     playerSeekable = false;
     playerSeeking = false;
+    playerFallbackDuration = 0;
     updatePlayerQualityControl(null, false);
     updatePlayerControls();
   }
@@ -2270,7 +2330,7 @@
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
           openAdjustablePlayer(program.title || program.id || "録画済み", function (nextQuery) {
             return recordedWatchURL(program, "mp4", nextQuery);
-          }, query, true);
+          }, query, true, programDurationSeconds(program));
         }, {
           openM2TS: function () {
             openURL(recordedWatchURL(program, "m2ts"));
