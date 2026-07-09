@@ -1627,13 +1627,21 @@
     return playerQueryLimit() || playerFallbackDuration;
   }
 
+  function playerPrefersConfiguredDuration() {
+    return playerSeekable && playerConfiguredDuration() > 0;
+  }
+
   function playerFiniteDuration(video) {
+    var configuredDuration = playerConfiguredDuration();
+    if (playerPrefersConfiguredDuration()) {
+      playerKnownDuration = configuredDuration;
+      return configuredDuration;
+    }
     var nativeDuration = playerNativeDuration(video);
     if (nativeDuration > 0) {
       playerKnownDuration = nativeDuration;
       return nativeDuration;
     }
-    var configuredDuration = playerConfiguredDuration();
     if (configuredDuration > 0) {
       playerKnownDuration = configuredDuration;
       return configuredDuration;
@@ -1645,7 +1653,7 @@
     if (!video || !isFinite(video.currentTime) || video.currentTime < 0) {
       return playerQueryLimit() ? 0 : Math.min(playerQueryStart(), duration || 0);
     }
-    if (playerNativeDuration(video) > 0 || playerQueryLimit() > 0) {
+    if (playerQueryLimit() > 0 || !playerPrefersConfiguredDuration()) {
       return video.currentTime;
     }
     return Math.min(duration || 0, playerQueryStart() + video.currentTime);
@@ -2254,7 +2262,7 @@
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
             openAdjustablePlayer(program.title || program.id || "録画済み", function (nextQuery) {
               return recordedWatchURL(program, "mp4", nextQuery);
-            }, query, true);
+            }, query, true, programDurationSeconds(program));
           }, {
             openM2TS: function () {
               openURL(recordedWatchURL(program, "m2ts"));
