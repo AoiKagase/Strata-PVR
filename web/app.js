@@ -20,6 +20,10 @@
   var mp4DialogReturnFocus = null;
   var playerDialogReturnFocus = null;
   var confirmDialogReturnFocus = null;
+  var playerSourceBuilder = null;
+  var playerBaseQuery = null;
+  var playerSeekable = false;
+  var playerSeeking = false;
   var pendingConfirmResolve = null;
   var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -1226,27 +1230,270 @@
     window.location.href = url;
   }
 
-  function openPlayerDialog(meta, url) {
+  function cloneQuery(query) {
+    var clone = {};
+    Object.keys(query || {}).forEach(function (key) {
+      if (query[key] !== undefined && query[key] !== null && query[key] !== "") {
+        clone[key] = String(query[key]);
+      }
+    });
+    return clone;
+  }
+
+  function presetQuery(name) {
+    var preset = mp4Presets[name];
+    if (!preset) {
+      return {};
+    }
+    return {
+      "s": preset.s,
+      "b:v": preset.video,
+      "b:a": preset.audio
+    };
+  }
+
+  function applyQualityToQuery(query, quality) {
+    var next = cloneQuery(query);
+    delete next.s;
+    delete next["b:v"];
+    delete next["b:a"];
+    var preset = presetQuery(quality);
+    Object.keys(preset).forEach(function (key) {
+      next[key] = preset[key];
+    });
+    return Object.keys(next).length ? next : null;
+  }
+
+  function qualityFromQuery(query) {
+    query = query || {};
+    var matched = "";
+    Object.keys(mp4Presets).some(function (name) {
+      var preset = mp4Presets[name];
+      if (query.s === preset.s && query["b:v"] === preset.video && query["b:a"] === preset.audio) {
+        matched = name;
+        return true;
+      }
+      return false;
+    });
+    if (matched) {
+      return matched;
+    }
+    return query.s || query["b:v"] || query["b:a"] ? "custom" : "";
+  }
+
+  function formatPlayerTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) {
+      return "--:--";
+    }
+    seconds = Math.floor(seconds);
+    var hours = Math.floor(seconds / 3600);
+    var minutes = Math.floor((seconds % 3600) / 60);
+    var rest = seconds % 60;
+    var prefix = hours > 0 ? hours + ":" + String(minutes).padStart(2, "0") : String(minutes);
+    return prefix + ":" + String(rest).padStart(2, "0");
+  }
+
+  function playerFiniteDuration(video) {
+    if (!video || !isFinite(video.duration) || video.duration <= 0) {
+      return 0;
+    }
+    return video.duration;
+  }
+
+  function updatePlayerControls() {
+    var video = byId("playerVideo");
+    var playButton = byId("playerPlayButton");
+    var seek = byId("playerSeek");
+    var time = byId("playerTime");
+    var muteButton = byId("playerMuteButton");
+    var volume = byId("playerVolume");
+    var quality = byId("playerQuality");
+    if (!video) {
+      return;
+    }
+    var duration = playerFiniteDuration(video);
+    if (playButton) {
+      playButton.textContent = video.paused ? "再生" : "停止";
+      playButton.setAttribute("aria-label", video.paused ? "再生" : "一時停止");
+    }
+    if (seek) {
+      seek.disabled = duration <= 0;
+      if (!playerSeeking) {
+        seek.value = duration > 0 ? String(Math.min(1000, Math.max(0, Math.round((video.currentTime / duration) * 1000)))) : "0";
+      }
+    }
+    if (time) {
+      time.textContent = duration > 0 ? formatPlayerTime(video.currentTime) + " / " + formatPlayerTime(duration) : "LIVE";
+    }
+    if (muteButton) {
+      muteButton.textContent = video.muted || video.volume === 0 ? "消音" : "音量";
+      muteButton.setAttribute("aria-label", video.muted || video.volume === 0 ? "ミュート解除" : "ミュート");
+    }
+    if (volume && document.activeElement !== volume) {
+      volume.value = String(video.muted ? 0 : video.volume);
+    }
+    if (quality) {
+      quality.disabled = !playerSourceBuilder;
+    }
+  }
+
+  function setPlayerSource(url, query) {
+    var video = byId("playerVideo");
+    var openLink = byId("playerOpenLink");
+    if (openLink) {
+      openLink.href = url;
+    }
+    if (!video) {
+      return;
+    }
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    video.src = url;
+    playerBaseQuery = cloneQuery(query || {});
+    updatePlayerControls();
+    video.play().catch(function () {
+      // Browsers may block autoplay; controls remain available for manual start.
+    }).finally(updatePlayerControls);
+  }
+
+  function togglePlayerPlayback() {
+    var video = byId("playerVideo");
+    if (!video || !video.src) {
+      return;
+    }
+    if (video.paused) {
+      video.play().catch(function () {
+        // Manual controls remain available when playback is blocked.
+      }).finally(updatePlayerControls);
+    } else {
+      video.pause();
+      updatePlayerControls();
+    }
+  }
+
+  function seekPlayerToRange() {
+    var video = byId("playerVideo");
+    var seek = byId("playerSeek");
+    var duration = playerFiniteDuration(video);
+    if (!video || !seek || duration <= 0) {
+      return;
+    }
+    video.currentTime = (Number(seek.value) / 1000) * duration;
+    updatePlayerControls();
+  }
+
+  function togglePlayerMute() {
+    var video = byId("playerVideo");
+    if (!video) {
+      return;
+    }
+    video.muted = !video.muted;
+    updatePlayerControls();
+  }
+
+  function changePlayerVolume() {
+    var video = byId("playerVideo");
+    var volume = byId("playerVolume");
+    if (!video || !volume) {
+      return;
+    }
+    var value = Number(volume.value);
+    if (!isFinite(value)) {
+      value = 1;
+    }
+    video.volume = Math.min(1, Math.max(0, value));
+    video.muted = video.volume === 0;
+    updatePlayerControls();
+  }
+
+  function togglePlayerFullscreen() {
+    var shell = document.querySelector(".player-shell");
+    if (!shell || !shell.requestFullscreen) {
+      return;
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(function () {});
+    } else {
+      shell.requestFullscreen().catch(function () {});
+    }
+  }
+
+  function bindPlayerVideoEvents() {
+    var video = byId("playerVideo");
+    if (!video) {
+      return;
+    }
+    ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "volumechange", "ended", "waiting", "playing"].forEach(function (name) {
+      video.addEventListener(name, updatePlayerControls);
+    });
+  }
+
+  function updatePlayerQualityControl(query, enabled) {
+    var select = byId("playerQuality");
+    if (!select) {
+      return;
+    }
+    select.disabled = !enabled;
+    select.value = qualityFromQuery(query);
+    if (select.value !== "custom") {
+      var custom = Array.prototype.filter.call(select.options, function (option) {
+        return option.value === "custom";
+      })[0];
+      if (custom) {
+        custom.hidden = true;
+      }
+    } else {
+      Array.prototype.forEach.call(select.options, function (option) {
+        if (option.value === "custom") {
+          option.hidden = false;
+        }
+      });
+    }
+  }
+
+  function changePlayerQuality(quality) {
+    if (!playerSourceBuilder) {
+      return;
+    }
+    var video = byId("playerVideo");
+    var elapsed = video && isFinite(video.currentTime) ? Math.floor(video.currentTime) : 0;
+    var nextQuery = applyQualityToQuery(playerBaseQuery, quality);
+    if (playerSeekable && elapsed > 0) {
+      var baseStart = playerBaseQuery && playerBaseQuery.ss ? Number(playerBaseQuery.ss) : 0;
+      if (!isFinite(baseStart) || baseStart < 0) {
+        baseStart = 0;
+      }
+      nextQuery = nextQuery || {};
+      nextQuery.ss = String(baseStart + elapsed);
+    }
+    setPlayerSource(playerSourceBuilder(nextQuery), nextQuery);
+    updatePlayerQualityControl(nextQuery, true);
+  }
+
+  function openPlayerDialog(meta, url, options) {
     var dialog = byId("playerDialog");
     var video = byId("playerVideo");
+    options = options || {};
     if (!dialog || !video || !dialog.showModal) {
       openURL(url);
       return;
     }
     playerDialogReturnFocus = rememberFocus();
     text(byId("playerDialogMeta"), meta || "");
-    var openLink = byId("playerOpenLink");
-    if (openLink) {
-      openLink.href = url;
-    }
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
-    video.src = url;
+    playerSourceBuilder = typeof options.sourceBuilder === "function" ? options.sourceBuilder : null;
+    playerSeekable = Boolean(options.seekable);
+    updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
+    setPlayerSource(url, options.query || null);
     video.focus();
-    video.play().catch(function () {
-      // Browsers may block autoplay; controls remain available for manual start.
+  }
+
+  function openAdjustablePlayer(meta, buildURL, query, seekable) {
+    openPlayerDialog(meta, buildURL(query), {
+      query: query,
+      seekable: seekable,
+      sourceBuilder: buildURL
     });
   }
 
@@ -1270,6 +1517,12 @@
     video.pause();
     video.removeAttribute("src");
     video.load();
+    playerSourceBuilder = null;
+    playerBaseQuery = null;
+    playerSeekable = false;
+    playerSeeking = false;
+    updatePlayerQualityControl(null, false);
+    updatePlayerControls();
   }
 
   function minuteNumber(id, label) {
@@ -1568,7 +1821,9 @@
       } else if (name === "watch-recording-mp4" && program.isRecording) {
         row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {
           openMP4Dialog(program.title || program.id || "録画中", function (query) {
-            openPlayerDialog(program.title || program.id || "録画中", recordingWatchURL(program, "mp4", query));
+            openAdjustablePlayer(program.title || program.id || "録画中", function (nextQuery) {
+              return recordingWatchURL(program, "mp4", nextQuery);
+            }, query, false);
           }, {
             openM2TS: function () {
               openURL(recordingWatchURL(program, "m2ts"));
@@ -1585,7 +1840,9 @@
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("視聴", "録画済み番組を視聴", function () {
           openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-            openPlayerDialog(program.title || program.id || "録画済み", recordedWatchURL(program, "mp4", query));
+            openAdjustablePlayer(program.title || program.id || "録画済み", function (nextQuery) {
+              return recordedWatchURL(program, "mp4", nextQuery);
+            }, query, true);
           }, {
             openM2TS: function () {
               openURL(recordedWatchURL(program, "m2ts"));
@@ -1608,7 +1865,9 @@
         if (channelID) {
           row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
             openMP4Dialog(program.title || channelID || "チャンネル", function (query) {
-              openPlayerDialog(program.title || channelID || "チャンネル", channelURL(channelID, "watch", "mp4", query));
+              openAdjustablePlayer(program.title || channelID || "チャンネル", function (nextQuery) {
+                return channelURL(channelID, "watch", "mp4", nextQuery);
+              }, query, false);
             }, {
               openM2TS: function () {
                 openURL(channelURL(channelID, "watch", "m2ts"));
@@ -1643,7 +1902,9 @@
     if (name === "watch-mp4") {
       return actionButton("視聴", "録画済み番組を視聴", function () {
         openMP4Dialog(program.title || program.id || "録画済み", function (query) {
-          openPlayerDialog(program.title || program.id || "録画済み", recordedWatchURL(program, "mp4", query));
+          openAdjustablePlayer(program.title || program.id || "録画済み", function (nextQuery) {
+            return recordedWatchURL(program, "mp4", nextQuery);
+          }, query, true);
         }, {
           openM2TS: function () {
             openURL(recordedWatchURL(program, "m2ts"));
@@ -1855,7 +2116,9 @@
     if (group.id) {
       actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
         openMP4Dialog(group.name || group.id || "チャンネル", function (query) {
-          openPlayerDialog(group.name || group.id || "チャンネル", channelURL(group.id, "watch", "mp4", query));
+          openAdjustablePlayer(group.name || group.id || "チャンネル", function (nextQuery) {
+            return channelURL(group.id, "watch", "mp4", nextQuery);
+          }, query, false);
         }, {
           openM2TS: function () {
             openURL(channelURL(group.id, "watch", "m2ts"));
@@ -2357,7 +2620,9 @@
     }
     row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
       openMP4Dialog(label || channelID || "チャンネル", function (query) {
-        openPlayerDialog(label || channelID || "チャンネル", channelURL(channelID, "watch", "mp4", query));
+        openAdjustablePlayer(label || channelID || "チャンネル", function (nextQuery) {
+          return channelURL(channelID, "watch", "mp4", nextQuery);
+        }, query, false);
       }, {
         openM2TS: function () {
           openURL(channelURL(channelID, "watch", "m2ts"));
@@ -4329,6 +4594,50 @@
     var playerDialogClose = byId("playerDialogClose");
     if (playerDialogClose) {
       playerDialogClose.addEventListener("click", closePlayerDialog);
+    }
+    bindPlayerVideoEvents();
+    var playerVideo = byId("playerVideo");
+    if (playerVideo) {
+      playerVideo.addEventListener("click", togglePlayerPlayback);
+      playerVideo.addEventListener("keydown", function (event) {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          togglePlayerPlayback();
+        }
+      });
+    }
+    var playerPlayButton = byId("playerPlayButton");
+    if (playerPlayButton) {
+      playerPlayButton.addEventListener("click", togglePlayerPlayback);
+    }
+    var playerSeek = byId("playerSeek");
+    if (playerSeek) {
+      playerSeek.addEventListener("input", function () {
+        playerSeeking = true;
+      });
+      playerSeek.addEventListener("change", function () {
+        seekPlayerToRange();
+        playerSeeking = false;
+      });
+    }
+    var playerMuteButton = byId("playerMuteButton");
+    if (playerMuteButton) {
+      playerMuteButton.addEventListener("click", togglePlayerMute);
+    }
+    var playerVolume = byId("playerVolume");
+    if (playerVolume) {
+      playerVolume.addEventListener("input", changePlayerVolume);
+      playerVolume.addEventListener("change", changePlayerVolume);
+    }
+    var playerQuality = byId("playerQuality");
+    if (playerQuality) {
+      playerQuality.addEventListener("change", function () {
+        changePlayerQuality(playerQuality.value);
+      });
+    }
+    var playerFullscreenButton = byId("playerFullscreenButton");
+    if (playerFullscreenButton) {
+      playerFullscreenButton.addEventListener("click", togglePlayerFullscreen);
     }
     var playerDialog = byId("playerDialog");
     if (playerDialog) {

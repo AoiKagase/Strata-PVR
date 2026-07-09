@@ -1308,17 +1308,117 @@ summary:focus-visible,
   justify-content: flex-end;
 }
 
-.player-dialog-actions {
-  justify-content: flex-end;
-  padding-top: 12px;
+.player-shell {
+  background: #0b1418;
 }
 
 .embedded-player {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 190px);
+  max-height: calc(100vh - 220px);
   background: #0b1418;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  background: #122027;
+  color: #eef7f8;
+}
+
+.player-control-button,
+.player-control-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 30px;
+  min-width: 48px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef7f8;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.player-control-button:hover,
+.player-control-link:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.player-control-button:disabled {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(238, 247, 248, 0.58);
+}
+
+.player-seek {
+  flex: 1 1 180px;
+  min-width: 90px;
+}
+
+.player-volume {
+  flex: 0 1 92px;
+  min-width: 70px;
+}
+
+.player-time {
+  flex: 0 0 auto;
+  min-width: 96px;
+  color: #d7e6e9;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.player-quality {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.player-quality span {
+  color: #d7e6e9;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.player-quality select {
+  min-height: 30px;
+  max-width: 128px;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #0e1a20;
+  color: #eef7f8;
+  font-size: 12px;
+}
+
+.player-shell:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.player-shell:fullscreen .embedded-player {
+  flex: 1 1 auto;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+.player-shell:fullscreen .player-controls {
+  flex: 0 0 auto;
 }
 
 .confirm-dialog .program-dialog-actions {
@@ -1852,6 +1952,19 @@ body.view-settings .settings-grid {
     grid-template-columns: 1fr;
   }
 
+  .player-controls {
+    flex-wrap: wrap;
+  }
+
+  .player-seek {
+    order: 2;
+    flex-basis: 100%;
+  }
+
+  .player-time {
+    min-width: 84px;
+  }
+
   .rule-builder {
     grid-template-columns: 1fr;
   }
@@ -1924,6 +2037,25 @@ body.view-settings .settings-grid {
   .row-actions .small-button,
   .action-menu-summary {
     min-height: 44px;
+  }
+
+  .player-control-button,
+  .player-control-link,
+  .player-quality select {
+    min-height: 40px;
+  }
+
+  .player-quality {
+    flex: 1 1 150px;
+  }
+
+  .player-quality select {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .player-volume {
+    flex: 1 1 92px;
   }
 
   .recorded-actions {
