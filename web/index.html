@@ -99,6 +99,10 @@
         <option value="CS">CS</option>
         <option value="EX">EX</option>
       </select>
+      <label class="icon-field-label" for="scheduleChannel" title="表示チャンネル"><svg class="icon"><use href="#icon-list"></use></svg><span class="screen-reader-only">表示チャンネル</span></label>
+      <select id="scheduleChannel">
+        <option value="">すべて</option>
+      </select>
       <label class="icon-field-label" for="scheduleDay" title="日付"><svg class="icon"><use href="#icon-calendar"></use></svg><span class="screen-reader-only">日付</span></label>
       <select id="scheduleDay"></select>
       <label class="icon-field-label" for="scheduleGenre" title="ジャンル"><svg class="icon"><use href="#icon-tag"></use></svg><span class="screen-reader-only">ジャンル</span></label>
@@ -156,12 +160,6 @@
           <p>時間軸・チャンネル軸で番組表を確認します。</p>
         </div>
         <div class="schedule-controls" aria-label="Schedule controls">
-          <label class="control-field" for="scheduleChannel">
-            <span>表示チャンネル</span>
-            <select id="scheduleChannel">
-              <option value="">すべて</option>
-            </select>
-          </label>
           <label class="control-field" for="scheduleWindow">
             <span>範囲</span>
             <select id="scheduleWindow">

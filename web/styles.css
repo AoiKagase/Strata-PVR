@@ -252,6 +252,10 @@ body {
   font-size: 12px;
 }
 
+.schedule-nav-controls #scheduleChannel {
+  max-width: 190px;
+}
+
 .schedule-nav-controls button {
   min-height: 36px;
   padding: 0 10px;
@@ -2313,6 +2317,12 @@ body.view-settings .settings-grid {
   body.view-schedule .schedule-nav-controls select,
   body.view-schedule .schedule-nav-controls button {
     min-height: 44px;
+  }
+
+  body.view-schedule .schedule-nav-controls select,
+  body.view-schedule .schedule-nav-controls #scheduleChannel {
+    width: 100%;
+    max-width: none;
   }
 
   body.view-schedule .schedule-nav-controls button {
