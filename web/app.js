@@ -989,6 +989,19 @@
     setScheduleMenuOpen(false);
   }
 
+  function setScheduleFilterOpen(open) {
+    var expanded = Boolean(open);
+    document.body.classList.toggle("schedule-filter-open", expanded);
+    var button = byId("scheduleFilterButton");
+    if (button) {
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+  }
+
+  function closeScheduleFilter() {
+    setScheduleFilterOpen(false);
+  }
+
   function firstScheduleChannelID(channels) {
     for (var i = 0; i < channels.length; i += 1) {
       var id = scheduleChannelID(channels[i]);
@@ -1032,6 +1045,7 @@
     state.currentView = found ? name : "dashboard";
     if (state.currentView !== "schedule") {
       closeScheduleMenu();
+      closeScheduleFilter();
     }
     document.querySelectorAll(".management-menu").forEach(function (menu) {
       menu.open = name === "status" || name === "settings" || name === "logs";
@@ -4392,9 +4406,16 @@
     window.addEventListener("resize", function () {
       if (!isMobileScheduleLayout()) {
         closeScheduleMenu();
+        closeScheduleFilter();
       }
     });
     initNavigation();
+    document.querySelectorAll("[data-view-link]").forEach(function (link) {
+      link.addEventListener("click", function () {
+        closeScheduleMenu();
+        closeScheduleFilter();
+      });
+    });
     initKeyboardShortcuts();
     var refreshButton = byId("refreshButton");
     if (refreshButton) {
@@ -4618,7 +4639,7 @@
         state.scheduleChannel = scheduleChannel.value;
         renderSchedule();
         if (isMobileScheduleLayout()) {
-          closeScheduleMenu();
+          closeScheduleFilter();
         }
       });
     }
@@ -4626,6 +4647,12 @@
     if (scheduleMenuButton) {
       scheduleMenuButton.addEventListener("click", function () {
         setScheduleMenuOpen(!document.body.classList.contains("schedule-menu-open"));
+      });
+    }
+    var scheduleFilterButton = byId("scheduleFilterButton");
+    if (scheduleFilterButton) {
+      scheduleFilterButton.addEventListener("click", function () {
+        setScheduleFilterOpen(!document.body.classList.contains("schedule-filter-open"));
       });
     }
     var scheduleMenuBackdrop = byId("scheduleMenuBackdrop");

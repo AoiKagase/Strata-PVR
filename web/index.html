@@ -67,12 +67,15 @@
   </header>
 
   <nav class="main-nav" aria-label="WUI sections">
-    <div class="main-nav-links">
-      <a href="#dashboard" data-view-link="dashboard" class="active">ダッシュボード</a>
-      <a href="#schedule" data-view-link="schedule">番組表</a>
-      <a href="#reserves" data-view-link="reserves">予約</a>
-      <a href="#recorded" data-view-link="recorded">録画済み</a>
-      <a href="#rules" data-view-link="rules">ルール</a>
+    <button id="scheduleMenuButton" class="schedule-menu-button icon-button" type="button" title="メニュー" aria-label="メニュー" aria-expanded="false" aria-controls="mainNavDrawer"><svg class="icon"><use href="#icon-list"></use></svg><span class="screen-reader-only">メニュー</span></button>
+    <div id="mainNavDrawer" class="main-nav-drawer">
+      <div class="main-nav-links">
+        <a href="#dashboard" data-view-link="dashboard" class="active">ダッシュボード</a>
+        <a href="#schedule" data-view-link="schedule">番組表</a>
+        <a href="#reserves" data-view-link="reserves">予約</a>
+        <a href="#recorded" data-view-link="recorded">録画済み</a>
+        <a href="#rules" data-view-link="rules">ルール</a>
+      </div>
     </div>
     <details class="management-menu">
       <summary class="icon-button" title="管理" aria-label="管理"><svg class="icon"><use href="#icon-settings"></use></svg><span class="screen-reader-only">管理</span></summary>
@@ -82,7 +85,7 @@
         <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
-    <button id="scheduleMenuButton" class="schedule-menu-button icon-button" type="button" title="番組表メニュー" aria-label="番組表メニュー" aria-expanded="false" aria-controls="scheduleNavControls"><svg class="icon"><use href="#icon-list"></use></svg><span class="screen-reader-only">番組表メニュー</span></button>
+    <button id="scheduleFilterButton" class="schedule-filter-button icon-button" type="button" title="番組表フィルタ" aria-label="番組表フィルタ" aria-expanded="false" aria-controls="scheduleNavControls"><svg class="icon"><use href="#icon-filter"></use></svg><span class="screen-reader-only">番組表フィルタ</span></button>
     <div id="scheduleNavControls" class="schedule-nav-controls" aria-label="番組表フィルタ">
       <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
         <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>

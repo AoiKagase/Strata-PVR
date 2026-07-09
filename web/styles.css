@@ -123,11 +123,19 @@ body {
   gap: 2px;
 }
 
+.main-nav-drawer {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 10px;
+}
+
 .management-menu {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  margin-left: 4px;
+  margin-left: auto;
+  order: 3;
 }
 
 .management-menu summary {
@@ -149,6 +157,7 @@ body {
 }
 
 .schedule-menu-button,
+.schedule-filter-button,
 .schedule-menu-backdrop {
   display: none;
 }
@@ -2295,6 +2304,14 @@ body.view-settings .settings-grid {
     padding: 0;
   }
 
+  .main-nav-drawer {
+    display: contents;
+  }
+
+  .management-menu {
+    display: none;
+  }
+
   .main-nav-links {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2388,6 +2405,11 @@ body.view-schedule .main-nav {
 
 body.view-schedule .schedule-nav-controls {
   display: flex;
+  order: 2;
+}
+
+body.view-schedule .management-menu {
+  margin-left: 4px;
 }
 
 body.view-schedule .workspace {
@@ -2425,16 +2447,52 @@ body.view-schedule .schedule-zoom-controls {
 
 @media (max-width: 520px) {
   body.view-schedule .main-nav {
+    z-index: 36;
     min-height: 48px;
     padding: 0 8px;
   }
 
-  body.view-schedule .main-nav-links,
-  body.view-schedule .management-menu {
-    display: none;
+  body.view-schedule .main-nav-drawer {
+    display: flex;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 35;
+    align-items: stretch;
+    width: min(82vw, 320px);
+    max-width: 320px;
+    flex-direction: column;
+    gap: 8px;
+    transform: translateX(-100%);
+    transition: transform 180ms ease-out;
+    overflow-y: auto;
+    padding: 12px;
+    border-right: 1px solid #aebfc7;
+    background: #dfe9ec;
+    box-shadow: 8px 0 18px rgba(15, 30, 36, 0.18);
   }
 
-  body.view-schedule .schedule-menu-button {
+  body.view-schedule.schedule-menu-open .main-nav-drawer {
+    transform: translateX(0);
+  }
+
+  body.view-schedule .main-nav-links {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  body.view-schedule .main-nav a {
+    width: 100%;
+    border-bottom-color: transparent;
+    padding: 12px 10px;
+    text-align: left;
+  }
+
+  body.view-schedule .schedule-menu-button,
+  body.view-schedule .schedule-filter-button {
     display: inline-flex;
     width: 44px;
     min-width: 44px;
@@ -2445,28 +2503,44 @@ body.view-schedule .schedule-zoom-controls {
     color: var(--ink);
   }
 
-  body.view-schedule .schedule-nav-controls {
-    display: grid;
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 35;
-    align-content: start;
-    width: min(82vw, 320px);
-    max-width: 320px;
-    grid-template-columns: 1fr;
-    transform: translateX(-100%);
-    transition: transform 180ms ease-out;
-    overflow-y: auto;
-    padding: 12px;
-    border-right: 1px solid #aebfc7;
-    background: #dfe9ec;
-    box-shadow: 8px 0 18px rgba(15, 30, 36, 0.18);
+  body.view-schedule .schedule-filter-button {
+    margin-right: 0;
+    margin-left: auto;
   }
 
-  body.view-schedule.schedule-menu-open .schedule-nav-controls {
-    transform: translateX(0);
+  body.view-schedule.schedule-filter-open .schedule-filter-button,
+  body.view-schedule.schedule-menu-open .schedule-menu-button {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  body.view-schedule .schedule-nav-controls {
+    display: none;
+    position: absolute;
+    top: 48px;
+    right: 0;
+    left: 0;
+    z-index: 18;
+    align-content: start;
+    width: 100%;
+    max-width: none;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow-y: auto;
+    max-height: calc(100vh - 48px);
+    padding: 10px 12px 12px;
+    border-bottom: 1px solid #aebfc7;
+    background: #dfe9ec;
+    box-shadow: 0 8px 18px rgba(15, 30, 36, 0.14);
+  }
+
+  body.view-schedule.schedule-filter-open .schedule-nav-controls {
+    display: grid;
+  }
+
+  body.view-schedule .schedule-nav-controls > :not([for="scheduleChannel"]):not(#scheduleChannel):not([for="scheduleDay"]):not(#scheduleDay):not([for="scheduleGenre"]):not(#scheduleGenre) {
+    display: none;
   }
 
   body.view-schedule .schedule-menu-backdrop {
@@ -2496,7 +2570,7 @@ body.view-schedule .schedule-zoom-controls {
 @media (prefers-reduced-motion: reduce) {
   .view,
   .player-controls,
-  body.view-schedule .schedule-nav-controls {
+  body.view-schedule .main-nav-drawer {
     animation: none;
     transition: none;
   }
