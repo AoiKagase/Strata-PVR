@@ -661,6 +661,23 @@ summary:focus-visible,
   background: #e5e7eb;
 }
 
+.program-row.preview-unavailable {
+  background: color-mix(in oklch, var(--error-soft) 42%, white);
+}
+
+.recorded-preview-warning {
+  justify-self: start;
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in oklch, var(--error-strong) 30%, white);
+  border-radius: 999px;
+  background: var(--error-soft);
+  color: var(--error-strong);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .program-row:last-child {
   border-bottom: 0;
 }

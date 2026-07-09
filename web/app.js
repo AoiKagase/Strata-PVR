@@ -2239,10 +2239,29 @@
       var row = image.closest(".program-row");
       if (row) {
         row.classList.remove("with-preview");
+        if (resource === "recorded") {
+          renderRecordedPreviewWarning(row);
+        }
       }
       image.remove();
     });
     return image;
+  }
+
+  function renderRecordedPreviewWarning(row) {
+    if (!row || row.querySelector(".recorded-preview-warning")) {
+      return;
+    }
+    row.classList.add("preview-unavailable");
+    var body = row.querySelector(".program-row-body");
+    if (!body) {
+      return;
+    }
+    var warning = document.createElement("span");
+    warning.className = "recorded-preview-warning";
+    warning.title = "録画ファイルが移動または削除されているか、プレビュー生成に失敗しました";
+    warning.textContent = "ファイル確認";
+    body.appendChild(warning);
   }
 
   function clearProgramDialogPreview(root) {
