@@ -443,8 +443,8 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "mp4XSPFButton"},
-		{"/app.js", "text/javascript", "submitMP4Playlist"},
+		{"/", "text/html", "playerSettings"},
+		{"/app.js", "text/javascript", "changePlayerAudio"},
 		{"/styles.css", "text/css", ".channel-tools"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -588,9 +588,9 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			`function renderProgramPreview(program, resource)`,
 			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size="`,
 			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
-			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
-			`openAdjustablePlayer(program.title || program.id || "録画済み", function (nextQuery)`,
-			`return recordedWatchURL(program, "mp4", nextQuery);`,
+			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
+			`openAdjustablePlayer(program.title || program.id || "録画済み", function (query)`,
+			`return recordedWatchURL(program, "mp4", query);`,
 			`actionButton("静止画", "録画中の静止画を開く"`,
 			`row.classList.remove("with-preview");`,
 		},
@@ -626,6 +626,12 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 			`function playerWindowURL(url, meta)`,
 			`return "/player.html?" + params.toString();`,
 			`openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "");`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.player-shell:fullscreen .player-controls`,
+			`opacity: 0;`,
+			`.player-shell:fullscreen .player-controls:hover`,
+			`.player-shell:fullscreen .player-controls:focus-within`,
 		},
 		filepath.Join("..", "..", "web", "player.html"): {
 			`<video id="externalPlayer" controls autoplay playsinline>`,
@@ -707,7 +713,8 @@ func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
 	for _, want := range []string{
 		`function isRecordedProgram(program)`,
 		`function programDialogActions(program)`,
-		`return ["watch-mp4", "download", "delete-recorded", "create-rule-from-program"];`,
+		`return ["watch-mp4", "download", "xspf", "delete-recorded", "create-rule-from-program"];`,
+		`return actionButton("XSPF", "録画済み番組のプレイリストを開く"`,
 		`if (name === "create-rule-from-program")`,
 		`return actionButton("ルール作成", "この番組を元にルールフォームを開く"`,
 		`renderActions(actions, program, programDialogActions(program));`,
@@ -717,9 +724,9 @@ func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
 		}
 	}
 	for _, notWant := range []string{
-		`return ["watch-mp4", "download", "delete-recorded", "reserve"`,
-		`return ["watch-mp4", "download", "delete-recorded", "unreserve"`,
-		`return ["watch-mp4", "download", "delete-recorded", "open-channel-programs"`,
+		`return ["watch-mp4", "download", "xspf", "delete-recorded", "reserve"`,
+		`return ["watch-mp4", "download", "xspf", "delete-recorded", "unreserve"`,
+		`return ["watch-mp4", "download", "xspf", "delete-recorded", "open-channel-programs"`,
 	} {
 		if strings.Contains(source, notWant) {
 			t.Fatalf("recorded dialog actions should not include %q", notWant)
@@ -2048,6 +2055,34 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 	}
 	if strings.Contains(joined, "-i pipe:0") {
 		t.Fatalf("recorded mp4 should use file input for fast seek: %s", joined)
+	}
+}
+
+func TestAPIRecordedWatchMP4CanSelectSecondaryAudio(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotArgs []string
+	restore := installFakeFFmpegFileStream(t, "mp4data", &gotArgs)
+	defer restore()
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
+	defer restoreProbe()
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?audio=secondary", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
+	}
+	joined := strings.Join(gotArgs, " ")
+	if !strings.Contains(joined, "-map 0:v:0 -map 0:a:1?") {
+		t.Fatalf("ffmpeg args should select secondary audio: %s", joined)
 	}
 }
 

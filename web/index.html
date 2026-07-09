@@ -54,6 +54,9 @@
     <symbol id="icon-volume-x" viewBox="0 0 24 24">
       <path d="M11 5 6 9H3v6h3l5 4z"></path><path d="m16 9 5 5"></path><path d="m21 9-5 5"></path>
     </symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <path d="M12.2 2h-.4l-1 3a7.3 7.3 0 0 0-1.7.7L6.2 4.3l-1.9 1.9 1.4 2.9a7.3 7.3 0 0 0-.7 1.7l-3 1v.4l3 1a7.3 7.3 0 0 0 .7 1.7l-1.4 2.9 1.9 1.9 2.9-1.4a7.3 7.3 0 0 0 1.7.7l1 3h.4l1-3a7.3 7.3 0 0 0 1.7-.7l2.9 1.4 1.9-1.9-1.4-2.9a7.3 7.3 0 0 0 .7-1.7l3-1v-.4l-3-1a7.3 7.3 0 0 0-.7-1.7l1.4-2.9-1.9-1.9-2.9 1.4a7.3 7.3 0 0 0-1.7-.7z"></path><circle cx="12" cy="12" r="3"></circle>
+    </symbol>
   </svg>
   <header class="topbar">
     <div>
@@ -838,57 +841,6 @@
     </form>
   </dialog>
 
-  <dialog id="mp4Dialog" class="program-dialog mp4-dialog" aria-labelledby="mp4DialogTitle">
-    <form id="mp4Form" method="dialog">
-      <div class="program-dialog-head">
-        <div>
-          <span id="mp4DialogMeta" class="program-dialog-meta"></span>
-          <h2 id="mp4DialogTitle">視聴</h2>
-        </div>
-        <button class="small-button" type="button" id="mp4DialogClose">閉じる</button>
-      </div>
-      <div class="mp4-options">
-        <label class="control-field" for="mp4Preset">
-          <span>プリセット</span>
-          <select id="mp4Preset">
-            <option value="">元データ相当</option>
-            <option value="1080p">1080p</option>
-            <option value="720p">720p</option>
-            <option value="540p">540p</option>
-            <option value="360p">低画質</option>
-            <option value="custom">手動指定</option>
-          </select>
-        </label>
-        <label class="control-field" for="mp4Start">
-          <span>開始分</span>
-          <input id="mp4Start" type="number" min="0" step="1" inputmode="numeric">
-        </label>
-        <label class="control-field" for="mp4Duration">
-          <span>長さ分</span>
-          <input id="mp4Duration" type="number" min="0" step="1" inputmode="numeric">
-        </label>
-        <label class="control-field" for="mp4Resolution">
-          <span>解像度</span>
-          <input id="mp4Resolution" type="text" inputmode="text" autocomplete="off" placeholder="1280x720">
-        </label>
-        <label class="control-field" for="mp4VideoBitrate">
-          <span>映像ビットレート</span>
-          <input id="mp4VideoBitrate" type="text" inputmode="text" autocomplete="off" placeholder="1800k">
-        </label>
-        <label class="control-field" for="mp4AudioBitrate">
-          <span>音声ビットレート</span>
-          <input id="mp4AudioBitrate" type="text" inputmode="text" autocomplete="off" placeholder="128k">
-        </label>
-      </div>
-      <div class="program-dialog-actions mp4-dialog-actions">
-        <button class="small-button" type="button" id="mp4M2TSButton" hidden>M2TS</button>
-        <button class="small-button" type="button" id="mp4XSPFButton" hidden>XSPF</button>
-        <button class="small-button" type="button" id="mp4VLCButton" hidden>VLCで開く</button>
-        <button class="small-button primary-action" type="button" id="mp4OpenButton">再生</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="playerDialog" class="program-dialog player-dialog" aria-labelledby="playerDialogTitle">
     <div class="program-dialog-head">
       <div>
@@ -905,17 +857,29 @@
         <span id="playerTime" class="player-time">0:00 / --:--</span>
         <button class="player-control-button icon-button" type="button" id="playerMuteButton" aria-label="ミュート"><svg class="icon"><use href="#icon-volume-2"></use></svg><span class="screen-reader-only">ミュート</span></button>
         <input id="playerVolume" class="player-volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="音量">
-        <label class="player-quality" for="playerQuality">
-          <span>画質</span>
-          <select id="playerQuality">
-            <option value="">元データ相当</option>
-            <option value="1080p">1080p</option>
-            <option value="720p">720p</option>
-            <option value="540p">540p</option>
-            <option value="360p">360p</option>
-            <option value="custom">現在の指定</option>
-          </select>
-        </label>
+        <details class="player-settings" id="playerSettings">
+          <summary class="player-control-button icon-button" title="再生設定" aria-label="再生設定"><svg class="icon"><use href="#icon-settings"></use></svg><span class="screen-reader-only">再生設定</span></summary>
+          <div class="player-settings-menu">
+            <label class="player-setting-field" for="playerQuality">
+              <span>画質</span>
+              <select id="playerQuality">
+                <option value="">元データ相当</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+                <option value="540p">540p</option>
+                <option value="360p">360p</option>
+                <option value="custom">現在の指定</option>
+              </select>
+            </label>
+            <label class="player-setting-field" for="playerAudio">
+              <span>音声</span>
+              <select id="playerAudio">
+                <option value="">主音声</option>
+                <option value="secondary">副音声</option>
+              </select>
+            </label>
+          </div>
+        </details>
         <button class="player-control-button icon-button" type="button" id="playerFullscreenButton" title="全画面" aria-label="全画面"><svg class="icon"><use href="#icon-maximize"></use></svg><span class="screen-reader-only">全画面</span></button>
         <a class="player-control-link icon-button" id="playerOpenLink" href="#" target="_blank" rel="noopener" title="別画面で開く" aria-label="別画面で開く"><svg class="icon"><use href="#icon-external-link"></use></svg><span class="screen-reader-only">別画面</span></a>
       </div>

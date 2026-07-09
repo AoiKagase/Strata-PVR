@@ -3125,7 +3125,7 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 		args = append(args, "-t", duration)
 	}
 	if format == "mp4" {
-		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn")
+		args = append(args, "-map", "0:v:0", "-map", watchAudioMap(q.Get("audio")), "-sn", "-dn")
 	}
 	if cfg.VAAPIEnabled {
 		filter := "format=nv12|vaapi,hwupload,deinterlace_vaapi"
@@ -3185,6 +3185,13 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
 	}
 	return append(args, "-y", "-f", container, "pipe:1")
+}
+
+func watchAudioMap(value string) string {
+	if value == "secondary" {
+		return "0:a:1?"
+	}
+	return "0:a:0?"
 }
 
 func legacyWatchStart(value string) string {

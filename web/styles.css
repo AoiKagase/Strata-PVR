@@ -1599,6 +1599,7 @@ summary:focus-visible,
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   background: #122027;
   color: #eef7f8;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .player-control-button,
@@ -1660,22 +1661,47 @@ summary:focus-visible,
   white-space: nowrap;
 }
 
-.player-quality {
-  display: inline-flex;
-  align-items: center;
+.player-settings {
+  position: relative;
   flex: 0 0 auto;
-  gap: 6px;
 }
 
-.player-quality span {
+.player-settings summary {
+  list-style: none;
+}
+
+.player-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.player-settings-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  min-width: 190px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: #18262d;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+}
+
+.player-setting-field {
+  display: grid;
+  gap: 5px;
+}
+
+.player-setting-field span {
   color: #d7e6e9;
   font-size: 12px;
   font-weight: 800;
 }
 
-.player-quality select {
-  min-height: 30px;
-  max-width: 128px;
+.player-setting-field select {
+  min-height: 34px;
   border-color: rgba(255, 255, 255, 0.2);
   background: #0e1a20;
   color: #eef7f8;
@@ -1683,6 +1709,7 @@ summary:focus-visible,
 }
 
 .player-shell:fullscreen {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100vw;
@@ -1696,8 +1723,31 @@ summary:focus-visible,
 }
 
 .player-shell:fullscreen .player-controls {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   flex: 0 0 auto;
+  opacity: 0;
+  transform: translateY(12px);
+  background: rgba(18, 32, 39, 0.94);
 }
+
+.player-shell:fullscreen .player-controls:hover,
+.player-shell:fullscreen .player-controls:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.player-shell:fullscreen .player-controls::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 28px;
+}
+
 
 .confirm-dialog .program-dialog-actions {
   justify-content: flex-end;
@@ -2404,17 +2454,8 @@ body.view-settings .settings-grid {
 
   .player-control-button,
   .player-control-link,
-  .player-quality select {
+  .player-setting-field select {
     min-height: 40px;
-  }
-
-  .player-quality {
-    flex: 1 1 150px;
-  }
-
-  .player-quality select {
-    flex: 1 1 auto;
-    max-width: none;
   }
 
   .player-volume {
@@ -2428,6 +2469,12 @@ body.view-settings .settings-grid {
   .row-danger-actions {
     flex-basis: 100%;
     margin-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .overview {
+    display: none;
   }
 }
 
@@ -2495,8 +2542,10 @@ body.view-schedule .schedule-zoom-controls {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .view {
+  .view,
+  .player-controls {
     animation: none;
+    transition: none;
   }
 }
 
