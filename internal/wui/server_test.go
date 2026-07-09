@@ -1979,9 +1979,9 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Title: "Title", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	var gotInput string
+	var gotFileArgs []string
 	var gotArgs []string
-	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	restore := installFakeFFmpegFileStream(t, "mp4data", &gotFileArgs)
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
@@ -1995,14 +1995,15 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename*=UTF-8''recorded.mp4" {
 		t.Fatalf("download content-disposition = %q", got)
 	}
-	if gotInput != "tsdata" {
-		t.Fatalf("ffmpeg input = %q", gotInput)
-	}
+	gotArgs = gotFileArgs
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mpegts -i pipe:0", "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v h264", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-ss 2", "-t 30"} {
+	for _, want := range []string{"-ss 2 -f mpegts -i " + recordedPath, "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v h264", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
+	}
+	if strings.Contains(joined, "-i pipe:0") {
+		t.Fatalf("recorded mp4 should use file input for fast seek: %s", joined)
 	}
 	if strings.Contains(joined, "-c:a aac") {
 		t.Fatalf("legacy b:v path should omit explicit audio codec: %s", joined)
@@ -2027,9 +2028,8 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	var gotInput string
 	var gotArgs []string
-	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	restore := installFakeFFmpegFileStream(t, "mp4data", &gotArgs)
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
@@ -2041,13 +2041,13 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-v error", "-f mpegts -i pipe:0", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:a aac", "-ac 2"} {
+	for _, want := range []string{"-v error", "-ss 2 -f mpegts -i " + recordedPath, "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:a aac", "-ac 2"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
 	}
-	if gotInput != "tsdata" {
-		t.Fatalf("ffmpeg input = %q", gotInput)
+	if strings.Contains(joined, "-i pipe:0") {
+		t.Fatalf("recorded mp4 should use file input for fast seek: %s", joined)
 	}
 }
 
@@ -2193,9 +2193,8 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	var gotInput string
 	var gotArgs []string
-	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	restore := installFakeFFmpegFileStream(t, "mp4data", &gotArgs)
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
@@ -2206,8 +2205,8 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
-	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 15") {
-		t.Fatalf("ffmpeg args missing legacy ss: %s", joined)
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 15 -f mpegts -i "+recordedPath) {
+		t.Fatalf("ffmpeg args missing input-side legacy ss: %s", joined)
 	}
 
 	gotArgs = nil
@@ -2217,8 +2216,8 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("mp4 low-ss status=%d body=%q", res.Code, res.Body.String())
 	}
-	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2") {
-		t.Fatalf("ffmpeg args did not clamp legacy ss: %s", joined)
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2 -f mpegts -i "+recordedPath) {
+		t.Fatalf("ffmpeg args did not clamp input-side legacy ss: %s", joined)
 	}
 }
 
@@ -2292,9 +2291,8 @@ func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	var gotInput string
 	var gotArgs []string
-	restore := installFakeFFmpegStream(t, "mp4data", &gotInput, &gotArgs)
+	restore := installFakeFFmpegFileStream(t, "mp4data", &gotArgs)
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
@@ -2311,8 +2309,8 @@ func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
 	}
-	if gotInput != "tsdata" {
-		t.Fatalf("ffmpeg input = %q", gotInput)
+	if strings.Contains(joined, "-i pipe:0") || !strings.Contains(joined, "-i "+recordedPath) {
+		t.Fatalf("recorded mp4 should use file input for fast seek: %s", joined)
 	}
 }
 
@@ -2502,6 +2500,16 @@ func installFakeFFmpegStream(t *testing.T, output string, gotInput *string, gotA
 		return io.NopCloser(strings.NewReader(output)), func() error { return nil }, nil
 	}
 	return func() { runFFmpegStream = old }
+}
+
+func installFakeFFmpegFileStream(t *testing.T, output string, gotArgs *[]string) func() {
+	t.Helper()
+	old := runFFmpegFileStream
+	runFFmpegFileStream = func(_ context.Context, args ...string) (io.ReadCloser, func() error, error) {
+		*gotArgs = append((*gotArgs)[:0], args...)
+		return io.NopCloser(strings.NewReader(output)), func() error { return nil }, nil
+	}
+	return func() { runFFmpegFileStream = old }
 }
 
 func TestGrowingFileReaderFollowsAppends(t *testing.T) {

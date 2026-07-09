@@ -61,6 +61,15 @@ var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string
 var runFFmpegStream = func(ctx context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	cmd.Stdin = input
+	return startFFmpegStream(cmd)
+}
+
+var runFFmpegFileStream = func(ctx context.Context, args ...string) (io.ReadCloser, func() error, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	return startFFmpegStream(cmd)
+}
+
+func startFFmpegStream(cmd *exec.Cmd) (io.ReadCloser, func() error, error) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -2301,13 +2310,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 			s.streamFFmpeg(w, r, newGrowingFileReader(r.Context(), filePath, 0), "mp4", true)
 			return
 		}
-		file, err := os.Open(filePath)
-		if err != nil {
-			legacyHTTPError(w, r, http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
-		s.streamFFmpeg(w, r, file, "mp4", false)
+		s.streamFFmpegFile(w, r, filePath, "mp4")
 	default:
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 	}
@@ -3028,6 +3031,16 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
 	args := watchFFmpegArgs(r, s.cfg, format, live)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
+	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status)
+}
+
+func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
+	args := watchFFmpegFileArgs(r, s.cfg, format, filePath)
+	output, wait, err := runFFmpegFileStream(r.Context(), args...)
+	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK)
+}
+
+func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, output io.ReadCloser, wait func() error, err error, args []string, format string, status int) {
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -3049,6 +3062,14 @@ func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, 
 }
 
 func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bool) []string {
+	return watchFFmpegArgsForInput(r, cfg, format, live, "pipe:0", false)
+}
+
+func watchFFmpegFileArgs(r *http.Request, cfg *config.Config, format string, filePath string) []string {
+	return watchFFmpegArgsForInput(r, cfg, format, false, filePath, true)
+}
+
+func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string, live bool, input string, seekBeforeInput bool) []string {
 	q := r.URL.Query()
 	videoCodec := q.Get("c:v")
 	audioCodec := q.Get("c:a")
@@ -3090,10 +3111,15 @@ func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bo
 	if live {
 		args = append(args, "-re")
 	}
-	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts")
-	args = append(args, "-i", "pipe:0", "-threads", "0")
-	if !live {
+	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000")
+	if !live && seekBeforeInput {
 		args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
+	}
+	args = append(args, "-f", "mpegts", "-i", input, "-threads", "0")
+	if !live {
+		if !seekBeforeInput {
+			args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
+		}
 	}
 	if duration := q.Get("t"); duration != "" {
 		args = append(args, "-t", duration)
