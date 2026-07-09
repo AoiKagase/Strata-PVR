@@ -445,7 +445,7 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 	}{
 		{"/", "text/html", "playerSettings"},
 		{"/app.js", "text/javascript", "changePlayerAudio"},
-		{"/styles.css", "text/css", ".channel-tools"},
+		{"/styles.css", "text/css", ".management-menu"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		res := httptest.NewRecorder()
@@ -465,10 +465,6 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 func TestNativeDashboardListFilters(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {
-			`id="channelProgramsQuery"`,
-			`id="channelProgramsFilterSummary"`,
-			`id="channelProgramsSort"`,
-			`id="channelProgramsFilterReset"`,
 			`id="reserveListQuery"`,
 			`id="reserveListCategory"`,
 			`id="reserveListSort"`,
@@ -497,9 +493,6 @@ func TestNativeDashboardListFilters(t *testing.T) {
 			`resetListFilter`,
 			`programSearchText`,
 			`updateListCategoryOptions`,
-			`state.listFilters.channelPrograms.query`,
-			`state.listFilters.channelPrograms.category`,
-			`state.listFilters.channelPrograms.sort`,
 			`state.listFilters.rules.state`,
 			`state.listFilters.rules.sort`,
 			`bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort")`,
@@ -509,7 +502,6 @@ func TestNativeDashboardListFilters(t *testing.T) {
 			`ruleListSort`,
 			`reserveListFilterReset`,
 			`recordedListFilterReset`,
-			`channelProgramsFilterReset`,
 			`ruleListFilterReset`,
 			`startDesc`,
 			`indexDesc`,
@@ -726,7 +718,6 @@ func TestNativeDashboardRecordedDialogActionsAreScoped(t *testing.T) {
 	for _, notWant := range []string{
 		`return ["watch-mp4", "download", "xspf", "delete-recorded", "reserve"`,
 		`return ["watch-mp4", "download", "xspf", "delete-recorded", "unreserve"`,
-		`return ["watch-mp4", "download", "xspf", "delete-recorded", "open-channel-programs"`,
 	} {
 		if strings.Contains(source, notWant) {
 			t.Fatalf("recorded dialog actions should not include %q", notWant)
@@ -933,7 +924,8 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 			`function decorateProgramState(program)`,
 			`program.isRecording`,
 			`program.isReserved`,
-			`renderProgramStateBadges(item, program)`,
+			`renderProgramStateBadges(body, program, options)`,
+			`item.classList.toggle("skip", Boolean(program.isSkip))`,
 			`録画中`,
 			`手動予約`,
 			`watch-recording-mp4`,
@@ -943,6 +935,7 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.program-state-badge`,
+			`.program-row.skip`,
 			`.schedule-card-state`,
 			`.schedule-card.recording`,
 			`.schedule-card.recording .schedule-card-state`,

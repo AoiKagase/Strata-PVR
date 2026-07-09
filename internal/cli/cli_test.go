@@ -754,7 +754,6 @@ func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
 		`value="three-days"`,
 		`value="all"`,
 		`scheduleHiddenChannel`,
-		`channelProgramsSort`,
 	} {
 		if !strings.Contains(indexText, want) {
 			t.Fatalf("native WUI index missing %q", want)

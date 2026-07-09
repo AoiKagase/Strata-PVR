@@ -207,41 +207,6 @@
       </div>
     </section>
 
-    <section class="view" data-view="channel-programs" hidden>
-      <div class="view-head">
-        <div>
-          <h2 id="channelProgramsTitle">チャンネル番組一覧</h2>
-          <p>選択したチャンネル内の番組を確認し、手動予約やルール作成に進めます。</p>
-        </div>
-        <div class="schedule-controls" aria-label="Channel program controls">
-          <label class="control-field" for="channelProgramsQuery">
-            <span>検索</span>
-            <input id="channelProgramsQuery" type="search" autocomplete="off" placeholder="タイトル、説明">
-          </label>
-          <label class="control-field" for="channelProgramsGenre">
-            <span>ジャンル</span>
-            <select id="channelProgramsGenre">
-              <option value="">全ジャンル</option>
-            </select>
-          </label>
-          <label class="control-field" for="channelProgramsSort">
-            <span>並び順</span>
-            <select id="channelProgramsSort">
-              <option value="startAsc">開始時刻 昇順</option>
-              <option value="startDesc">開始時刻 降順</option>
-              <option value="category">ジャンル</option>
-              <option value="title">タイトル</option>
-              <option value="duration">長さ</option>
-            </select>
-          </label>
-          <button id="channelProgramsFilterReset" class="filter-clear-button" type="button">クリア</button>
-          <span id="channelProgramsFilterSummary" class="list-filter-summary">0件</span>
-        </div>
-      </div>
-      <div id="channelProgramsTools" class="channel-tools" hidden></div>
-      <div id="channelProgramsList" class="list empty">チャンネルを選択してください</div>
-    </section>
-
     <section class="view" data-view="reserves" hidden>
       <div class="view-head">
         <div>

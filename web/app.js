@@ -47,9 +47,6 @@
     scheduleHiddenChannels: loadHiddenChannels(),
     scheduleWindowMode: "day",
     scheduleZoomLevel: loadScheduleZoomLevel(),
-    channelProgramsChannel: "",
-    channelProgramsGenre: "",
-    channelProgramsSort: "startAsc",
     editingRuleFormIndex: null,
     selectedProgram: null,
     activeProgramID: "",
@@ -127,7 +124,6 @@
 
   function defaultListFilters() {
     return {
-      channelPrograms: { query: "", category: "", sort: "startAsc" },
       rules: { query: "", state: "", sort: "indexAsc" },
       recorded: { query: "", category: "", sort: "startDesc" },
       reserves: { query: "", category: "", sort: "startAsc" }
@@ -668,14 +664,15 @@
     if (isRecordedProgram(program)) {
       return ["watch-mp4", "download", "xspf", "delete-recorded", "create-rule-from-program"];
     }
-    return ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "open-channel-programs", "create-rule-from-program"];
+    return ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "create-rule-from-program"];
   }
 
-  function programStateLabels(program) {
+  function programStateLabels(program, options) {
+    options = options || {};
     var labels = [];
     if (program && program.isRecording) {
       labels.push({ text: "録画中", type: "recording" });
-    } else if (program && program.isReserved) {
+    } else if (program && program.isReserved && !options.hideReservedBadge) {
       labels.push({ text: program.isManualReserved ? "手動予約" : "予約済み", type: "reserved" });
     }
     if (program && program.isConflict) {
@@ -693,8 +690,8 @@
     }).join(" / ");
   }
 
-  function renderProgramStateBadges(item, program) {
-    var labels = programStateLabels(program);
+  function renderProgramStateBadges(item, program, options) {
+    var labels = programStateLabels(program, options);
     if (!labels.length) {
       return;
     }
@@ -1044,7 +1041,6 @@
   function focusCurrentSearch() {
     var view = currentView();
     var focusByView = {
-      "channel-programs": "channelProgramsQuery",
       "reserves": "reserveListQuery",
       "recorded": "recordedListQuery",
       "rules": "ruleListQuery",
@@ -1913,14 +1909,6 @@
             }, null, false);
           }));
         }
-      } else if (name === "open-channel-programs") {
-        var programsChannelID = programChannelID(program);
-        if (programsChannelID) {
-          row.appendChild(actionButton("番組一覧", "このチャンネルの番組一覧を開く", function () {
-            closeProgramDialog();
-            openChannelPrograms(programsChannelID);
-          }));
-        }
       } else if (name === "create-rule-from-program") {
         row.appendChild(actionButton("ルール作成", "この番組を元にルールフォームを開く", function () {
           closeProgramDialog();
@@ -2002,9 +1990,11 @@
     button.type = "button";
     button.className = "channel-link";
     button.textContent = label || channelID || "不明なチャンネル";
-    button.title = "このチャンネルの番組一覧を開く";
+    button.title = "番組表をこのチャンネルで絞り込む";
     button.addEventListener("click", function () {
-      openChannelPrograms(channelID);
+      state.scheduleChannel = channelID || "";
+      window.location.hash = "schedule";
+      renderSchedule();
     });
     return button;
   }
@@ -2169,8 +2159,12 @@
     options = options || {};
     var item = document.createElement("article");
     item.className = "program-row";
+    if (options.compactActions) {
+      item.className += " compact-actions";
+    }
     item.classList.toggle("with-preview", Boolean(options.preview));
     item.classList.toggle("selected", isActiveProgram(program));
+    item.classList.toggle("skip", Boolean(program.isSkip));
     item.tabIndex = 0;
     item.setAttribute("role", "group");
     item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
@@ -2208,7 +2202,7 @@
     body.className = "program-row-body";
     body.appendChild(title);
     body.appendChild(meta);
-    renderProgramStateBadges(body, program);
+    renderProgramStateBadges(body, program, options);
     renderActions(body, program, actions);
 
     if (options.preview) {
@@ -2394,31 +2388,6 @@
       groups.push(group);
     });
     return groups;
-  }
-
-  function findChannelProgramGroup(channelID) {
-    var groups = channelProgramGroups();
-    var found = null;
-    groups.some(function (group) {
-      if (group.id === channelID) {
-        found = group;
-        return true;
-      }
-      return false;
-    });
-    return found;
-  }
-
-  function openChannelPrograms(channelID) {
-    if (!channelID) {
-      return;
-    }
-    state.channelProgramsChannel = channelID;
-    state.channelProgramsGenre = "";
-    state.listFilters.channelPrograms.category = "";
-    saveListFilters();
-    window.location.hash = "channel-programs";
-    renderChannelPrograms();
   }
 
   function renderList(id, items, emptyText, limit, actions, options) {
@@ -3039,100 +3008,6 @@
     if (select.value !== current) {
       select.value = "";
     }
-  }
-
-  function renderChannelPrograms() {
-    var root = byId("channelProgramsList");
-    if (!root) {
-      return;
-    }
-    var group = findChannelProgramGroup(state.channelProgramsChannel);
-    var title = byId("channelProgramsTitle");
-    var tools = byId("channelProgramsTools");
-    root.innerHTML = "";
-    if (!group) {
-      if (title) {
-        title.textContent = "チャンネル番組一覧";
-      }
-      if (tools) {
-        tools.hidden = true;
-        tools.innerHTML = "";
-      }
-      renderChannelProgramsGenreOptions([]);
-      updateListFilterSummary("channelProgramsFilterSummary", 0, 0);
-      root.className = "list empty";
-      root.textContent = "チャンネルを選択してください";
-      return;
-    }
-
-    if (title) {
-      title.textContent = group.name + " の番組一覧";
-    }
-    if (tools) {
-      tools.hidden = false;
-      tools.innerHTML = "";
-      var label = document.createElement("span");
-      label.className = "channel-tool-label";
-      label.textContent = group.name;
-      tools.appendChild(label);
-      tools.appendChild(renderChannelActions(group.id));
-    }
-
-    renderChannelProgramsGenreOptions(group.programs);
-    var programs = group.programs.filter(function (program) {
-      if (programEnd(program) < Date.now()) {
-        return false;
-      }
-      return !state.channelProgramsGenre || String(program.category || "") === state.channelProgramsGenre;
-    });
-    state.listFilters.channelPrograms.category = state.channelProgramsGenre;
-    programs = filteredPrograms(programs, "channelPrograms");
-    updateListFilterSummary("channelProgramsFilterSummary", programs.length, group.programs.length);
-    programs = sortedPrograms(programs, "channelPrograms");
-
-    if (!programs.length) {
-      root.className = "list empty";
-      root.textContent = "条件に一致する番組はありません";
-      return;
-    }
-    root.className = "list";
-    programs.forEach(function (program) {
-      root.appendChild(renderProgramRow(program, ["reserve", "unreserve", "skip", "unskip", "watch-recording-mp4", "preview-recording", "stop", "watch-channel-mp4", "create-rule-from-program"], false));
-    });
-  }
-
-  function renderChannelProgramsGenreOptions(programs) {
-    var select = byId("channelProgramsGenre");
-    if (!select) {
-      return;
-    }
-    var current = state.listFilters.channelPrograms.category || state.channelProgramsGenre;
-    var genres = {};
-    (programs || []).forEach(function (program) {
-      if (program && program.category) {
-        genres[String(program.category)] = true;
-      }
-    });
-    select.innerHTML = "";
-    var all = document.createElement("option");
-    all.value = "";
-    all.textContent = "全ジャンル";
-    select.appendChild(all);
-    Object.keys(genres).sort().forEach(function (genre) {
-      var option = document.createElement("option");
-      option.value = genre;
-      option.textContent = genre;
-      select.appendChild(option);
-    });
-    select.value = current;
-    if (select.value !== current) {
-      state.channelProgramsGenre = "";
-      state.listFilters.channelPrograms.category = "";
-      select.value = "";
-      return;
-    }
-    state.channelProgramsGenre = current;
-    state.listFilters.channelPrograms.category = current;
   }
 
   function renderRules() {
@@ -4187,13 +4062,12 @@
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
 
     renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
-    renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"]);
-    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"]);
+    renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
-    renderChannelPrograms();
     renderRules();
     renderSettings();
     renderStatus();
@@ -4299,7 +4173,6 @@
     text(byId("ruleListFilterSummary"), "0件");
     text(byId("reserveListFilterSummary"), "0件");
     text(byId("recordedListFilterSummary"), "0件");
-    text(byId("channelProgramsFilterSummary"), "0件");
     if (error) {
       setBusy(error.message);
       showError(error);
@@ -4440,10 +4313,6 @@
   function resetListFilterControls(filterName, ids, renderFn) {
     var defaults = defaultListFilter(filterName);
     state.listFilters[filterName] = defaults;
-    if (filterName === "channelPrograms") {
-      state.channelProgramsGenre = "";
-      state.channelProgramsSort = defaults.sort || "startAsc";
-    }
     [
       { id: ids.query, value: defaults.query || "" },
       { id: ids.category, value: defaults.category || defaults.state || "" },
@@ -4508,15 +4377,6 @@
       query: "recordedListQuery",
       sort: "recordedListSort"
     });
-    var channelProgramsQuery = byId("channelProgramsQuery");
-    if (channelProgramsQuery) {
-      channelProgramsQuery.value = state.listFilters.channelPrograms.query || "";
-      channelProgramsQuery.addEventListener("input", function () {
-        state.listFilters.channelPrograms.query = channelProgramsQuery.value;
-        saveListFilters();
-        renderChannelPrograms();
-      });
-    }
     var ruleListQuery = byId("ruleListQuery");
     if (ruleListQuery) {
       ruleListQuery.value = state.listFilters.rules.query || "";
@@ -4803,36 +4663,6 @@
         changeScheduleZoom(-1);
       }
     });
-    var channelProgramsGenre = byId("channelProgramsGenre");
-    if (channelProgramsGenre) {
-      channelProgramsGenre.addEventListener("change", function () {
-        state.channelProgramsGenre = channelProgramsGenre.value;
-        state.listFilters.channelPrograms.category = channelProgramsGenre.value;
-        saveListFilters();
-        renderChannelPrograms();
-      });
-    }
-    var channelProgramsSort = byId("channelProgramsSort");
-    if (channelProgramsSort) {
-      channelProgramsSort.value = state.listFilters.channelPrograms.sort || state.channelProgramsSort || "startAsc";
-      if (state.listFilters.channelPrograms.sort && channelProgramsSort.value !== state.listFilters.channelPrograms.sort) {
-        channelProgramsSort.value = channelProgramsSort.options.length ? channelProgramsSort.options[0].value : "startAsc";
-      }
-      state.channelProgramsSort = channelProgramsSort.value;
-      state.listFilters.channelPrograms.sort = channelProgramsSort.value;
-      channelProgramsSort.addEventListener("change", function () {
-        state.channelProgramsSort = channelProgramsSort.value || "startAsc";
-        state.listFilters.channelPrograms.sort = state.channelProgramsSort;
-        saveListFilters();
-        renderChannelPrograms();
-      });
-    }
-    resetListFilter("channelPrograms", {
-      button: "channelProgramsFilterReset",
-      category: "channelProgramsGenre",
-      query: "channelProgramsQuery",
-      sort: "channelProgramsSort"
-    }, renderChannelPrograms);
     subscribeRealtimeRefresh();
     refresh();
     setInterval(refreshOperationalData, 30000);

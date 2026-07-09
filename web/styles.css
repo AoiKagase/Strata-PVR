@@ -464,6 +464,7 @@ h3 {
 .content-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 14px;
 }
 
@@ -484,7 +485,7 @@ h3 {
 }
 
 .dashboard-summary-panel {
-  min-height: 220px;
+  min-height: 0;
 }
 
 .live-channel-list:not(.empty) {
@@ -719,10 +720,47 @@ summary:focus-visible,
   column-gap: 10px;
 }
 
+.program-row.skip {
+  opacity: 0.72;
+}
+
+.program-row.skip .program-title-button,
+.program-row.skip .program-row-meta,
+.program-row.skip .program-category-chip {
+  color: var(--muted);
+}
+
 .program-row-body {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.program-row.compact-actions {
+  min-height: 0;
+  padding: 7px 0;
+}
+
+.program-row.compact-actions .program-row-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+
+.program-row.compact-actions .program-title-button {
+  min-height: 24px;
+}
+
+.program-row.compact-actions .program-row-meta,
+.program-row.compact-actions .program-state-badges {
+  grid-column: 1;
+}
+
+.program-row.compact-actions .row-actions {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  justify-self: end;
+  align-self: center;
 }
 
 .program-preview-image {
@@ -1337,31 +1375,6 @@ summary:focus-visible,
   font-size: 11px;
 }
 
-.channel-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 7px 10px;
-  border: 1px solid #c7d2d8;
-  border-radius: 6px;
-  background: #f8fbfc;
-}
-
-.channel-tools[hidden] {
-  display: none;
-}
-
-.channel-tool-label {
-  overflow: hidden;
-  max-width: 220px;
-  color: #33444c;
-  font-size: 12px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1531,25 +1544,6 @@ summary:focus-visible,
   flex-wrap: wrap;
   gap: 8px;
   padding: 14px 16px 16px;
-}
-
-.program-copy-actions {
-  flex: 1 0 100%;
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-
-.copy-action {
-  border-color: #d3dde2;
-  background: #fbfcfd;
-  color: #33444c;
-}
-
-.copy-action:hover {
-  border-color: #9eb1ba;
-  background: #eef3f5;
-  color: var(--ink);
 }
 
 .mp4-dialog-actions {
@@ -2306,6 +2300,16 @@ body.view-settings .settings-grid {
     grid-column: 2;
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .program-row.compact-actions .program-row-body {
+    grid-template-columns: 1fr;
+  }
+
+  .program-row.compact-actions .row-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
   }
 
   .settings-list {
