@@ -358,8 +358,11 @@
   }
 
   function sendConfigJSON(raw) {
-    return fetch("/api/config.json?json=" + encodeURIComponent(raw), {
+    var strata = state.config && state.config.schema === "strata/config";
+    return fetch(strata ? "/api/config.json" : "/api/config.json?json=" + encodeURIComponent(raw), {
+      body: strata ? raw : undefined,
       credentials: "same-origin",
+      headers: strata ? { "Content-Type": "application/json" } : undefined,
       method: "PUT"
     }).then(function (response) {
       if (!response.ok) {
@@ -3248,44 +3251,185 @@
 
   function renderConfigForm() {
     var cfg = state.config || {};
+    var strata = cfg.schema === "strata/config";
+    var strataPanel = byId("strataConfigPanel");
+    var legacyPanel = byId("legacyConfigPanel");
+    if (strataPanel) {
+      strataPanel.hidden = !strata;
+    }
+    if (legacyPanel) {
+      legacyPanel.hidden = strata;
+    }
+    if (strata) {
+      renderStrataConfigForm(cfg);
+      return;
+    }
     setControlValue("configMirakurunPath", cfg.mirakurunPath);
     setControlValue("configSchedulerMirakurunPath", cfg.schedulerMirakurunPath);
     setControlValue("configRecordedDir", cfg.recordedDir);
     setControlValue("configRecordedFormat", cfg.recordedFormat);
     setControlValue("configWuiHost", cfg.wuiHost);
     setControlValue("configWuiPort", cfg.wuiPort);
-    setControlValue("configWuiOpenServer", cfg.wuiOpenServer);
-    setControlValue("configWuiOpenHost", cfg.wuiOpenHost);
-    setControlValue("configWuiOpenPort", cfg.wuiOpenPort);
     setControlValue("configNormalizationForm", cfg.normalizationForm);
     setControlValue("configStorageLowSpaceThresholdMB", cfg.storageLowSpaceThresholdMB);
     setControlValue("configStorageLowSpaceAction", cfg.storageLowSpaceAction);
     setControlValue("configExcludeServices", cfg.excludeServices);
-    setControlValue("configUid", cfg.uid);
-    setControlValue("configGid", cfg.gid);
     setControlValue("configWuiUsers", cfg.wuiUsers);
-    setControlValue("configWuiAllowCountries", cfg.wuiAllowCountries);
     setControlValue("configServiceOrder", cfg.serviceOrder);
-    setBooleanSelectValue("configWuiXFF", cfg.wuiXFF);
-    setBooleanSelectValue("configWuiMdnsAdvertisement", cfg.wuiMdnsAdvertisement);
-    setBooleanSelectValue("configVaapiEnabled", cfg.vaapiEnabled);
-    setControlValue("configVaapiDevice", cfg.vaapiDevice);
     setControlValue("configRecordingPriority", cfg.recordingPriority);
     setControlValue("configConflictedPriority", cfg.conflictedPriority);
-    setControlValue("configWuiTlsKeyPath", cfg.wuiTlsKeyPath);
-    setControlValue("configWuiTlsCertPath", cfg.wuiTlsCertPath);
-    setControlValue("configWuiTlsCaPath", cfg.wuiTlsCaPath);
-    setControlValue("configWuiTlsPassphrase", cfg.wuiTlsPassphrase);
-    setBooleanSelectValue("configWuiTlsRequestCert", cfg.wuiTlsRequestCert);
-    setBooleanSelectValue("configWuiTlsRejectUnauthorized", cfg.wuiTlsRejectUnauthorized);
-    setControlValue("configStorageLowSpaceNotifyTo", cfg.storageLowSpaceNotifyTo);
-    setControlValue("configStorageLowSpaceCommand", cfg.storageLowSpaceCommand);
-    setControlValue("configSchedulerStartCommand", cfg.schedulerStartCommand);
-    setControlValue("configSchedulerEndCommand", cfg.schedulerEndCommand);
-    setControlValue("configEpgStartCommand", cfg.epgStartCommand);
-    setControlValue("configEpgEndCommand", cfg.epgEndCommand);
-    setControlValue("configConflictCommand", cfg.conflictCommand);
-    setControlValue("configRecordedCommand", cfg.recordedCommand);
+  }
+
+  function renderStrataConfigForm(cfg) {
+    var web = cfg.web || {};
+    var authentication = web.authentication || {};
+    var recording = cfg.recording || {};
+    var lowSpace = recording.lowSpace || {};
+	var previewCache = cfg.previewCache || {};
+    var services = cfg.services || {};
+    var advanced = cfg.advanced || {};
+    setControlValue("strataMirakurunURL", (cfg.mirakurun || {}).url);
+    setControlValue("strataListenAddress", web.listenAddress);
+    setControlValue("strataWebPort", web.port);
+    setControlValue("strataAuthEnabled", authentication.enabled);
+    setControlValue("strataRecordingDirectory", recording.directory);
+    setControlValue("strataFilenameFormat", recording.filenameFormat);
+    setControlValue("strataRecordingPriority", (cfg.mirakurun || {}).recordingPriority);
+    setControlValue("strataConflictedPriority", (cfg.mirakurun || {}).conflictedPriority);
+    setControlValue("strataLowSpaceThreshold", lowSpace.thresholdMB);
+    setControlValue("strataLowSpaceAction", lowSpace.action);
+	setControlValue("strataPreviewCacheMaxAge", previewCache.maxAgeDays);
+	setControlValue("strataPreviewCacheMaxSize", previewCache.maxSizeMB);
+    setControlValue("strataExcludedServices", services.excluded);
+    setControlValue("strataServiceOrder", services.order);
+    setControlValue("strataNormalizationForm", advanced.normalizationForm);
+    var root = byId("strataAuthUsers");
+    root.innerHTML = "";
+    (authentication.users || []).forEach(function (user) {
+      appendStrataUser(user);
+    });
+    updateStrataAuthUsersState();
+  }
+
+  function appendStrataUser(user) {
+    var root = byId("strataAuthUsers");
+    if (!root) {
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "config-user-row";
+    row.innerHTML = '<label><span>ユーザー名</span><input class="config-form-control strata-user-name" type="text" autocomplete="username" required></label>' +
+      '<label><span>パスワード</span><input class="config-form-control strata-user-password" type="password" autocomplete="new-password" spellcheck="false"></label>' +
+      '<button class="icon-button danger-button strata-user-remove" type="button" title="ユーザーを削除" aria-label="ユーザーを削除">&times;</button>';
+    row.querySelector(".strata-user-name").value = user && user.username || "";
+    var password = row.querySelector(".strata-user-password");
+    if (user && user.passwordConfigured) {
+      password.placeholder = "変更しない";
+      row.dataset.passwordConfigured = "true";
+    }
+    row.querySelector(".strata-user-remove").addEventListener("click", function () {
+      row.remove();
+    });
+    root.appendChild(row);
+  }
+
+  function updateStrataAuthUsersState() {
+    var enabled = byId("strataAuthEnabled").checked;
+    byId("strataAuthUsers").hidden = !enabled;
+    byId("addStrataUserButton").hidden = !enabled;
+  }
+
+  function requiredString(id, label) {
+    var value = controlString(id);
+    if (!value) {
+      showError(new Error(label + "を入力してください"));
+      return null;
+    }
+    return value;
+  }
+
+  function requiredInteger(id, label, minimum, maximum) {
+    var value = Number(controlString(id));
+    if (!Number.isInteger(value) || value < minimum || value > maximum) {
+      showError(new Error(label + "は" + minimum + "から" + maximum + "の整数にしてください"));
+      return null;
+    }
+    return value;
+  }
+
+  function strataServiceList(id, label) {
+    var values = splitList(controlString(id)).map(Number);
+    if (values.some(function (value) { return !Number.isInteger(value) || value <= 0; })) {
+      showError(new Error(label + "はカンマ区切りの正の整数にしてください"));
+      return null;
+    }
+    return values;
+  }
+
+  function readStrataConfigForm() {
+    var mirakurunURL = requiredString("strataMirakurunURL", "Mirakurun URL");
+    var listenAddress = requiredString("strataListenAddress", "待受アドレス");
+    var port = requiredInteger("strataWebPort", "ポート", 1, 65535);
+    var directory = requiredString("strataRecordingDirectory", "録画保存先");
+    var filenameFormat = requiredString("strataFilenameFormat", "ファイル名形式");
+    var threshold = requiredInteger("strataLowSpaceThreshold", "空き容量しきい値", 0, Number.MAX_SAFE_INTEGER);
+	var previewMaxAge = requiredInteger("strataPreviewCacheMaxAge", "プレビュー保持日数", 0, Number.MAX_SAFE_INTEGER);
+	var previewMaxSize = requiredInteger("strataPreviewCacheMaxSize", "プレビュー上限", 0, Number.MAX_SAFE_INTEGER);
+    var excluded = strataServiceList("strataExcludedServices", "除外サービス");
+    var order = strataServiceList("strataServiceOrder", "サービス順");
+    if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || threshold === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
+      return null;
+    }
+    var enabled = byId("strataAuthEnabled").checked;
+    var users = [];
+    var names = {};
+    Array.prototype.forEach.call(document.querySelectorAll("#strataAuthUsers .config-user-row"), function (row) {
+      var username = row.querySelector(".strata-user-name").value.trim();
+      var password = row.querySelector(".strata-user-password").value;
+      if (!username || names[username] || (!password && row.dataset.passwordConfigured !== "true")) {
+        users = null;
+        return;
+      }
+      names[username] = true;
+      var user = { username: username, passwordConfigured: row.dataset.passwordConfigured === "true" };
+      if (password) {
+        user.password = password;
+      }
+      users.push(user);
+    });
+    if (users === null || (enabled && users.length === 0)) {
+      showError(new Error("認証ユーザーの名前とパスワードを確認してください"));
+      return null;
+    }
+    var cfg = state.config || {};
+    return {
+      schema: cfg.schema,
+      version: cfg.version,
+      mirakurun: { url: mirakurunURL, recordingPriority: Number(controlString("strataRecordingPriority")), conflictedPriority: Number(controlString("strataConflictedPriority")) },
+      recording: { directory: directory, filenameFormat: filenameFormat, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") } },
+	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
+      web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
+      services: { excluded: excluded, order: order },
+      advanced: { normalizationForm: controlString("strataNormalizationForm") }
+    };
+  }
+
+  function saveStrataConfigFromForm() {
+    var config = readStrataConfigForm();
+    if (!config) {
+      return;
+    }
+    confirmAction("Strata設定を保存しますか？", { danger: false, okLabel: "保存", title: "設定保存の確認" }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      setBusy("設定保存中");
+      sendConfigJSON(JSON.stringify(config)).then(function (savedConfig) {
+        state.config = savedConfig || {};
+        render();
+        setBusy("設定を保存しました");
+      }).catch(showError);
+    });
   }
 
   function renderSettings() {
@@ -3294,43 +3438,28 @@
       return;
     }
     var cfg = state.config || {};
-    var rows = [
+    var rows = cfg.schema === "strata/config" ? [
+      ["形式", "Strata config v" + cfg.version],
+      ["Mirakurun", (cfg.mirakurun || {}).url],
+      ["録画保存先", (cfg.recording || {}).directory],
+      ["待受", ((cfg.web || {}).listenAddress || "") + ":" + ((cfg.web || {}).port || "")],
+      ["認証", ((cfg.web || {}).authentication || {}).enabled],
+      ["ユーザー", (((cfg.web || {}).authentication || {}).users || []).map(function (user) { return user.username; })]
+    ] : [
       ["Mirakurun", cfg.mirakurunPath || cfg.schedulerMirakurunPath],
       ["旧Mirakurun", cfg.schedulerMirakurunPath],
-      ["実行ユーザーID", cfg.uid],
-      ["実行グループID", cfg.gid],
       ["録画ディレクトリ", cfg.recordedDir],
       ["録画ファイル名", cfg.recordedFormat],
       ["WUIホスト", cfg.wuiHost],
       ["WUIポート", cfg.wuiPort],
-      ["公開WUI", cfg.wuiOpenServer],
-      ["公開ホスト", cfg.wuiOpenHost],
-      ["公開ポート", cfg.wuiOpenPort],
-      ["WUI X-Forwarded-For", cfg.wuiXFF],
-      ["mDNS広告", cfg.wuiMdnsAdvertisement],
-      ["TLS", Boolean(cfg.wuiTlsKeyPath || cfg.wuiTlsCertPath)],
-      ["TLS CA", cfg.wuiTlsCaPath],
-      ["TLSクライアント証明書要求", cfg.wuiTlsRequestCert],
-      ["TLS未認証拒否", cfg.wuiTlsRejectUnauthorized],
       ["WUIユーザー", cfg.wuiUsers],
-      ["許可国コード", cfg.wuiAllowCountries],
       ["サービス順", cfg.serviceOrder],
-      ["VAAPI", cfg.vaapiEnabled],
-      ["VAAPIデバイス", cfg.vaapiDevice],
       ["除外サービス", cfg.excludeServices],
       ["録画優先度", cfg.recordingPriority],
       ["競合優先度", cfg.conflictedPriority],
       ["空き容量しきい値MB", cfg.storageLowSpaceThresholdMB],
       ["空き容量不足時の動作", cfg.storageLowSpaceAction],
-      ["空き容量通知先", cfg.storageLowSpaceNotifyTo],
-      ["空き容量コマンド", cfg.storageLowSpaceCommand],
       ["正規化", cfg.normalizationForm],
-      ["スケジューラ開始コマンド", cfg.schedulerStartCommand],
-      ["スケジューラ終了コマンド", cfg.schedulerEndCommand],
-      ["EPG開始コマンド", cfg.epgStartCommand],
-      ["EPG終了コマンド", cfg.epgEndCommand],
-      ["競合コマンド", cfg.conflictCommand],
-      ["録画完了コマンド", cfg.recordedCommand]
     ];
     root.innerHTML = "";
     rows.forEach(function (row) {
@@ -3671,20 +3800,12 @@
     Object.keys(state.config || {}).forEach(function (key) {
       config[key] = state.config[key];
     });
-    var openServer = byId("configWuiOpenServer");
     setOptionalString(config, "mirakurunPath", "configMirakurunPath");
     setOptionalString(config, "schedulerMirakurunPath", "configSchedulerMirakurunPath");
     setOptionalString(config, "recordedDir", "configRecordedDir");
     setOptionalString(config, "recordedFormat", "configRecordedFormat");
     setOptionalString(config, "wuiHost", "configWuiHost");
     if (!setOptionalPort(config, "wuiPort", "configWuiPort")) {
-      return null;
-    }
-    if (openServer) {
-      config.wuiOpenServer = openServer.checked;
-    }
-    setOptionalString(config, "wuiOpenHost", "configWuiOpenHost");
-    if (!setOptionalPort(config, "wuiOpenPort", "configWuiOpenPort")) {
       return null;
     }
     setOptionalString(config, "normalizationForm", "configNormalizationForm");
@@ -3706,51 +3827,16 @@
     } else {
       delete config.excludeServices;
     }
-    if (!setOptionalStringOrInteger(config, "uid", "configUid", "実行ユーザーID")) {
-      return null;
-    }
-    if (!setOptionalStringOrInteger(config, "gid", "configGid", "実行グループID")) {
-      return null;
-    }
     setOptionalStringList(config, "wuiUsers", "configWuiUsers");
-    setOptionalStringList(config, "wuiAllowCountries", "configWuiAllowCountries");
     if (!setOptionalPositiveIntegerList(config, "serviceOrder", "configServiceOrder", "サービス順")) {
       return null;
     }
-    if (!setOptionalBooleanSelect(config, "wuiXFF", "configWuiXFF")) {
-      return null;
-    }
-    if (!setOptionalBooleanSelect(config, "wuiMdnsAdvertisement", "configWuiMdnsAdvertisement")) {
-      return null;
-    }
-    if (!setOptionalBooleanSelect(config, "vaapiEnabled", "configVaapiEnabled")) {
-      return null;
-    }
-    setOptionalString(config, "vaapiDevice", "configVaapiDevice");
     if (!setOptionalInteger(config, "recordingPriority", "configRecordingPriority")) {
       return null;
     }
     if (!setOptionalInteger(config, "conflictedPriority", "configConflictedPriority")) {
       return null;
     }
-    setOptionalString(config, "wuiTlsKeyPath", "configWuiTlsKeyPath");
-    setOptionalString(config, "wuiTlsCertPath", "configWuiTlsCertPath");
-    setOptionalString(config, "wuiTlsCaPath", "configWuiTlsCaPath");
-    setOptionalString(config, "wuiTlsPassphrase", "configWuiTlsPassphrase");
-    if (!setOptionalBooleanSelect(config, "wuiTlsRequestCert", "configWuiTlsRequestCert")) {
-      return null;
-    }
-    if (!setOptionalBooleanSelect(config, "wuiTlsRejectUnauthorized", "configWuiTlsRejectUnauthorized")) {
-      return null;
-    }
-    setOptionalString(config, "storageLowSpaceNotifyTo", "configStorageLowSpaceNotifyTo");
-    setOptionalString(config, "storageLowSpaceCommand", "configStorageLowSpaceCommand");
-    setOptionalString(config, "schedulerStartCommand", "configSchedulerStartCommand");
-    setOptionalString(config, "schedulerEndCommand", "configSchedulerEndCommand");
-    setOptionalString(config, "epgStartCommand", "configEpgStartCommand");
-    setOptionalString(config, "epgEndCommand", "configEpgEndCommand");
-    setOptionalString(config, "conflictCommand", "configConflictCommand");
-    setOptionalString(config, "recordedCommand", "configRecordedCommand");
     return config;
   }
 
@@ -4693,6 +4779,28 @@
     var saveConfigFormButton = byId("saveConfigFormButton");
     if (saveConfigFormButton) {
       saveConfigFormButton.addEventListener("click", saveConfigFromForm);
+    }
+    var strataConfigForm = byId("strataConfigForm");
+    if (strataConfigForm) {
+      strataConfigForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+      });
+    }
+    var saveStrataConfigButton = byId("saveStrataConfigButton");
+    if (saveStrataConfigButton) {
+      saveStrataConfigButton.addEventListener("click", saveStrataConfigFromForm);
+    }
+    var strataAuthEnabled = byId("strataAuthEnabled");
+    if (strataAuthEnabled) {
+      strataAuthEnabled.addEventListener("change", updateStrataAuthUsersState);
+    }
+    var addStrataUserButton = byId("addStrataUserButton");
+    if (addStrataUserButton) {
+      addStrataUserButton.addEventListener("click", function () {
+        appendStrataUser({});
+        var names = byId("strataAuthUsers").querySelectorAll(".strata-user-name");
+        names[names.length - 1].focus();
+      });
     }
     var addBasicRuleButton = byId("addBasicRuleButton");
     if (addBasicRuleButton) {

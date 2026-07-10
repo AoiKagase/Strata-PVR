@@ -7,16 +7,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
 )
@@ -24,11 +26,6 @@ import (
 const recordStartMargin = 15 * time.Second
 
 var getDiskUsage = system.GetDiskUsage
-var sendmailPath = "/usr/sbin/sendmail"
-var lowStorageNow = time.Now
-var lowStorageLastNotified time.Time
-
-const lowStorageNotifyInterval = 3 * time.Hour
 
 type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
@@ -40,6 +37,7 @@ type prioritySetter interface {
 
 type Paths struct {
 	Config    string
+	Database  string
 	Reserves  string
 	Recording string
 	Recorded  string
@@ -58,15 +56,20 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if err != nil {
 		return err
 	}
-	if err := system.DropPrivileges(cfg.UID, cfg.GID); err != nil {
-		return err
-	}
 	if err := writePIDFile(paths.PID); err != nil {
 		return err
 	}
 	defer removePIDFile(paths.PID)
 	if err := initializeRuntimeState(paths, cfg); err != nil {
 		return err
+	}
+	if paths.Database != "" {
+		db, err := database.Open(ctx, paths.Database)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		ctx = database.WithHandle(ctx, db)
 	}
 
 	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
@@ -92,7 +95,7 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
-	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{}, false); err != nil {
+	if err := programstore.Write(context.Background(), paths.Database, paths.Recording, programstore.Recording, []legacy.Program{}); err != nil {
 		return err
 	}
 	recordedDir := cfg.RecordedDir
@@ -127,19 +130,18 @@ func removePIDFile(path string) {
 }
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+	reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves)
+	if err != nil {
 		return Result{}, err
 	}
-	var recording []legacy.Program
-	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+	recording, err := programstore.Read(ctx, paths.Database, paths.Recording, programstore.Recording)
+	if err != nil {
 		return Result{}, err
 	}
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := programstore.Read(ctx, paths.Database, paths.Recorded, programstore.Recorded)
+	if err != nil {
 		return Result{}, err
 	}
-	var err error
 	recorded, err = handleLowStorage(ctx, paths, cfg, recording, recorded)
 	if err != nil {
 		return Result{}, err
@@ -154,7 +156,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			return result, err
 		}
 		recording = append(recording, reserve)
-		if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
+		if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, reserve); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
@@ -167,20 +169,28 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 		completed, err := recordProgramWithLog(ctx, paths.Recording, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
-		if writeErr := storage.WriteJSONAtomic(paths.Recording, recording, false); writeErr != nil && err == nil {
-			err = writeErr
-		} else if writeErr == nil {
-			if logErr := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); logErr != nil && err == nil {
-				err = logErr
-			}
-		}
 		if err != nil {
+			if writeErr := programstore.Remove(ctx, paths.Database, paths.Recording, programstore.Recording, reserve.ID); writeErr != nil {
+				err = errors.Join(err, writeErr)
+			}
 			result.Failed++
 			return result, err
 		}
 
 		recorded = mergeRecordedProgram(recorded, completed)
-		if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		if paths.Database != "" {
+			if err := programstore.Complete(ctx, paths.Database, completed); err != nil {
+				return result, err
+			}
+		} else {
+			if err := programstore.Remove(ctx, "", paths.Recording, programstore.Recording, reserve.ID); err != nil {
+				return result, err
+			}
+			if err := programstore.Write(ctx, "", paths.Recorded, programstore.Recorded, recorded); err != nil {
+				return result, err
+			}
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
@@ -188,16 +198,12 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		if completed.IsManualReserved {
 			reserves = removeProgram(reserves, reserve.ID)
-			if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
+			if _, err := reservationstore.Delete(ctx, paths.Database, paths.Reserves, reserve.ID); err != nil {
 				return result, err
 			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
 				return result, err
 			}
-		}
-		if err := runRecordedCommand(ctx, paths.Log, cfg.RecordedCommand, completed); err != nil {
-			result.Failed++
-			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title); err != nil {
 			return result, err
@@ -405,30 +411,6 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 	}
 }
 
-func runRecordedCommand(ctx context.Context, logPath, command string, program legacy.Program) error {
-	if command == "" {
-		return nil
-	}
-	payload, err := json.Marshal(program)
-	if err != nil {
-		return err
-	}
-	ctx = context.WithoutCancel(ctx)
-	cmd := exec.CommandContext(ctx, command, filepath.FromSlash(program.Recorded), string(payload))
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if logPath != "" {
-		if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
-			return err
-		}
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
-}
-
 func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, recording, recorded []legacy.Program) ([]legacy.Program, error) {
 	if cfg.StorageLowSpaceThresholdMB <= 0 {
 		return recorded, nil
@@ -444,16 +426,6 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 	if err := logging.AppendLine(paths.Log, "ALERT: Storage Low Space! (%d MB < %d MB)", freeMB, cfg.StorageLowSpaceThresholdMB); err != nil {
 		return recorded, err
 	}
-	if cfg.StorageLowSpaceCommand != "" {
-		cmd := exec.CommandContext(ctx, cfg.StorageLowSpaceCommand)
-		if err := cmd.Start(); err != nil {
-			return recorded, err
-		}
-		if err := logging.AppendLine(paths.Log, "SPAWN: %s (pid=%d)", cfg.StorageLowSpaceCommand, cmd.Process.Pid); err != nil {
-			return recorded, err
-		}
-		go func() { _ = cmd.Wait() }()
-	}
 	switch cfg.StorageLowSpaceAction {
 	case "stop":
 		changed := false
@@ -461,11 +433,18 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if !recording[i].Abort {
 				recording[i].Abort = true
 				changed = true
+				if paths.Database != "" {
+					if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, recording[i]); err != nil {
+						return recorded, err
+					}
+				}
 			}
 		}
 		if changed {
-			if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
-				return recorded, err
+			if paths.Database == "" {
+				if err := programstore.Write(ctx, "", paths.Recording, programstore.Recording, recording); err != nil {
+					return recorded, err
+				}
 			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
 				return recorded, err
@@ -483,7 +462,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if _, err := storage.BackupFile(paths.Recorded); err != nil {
 				return recorded, err
 			}
-			if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+			if err := programstore.Remove(ctx, paths.Database, paths.Recorded, programstore.Recorded, removed.ID); err != nil {
 				return recorded, err
 			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
@@ -491,56 +470,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			}
 		}
 	}
-	if shouldSendLowStorageNotification(cfg.StorageLowSpaceNotifyTo) {
-		if err := sendLowStorageNotification(ctx, cfg.StorageLowSpaceNotifyTo, freeMB, cfg.StorageLowSpaceThresholdMB); err != nil {
-			if logErr := logging.AppendLine(paths.Log, "ERROR: %v", err); logErr != nil {
-				return recorded, logErr
-			}
-		}
-	}
 	return recorded, nil
-}
-
-func shouldSendLowStorageNotification(to string) bool {
-	if to == "" {
-		return false
-	}
-	now := lowStorageNow()
-	if lowStorageLastNotified.IsZero() || now.Sub(lowStorageLastNotified) > lowStorageNotifyInterval {
-		lowStorageLastNotified = now
-		return true
-	}
-	return false
-}
-
-func sendLowStorageNotification(ctx context.Context, to string, freeMB uint64, thresholdMB int) error {
-	if to == "" {
-		return nil
-	}
-	message := fmt.Sprintf(
-		"From: Chinachu <chinachu@localhost>\nTo: %s\nSubject: [Chinachu] ALERT: Storage Low Space!\n\nCurrent Free Space is %d MB.\nThreshold is %d MB.\n",
-		to,
-		freeMB,
-		thresholdMB,
-	)
-	cmd := exec.CommandContext(ctx, sendmailPath, "-t")
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if _, err := io.WriteString(stdin, message); err != nil {
-		_ = stdin.Close()
-		_ = cmd.Wait()
-		return err
-	}
-	if err := stdin.Close(); err != nil {
-		_ = cmd.Wait()
-		return err
-	}
-	return cmd.Wait()
 }
 
 func removeProgram(programs []legacy.Program, id string) []legacy.Program {

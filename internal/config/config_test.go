@@ -1,9 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"strata-pvr/internal/storage"
 )
 
 func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
@@ -22,17 +25,10 @@ func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
 	if cfg.EffectiveMirakurunPath() != "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/" {
 		t.Fatalf("unexpected mirakurun path: %s", cfg.EffectiveMirakurunPath())
 	}
-	if !cfg.VAAPIEnabled || cfg.VAAPIDevice != "/dev/dri/renderD128" {
-		t.Fatalf("VAAPI fields were not loaded: enabled=%v device=%q", cfg.VAAPIEnabled, cfg.VAAPIDevice)
-	}
-	if !cfg.WUIMdnsAdvertisement {
-		t.Fatal("wuiMdnsAdvertisement was not loaded")
-	}
-	if len(cfg.WUIAllowCountries) != 2 || cfg.WUIAllowCountries[0] != "JP" || cfg.WUIAllowCountries[1] != "US" {
-		t.Fatalf("wuiAllowCountries was not loaded: %#v", cfg.WUIAllowCountries)
-	}
-	if !cfg.OperTweeter || cfg.OperTweeterAuth == nil || cfg.OperTweeterAuth.ConsumerKey != "ck" || cfg.OperTweeterFormat == nil || cfg.OperTweeterFormat.End != "end <title>" {
-		t.Fatalf("operTweeter fields were not loaded: %#v", cfg)
+	for _, key := range []string{"wuiAllowCountries", "wuiMdnsAdvertisement", "operTweeter", "operTweeterAuth", "operTweeterFormat"} {
+		if _, ok := cfg.Raw[key]; !ok {
+			t.Fatalf("retired legacy field %q was not retained for migration diagnostics", key)
+		}
 	}
 	if _, ok := cfg.Raw["custom"]; !ok {
 		t.Fatal("unknown field was not preserved in Raw")
@@ -53,13 +49,49 @@ func TestSampleConfigLoads(t *testing.T) {
 	if cfg.RecordedFormat == "" {
 		t.Fatal("sample config has no recordedFormat")
 	}
-	if len(cfg.WUIUsers) == 0 {
-		t.Fatal("sample config has no WUI user")
+	if !cfg.Strata || cfg.WUIAuthenticationEnabled {
+		t.Fatalf("sample config should be native Strata with authentication disabled: %#v", cfg)
 	}
-	if len(cfg.WUIAllowCountries) != 0 {
-		t.Fatalf("sample config should not enable GeoIP filtering by default: %#v", cfg.WUIAllowCountries)
+}
+
+func TestLoadStrataDocument(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	doc := DefaultDocument()
+	doc.Web.Authentication = AuthenticationSettings{
+		Enabled: true,
+		Users:   []WebUser{{Username: "admin", PasswordHash: "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA"}},
 	}
-	if cfg.WUIMdnsAdvertisement {
-		t.Fatal("sample config should not enable mDNS advertisement by default")
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MirakurunPath != doc.Mirakurun.URL || cfg.WUIPort == nil || *cfg.WUIPort != doc.Web.Port {
+		t.Fatalf("Strata document was not mapped: %#v", cfg)
+	}
+	if len(cfg.WUIAccounts) != 1 || cfg.WUIAccounts[0].Username != "admin" {
+		t.Fatalf("Strata accounts were not mapped: %#v", cfg.WUIAccounts)
+	}
+}
+
+func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := storage.WriteJSONAtomic(path, DefaultDocument(), true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Strata || cfg.WUIPort == nil || *cfg.WUIPort != 20772 || cfg.WUIAuthenticationEnabled {
+		t.Fatalf("unexpected unauthenticated listener mapping: %#v", cfg)
 	}
 }

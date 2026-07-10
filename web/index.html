@@ -482,7 +482,55 @@
           </dl>
         </section>
       </div>
-      <section class="panel config-form-panel">
+      <section id="strataConfigPanel" class="panel config-form-panel" hidden>
+        <div class="panel-head">
+          <div>
+            <h3>Strata設定</h3>
+            <p>接続、録画、認証を管理します。</p>
+          </div>
+          <div class="row-actions">
+            <button id="saveStrataConfigButton" type="button" title="Strata設定を保存">保存</button>
+          </div>
+        </div>
+        <form id="strataConfigForm" class="config-form-shell" autocomplete="off" novalidate>
+          <fieldset class="config-fieldset">
+            <legend>接続</legend>
+            <div class="config-form">
+              <label><span>Mirakurun URL</span><input id="strataMirakurunURL" class="config-form-control" type="url" autocomplete="off" placeholder="http://127.0.0.1:40772" required></label>
+              <label><span>待受アドレス</span><input id="strataListenAddress" class="config-form-control" type="text" autocomplete="off" placeholder="0.0.0.0" required></label>
+              <label><span>ポート</span><input id="strataWebPort" class="config-form-control" type="number" min="1" max="65535" step="1" inputmode="numeric" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="config-fieldset">
+            <legend>認証</legend>
+            <label class="config-toggle"><input id="strataAuthEnabled" type="checkbox"><span><strong>Basic認証</strong><small>ネットワーク経由のアクセスにユーザー名とパスワードを要求します。</small></span></label>
+            <div id="strataAuthUsers" class="config-user-list"></div>
+            <button id="addStrataUserButton" class="secondary-button" type="button">ユーザーを追加</button>
+          </fieldset>
+          <fieldset class="config-fieldset">
+            <legend>録画</legend>
+            <div class="config-form">
+              <label><span>保存先</span><input id="strataRecordingDirectory" class="config-form-control" type="text" autocomplete="off" required></label>
+              <label><span>ファイル名形式</span><input id="strataFilenameFormat" class="config-form-control" type="text" autocomplete="off" required></label>
+              <label><span>録画優先度</span><input id="strataRecordingPriority" class="config-form-control" type="number" step="1" inputmode="numeric"></label>
+              <label><span>競合優先度</span><input id="strataConflictedPriority" class="config-form-control" type="number" step="1" inputmode="numeric"></label>
+              <label><span>空き容量しきい値 MB</span><input id="strataLowSpaceThreshold" class="config-form-control" type="number" min="0" step="1" inputmode="numeric"></label>
+              <label><span>容量不足時の動作</span><select id="strataLowSpaceAction" class="config-form-control"><option value="remove">古い録画を削除</option><option value="stop">録画を停止</option></select></label>
+              <label><span>プレビュー保持日数</span><input id="strataPreviewCacheMaxAge" class="config-form-control" type="number" min="0" step="1" inputmode="numeric"></label>
+              <label><span>プレビュー上限 MB</span><input id="strataPreviewCacheMaxSize" class="config-form-control" type="number" min="0" step="1" inputmode="numeric"></label>
+            </div>
+          </fieldset>
+          <fieldset class="config-fieldset">
+            <legend>サービス</legend>
+            <div class="config-form">
+              <label><span>除外サービス</span><input id="strataExcludedServices" class="config-form-control" type="text" inputmode="numeric" placeholder="32736, 32737"></label>
+              <label><span>サービス順</span><input id="strataServiceOrder" class="config-form-control" type="text" inputmode="numeric" placeholder="32736, 32737"></label>
+              <label><span>文字正規化</span><select id="strataNormalizationForm" class="config-form-control"><option value="">未設定</option><option value="NFC">NFC</option><option value="NFD">NFD</option><option value="NFKC">NFKC</option><option value="NFKD">NFKD</option></select></label>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+      <section id="legacyConfigPanel" class="panel config-form-panel">
         <div class="panel-head">
           <div>
             <h3>基本設定</h3>
@@ -519,14 +567,6 @@
             <input id="configWuiPort" class="config-form-control" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="10772">
           </label>
           <label>
-            <span>公開ホスト</span>
-            <input id="configWuiOpenHost" class="config-form-control" type="text" autocomplete="off" placeholder="192.168.x.x">
-          </label>
-          <label>
-            <span>公開ポート</span>
-            <input id="configWuiOpenPort" class="config-form-control" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="20772">
-          </label>
-          <label>
             <span>正規化</span>
             <select id="configNormalizationForm" class="config-form-control">
               <option value="">未設定</option>
@@ -546,68 +586,22 @@
               <option value="">未設定</option>
               <option value="remove">remove</option>
               <option value="stop">stop</option>
-              <option value="command">command</option>
-              <option value="notify">notify</option>
             </select>
           </label>
           <label>
             <span>除外サービス</span>
             <input id="configExcludeServices" class="config-form-control" type="text" autocomplete="off" placeholder="32736, 32737">
           </label>
-            <label class="checkbox-label">
-              <span>公開WUI</span>
-              <input id="configWuiOpenServer" class="config-form-control" type="checkbox">
-            </label>
           </div>
           <h4 class="config-form-heading">詳細設定</h4>
           <div class="config-form config-form-detail">
-          <label>
-            <span>実行ユーザーID</span>
-            <input id="configUid" class="config-form-control" type="text" autocomplete="off" placeholder="strata または 1001">
-          </label>
-          <label>
-            <span>実行グループID</span>
-            <input id="configGid" class="config-form-control" type="text" autocomplete="off" placeholder="video または 44">
-          </label>
           <label>
             <span>WUIユーザー</span>
             <input id="configWuiUsers" class="config-form-control" type="text" autocomplete="off" placeholder="user:password, user2:password2">
           </label>
           <label>
-            <span>許可国コード</span>
-            <input id="configWuiAllowCountries" class="config-form-control" type="text" autocomplete="off" placeholder="JP, US">
-          </label>
-          <label>
             <span>サービス順</span>
             <input id="configServiceOrder" class="config-form-control" type="text" autocomplete="off" placeholder="32736, 32737">
-          </label>
-          <label>
-            <span>WUI X-Forwarded-For</span>
-            <select id="configWuiXFF" class="config-form-control">
-              <option value="">未設定</option>
-              <option value="true">有効</option>
-              <option value="false">無効</option>
-            </select>
-          </label>
-          <label>
-            <span>mDNS広告</span>
-            <select id="configWuiMdnsAdvertisement" class="config-form-control">
-              <option value="">未設定</option>
-              <option value="true">有効</option>
-              <option value="false">無効</option>
-            </select>
-          </label>
-          <label>
-            <span>VAAPI</span>
-            <select id="configVaapiEnabled" class="config-form-control">
-              <option value="">未設定</option>
-              <option value="true">有効</option>
-              <option value="false">無効</option>
-            </select>
-          </label>
-          <label>
-            <span>VAAPIデバイス</span>
-            <input id="configVaapiDevice" class="config-form-control" type="text" autocomplete="off" placeholder="/dev/dri/renderD128">
           </label>
           <label>
             <span>録画優先度</span>
@@ -616,70 +610,6 @@
           <label>
             <span>競合優先度</span>
             <input id="configConflictedPriority" class="config-form-control" type="number" step="1" inputmode="numeric" placeholder="1">
-          </label>
-          <label>
-            <span>TLS鍵パス</span>
-            <input id="configWuiTlsKeyPath" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>TLS証明書パス</span>
-            <input id="configWuiTlsCertPath" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>TLS CAパス</span>
-            <input id="configWuiTlsCaPath" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>TLSパスフレーズ</span>
-            <input id="configWuiTlsPassphrase" class="config-form-control" type="password" autocomplete="new-password" spellcheck="false">
-          </label>
-          <label>
-            <span>TLSクライアント証明書要求</span>
-            <select id="configWuiTlsRequestCert" class="config-form-control">
-              <option value="">未設定</option>
-              <option value="true">有効</option>
-              <option value="false">無効</option>
-            </select>
-          </label>
-          <label>
-            <span>TLS未認証拒否</span>
-            <select id="configWuiTlsRejectUnauthorized" class="config-form-control">
-              <option value="">未設定</option>
-              <option value="true">有効</option>
-              <option value="false">無効</option>
-            </select>
-          </label>
-          <label>
-            <span>空き容量通知先</span>
-            <input id="configStorageLowSpaceNotifyTo" class="config-form-control" type="text" autocomplete="off" placeholder="admin@example.com">
-          </label>
-          <label>
-            <span>空き容量コマンド</span>
-            <input id="configStorageLowSpaceCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>スケジューラ開始コマンド</span>
-            <input id="configSchedulerStartCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>スケジューラ終了コマンド</span>
-            <input id="configSchedulerEndCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>EPG開始コマンド</span>
-            <input id="configEpgStartCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>EPG終了コマンド</span>
-            <input id="configEpgEndCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>競合コマンド</span>
-            <input id="configConflictCommand" class="config-form-control" type="text" autocomplete="off">
-          </label>
-          <label>
-            <span>録画完了コマンド</span>
-            <input id="configRecordedCommand" class="config-form-control" type="text" autocomplete="off">
           </label>
           </div>
         </form>

@@ -8,5 +8,6 @@ strata-pvr.exe
 /data
 /log
 /recorded
+/migrate
 rules.json
 config.json

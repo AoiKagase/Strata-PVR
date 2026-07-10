@@ -1,51 +1,35 @@
 {
-  "uid": null,
-  "gid": "video",
-  "mirakurunPath": "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/",
-
-  "recordedDir": "./recorded/",
-
-  "vaapiEnabled": false,
-  "vaapiDevice": "/dev/dri/renderD128",
-
-  "excludeServices": [
-    3273701416,
-    3232728088,
-    3273901183,
-    3274201456,
-    3239123992,
-    3239123993,
-    3273601408
-  ],
-
-  "serviceOrder": [
-    3273601024,
-    3273601025,
-    3273701032,
-    3273701033,
-    3273701034
-  ],
-
-  "wuiUsers": [
-    "strata:yoshikawa"
-  ],
-  "wuiAllowCountries": [],
-
-  "wuiPort": null,
-  "wuiHost": "0.0.0.0",
-  "wuiTlsKeyPath": null,
-  "wuiTlsCertPath": null,
-  "wuiTlsRequestCert": false,
-  "wuiTlsRejectUnauthorized": true,
-  "wuiTlsCaPath": null,
-  "wuiOpenServer": true,
-  "wuiOpenPort": 20772,
-  "wuiXFF": false,
-  "wuiMdnsAdvertisement": false,
-
-  "recordedFormat": "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
-  "storageLowSpaceThresholdMB": 3000,
-  "storageLowSpaceAction": "remove",
-  "storageLowSpaceNotifyTo": null,
-  "storageLowSpaceCommand": ""
+  "schema": "strata/config",
+  "version": 1,
+  "mirakurun": {
+    "url": "http://127.0.0.1:40772",
+    "recordingPriority": 2,
+    "conflictedPriority": 1
+  },
+  "recording": {
+    "directory": "./recorded/",
+    "filenameFormat": "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+    "lowSpace": {
+      "thresholdMB": 3000,
+      "action": "remove"
+    }
+  },
+  "web": {
+    "listenAddress": "127.0.0.1",
+    "port": 20772,
+    "authentication": {
+      "enabled": false
+    }
+  },
+  "previewCache": {
+    "maxAgeDays": 30,
+    "maxSizeMB": 1024
+  },
+  "services": {
+    "excluded": [],
+    "order": []
+  },
+  "advanced": {
+    "normalizationForm": "NFKC"
+  }
 }

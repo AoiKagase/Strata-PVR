@@ -79,7 +79,7 @@ workflows are already available.
 | Legacy shell/browser chrome | partial | Counts and operational status are visible in native navigation/status views. Old favicon switching, browser notifications, footer connected-count display, operator footer button, and side-page index behavior are not reproduced exactly. |
 | Rare non-retired config controls | mostly implemented | Known non-retired runtime config fields in `internal/config.Config` have dedicated form controls and are visible in the settings summary. Future runtime config additions should get controls when they have clear operational value. |
 | Unknown/custom config fields | intentionally raw JSON | Unknown fields are preserved through raw JSON editing rather than first-class controls, because the Go runtime cannot know deployment-specific extension semantics. |
-| Retired Tweeter/Twitter config fields | intentionally raw JSON | Legacy Twitter posting fields are parsed/preserved and warned about, but dedicated WUI controls are intentionally omitted because the integration is retired/unavailable. |
+| Retired legacy config fields | migration warning only | TLS, proxy trust, GeoIP, mDNS, Twitter, hooks, VAAPI and UID/GID are not part of Strata runtime configuration. |
 
 ## Intentional Non-Implementations
 

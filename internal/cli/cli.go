@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,11 +16,17 @@ import (
 	"strings"
 	"time"
 
+	passwordauth "strata-pvr/internal/auth"
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/mirakurun"
 	"strata-pvr/internal/operator"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
+	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/scheduler"
+	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
 	"strata-pvr/internal/wui"
@@ -26,6 +34,7 @@ import (
 
 type paths struct {
 	config    string
+	database  string
 	rules     string
 	schedule  string
 	reserves  string
@@ -39,13 +48,12 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	p := paths{
-		config:    "config.json",
-		rules:     "rules.json",
-		schedule:  filepath.Join("data", "schedule.json"),
-		reserves:  filepath.Join("data", "reserves.json"),
-		recording: filepath.Join("data", "recording.json"),
-		recorded:  filepath.Join("data", "recorded.json"),
+	p := runtimePaths()
+	if len(args) > 0 && args[0] == "init" {
+		return initializeStrata(ctx, stdout)
+	}
+	if len(args) > 0 && (args[0] == "migrate" || args[0] == "migration") {
+		return migrateChinachu(ctx, args[1:], stdout)
 	}
 	if len(args) == 0 || args[0] == "help" {
 		printHelp(stdout)
@@ -81,13 +89,13 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "stop":
 		return stopRecording(p, args[1:], stdout)
 	case "rules":
-		return ruleList(p.rules, args[1:], stdout)
+		return ruleList(p, args[1:], stdout)
 	case "reserves":
-		return programList(p.reserves, args[1:], stdout)
+		return programList(p.reserves, p.database, "reservations", args[1:], stdout)
 	case "recording":
-		return programList(p.recording, args[1:], stdout)
+		return programList(p.recording, p.database, programstore.Recording, args[1:], stdout)
 	case "recorded":
-		return programList(p.recorded, args[1:], stdout)
+		return programList(p.recorded, p.database, programstore.Recorded, args[1:], stdout)
 	case "cleanup":
 		return cleanup(p, args[1:], stdout)
 	case "update":
@@ -106,6 +114,347 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		printHelp(stdout)
 		return nil
 	}
+}
+
+func runtimePaths() paths {
+	configPath := "config.json"
+	rulesPath := "rules.json"
+	databasePath := ""
+	if _, err := os.Stat(filepath.Join("data", "config.json")); err == nil {
+		configPath = filepath.Join("data", "config.json")
+		rulesPath = filepath.Join("data", "rules.json")
+		databasePath = filepath.Join("data", "strata.db")
+	}
+	return paths{
+		config:    configPath,
+		database:  databasePath,
+		rules:     rulesPath,
+		schedule:  filepath.Join("data", "schedule.json"),
+		reserves:  filepath.Join("data", "reserves.json"),
+		recording: filepath.Join("data", "recording.json"),
+		recorded:  filepath.Join("data", "recorded.json"),
+	}
+}
+
+func initializeStrata(ctx context.Context, stdout io.Writer) error {
+	configPath := filepath.Join("data", "config.json")
+	rulesPath := filepath.Join("data", "rules.json")
+	databasePath := filepath.Join("data", "strata.db")
+	for _, path := range []string{configPath, rulesPath, databasePath} {
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("Strata data already exists: %s", path)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if _, err := os.Stat("config.json"); err == nil {
+		return fmt.Errorf("legacy config.json detected; move Chinachu files under migrate/ and run the migration command instead")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll("data", 0o755); err != nil {
+		return err
+	}
+	complete := false
+	defer func() {
+		if complete {
+			return
+		}
+		for _, path := range []string{configPath, rulesPath, databasePath, databasePath + "-wal", databasePath + "-shm"} {
+			_ = os.Remove(path)
+		}
+	}()
+	if err := storage.WriteJSONAtomic(configPath, config.DefaultDocument(), true); err != nil {
+		return err
+	}
+	if err := storage.WriteJSONAtomic(rulesPath, []any{}, true); err != nil {
+		return err
+	}
+	db, err := database.Open(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	if err := db.Close(); err != nil {
+		return err
+	}
+	complete = true
+	fmt.Fprintln(stdout, "Initialized Strata PVR in data/.")
+	return nil
+}
+
+func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("Usage: strata-pvr migrate")
+	}
+	if _, err := os.Stat("data"); err == nil {
+		return fmt.Errorf("Strata data already exists: data")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	legacyConfigPath := filepath.Join("migrate", "config.json")
+	legacyConfig, err := config.Load(legacyConfigPath)
+	if err != nil {
+		return fmt.Errorf("validate %s: %w", legacyConfigPath, err)
+	}
+	doc, warnings, err := convertLegacyConfig(legacyConfig)
+	if err != nil {
+		return err
+	}
+	tempDir, err := os.MkdirTemp(".", ".strata-migrate-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+	if err := storage.WriteJSONAtomic(filepath.Join(tempDir, "config.json"), doc, true); err != nil {
+		return err
+	}
+	if err := migrateLegacyJSONFiles(tempDir); err != nil {
+		return err
+	}
+	db, err := database.Open(ctx, filepath.Join(tempDir, "strata.db"))
+	if err != nil {
+		return err
+	}
+	var migratedRules []json.RawMessage
+	if err := storage.ReadJSON(filepath.Join(tempDir, "rules.json"), &migratedRules, "[]"); err != nil {
+		db.Close()
+		return err
+	}
+	if err := database.ReplaceRules(ctx, db, migratedRules); err != nil {
+		db.Close()
+		return err
+	}
+	var migratedReservations []legacy.Program
+	if err := storage.ReadJSON(filepath.Join(tempDir, "reserves.json"), &migratedReservations, "[]"); err != nil {
+		db.Close()
+		return err
+	}
+	reservationDocuments := make([]database.ReservationDocument, 0, len(migratedReservations))
+	for _, reservation := range migratedReservations {
+		document, err := json.Marshal(reservation)
+		if err != nil {
+			db.Close()
+			return err
+		}
+		reservationDocuments = append(reservationDocuments, database.ReservationDocument{
+			ProgramID: reservation.ID, Start: reservation.Start, End: reservation.End, Document: document,
+		})
+	}
+	if err := database.ReplaceReservations(ctx, db, reservationDocuments); err != nil {
+		db.Close()
+		return err
+	}
+	if err := db.Close(); err != nil {
+		return err
+	}
+	var migratedSchedule []legacy.ChannelSchedule
+	if err := storage.ReadJSON(filepath.Join(tempDir, "schedule.json"), &migratedSchedule, "[]"); err != nil {
+		return err
+	}
+	if err := schedulestore.Write(ctx, filepath.Join(tempDir, "strata.db"), filepath.Join(tempDir, "schedule.json"), migratedSchedule); err != nil {
+		return err
+	}
+	counts := map[string]int{
+		"rules": len(migratedRules), "reservations": len(migratedReservations), "scheduleChannels": len(migratedSchedule),
+	}
+	for _, channel := range migratedSchedule {
+		counts["schedulePrograms"] += len(channel.Programs)
+	}
+	for _, collection := range []struct {
+		name string
+		path string
+	}{
+		{programstore.Recording, filepath.Join(tempDir, "recording.json")},
+		{programstore.Recorded, filepath.Join(tempDir, "recorded.json")},
+	} {
+		var programs []legacy.Program
+		if err := storage.ReadJSON(collection.path, &programs, "[]"); err != nil {
+			return err
+		}
+		if err := programstore.Write(ctx, filepath.Join(tempDir, "strata.db"), collection.path, collection.name, programs); err != nil {
+			return err
+		}
+		counts[collection.name] = len(programs)
+	}
+	sourceHashes, sourceSizes, err := inspectMigrationFiles("migrate")
+	if err != nil {
+		return err
+	}
+	backupRoot := "backup"
+	if err := os.MkdirAll(backupRoot, 0o755); err != nil {
+		return err
+	}
+	stamp := time.Now().Format("20060102-150405")
+	archivePath := filepath.Join(backupRoot, "chinachu-"+stamp)
+	if err := os.Rename("migrate", archivePath); err != nil {
+		return fmt.Errorf("archive migration input: %w", err)
+	}
+	archivedHashes, archivedSizes, err := inspectMigrationFiles(archivePath)
+	if err != nil || !maps.Equal(sourceHashes, archivedHashes) || !maps.Equal(sourceSizes, archivedSizes) {
+		_ = os.Rename(archivePath, "migrate")
+		if err != nil {
+			return fmt.Errorf("verify archived migration input: %w", err)
+		}
+		return fmt.Errorf("verify archived migration input: source files changed while migrating")
+	}
+	if err := os.Rename(tempDir, "data"); err != nil {
+		_ = os.Rename(archivePath, "migrate")
+		return fmt.Errorf("install Strata data: %w", err)
+	}
+	manifest := map[string]any{
+		"schema": "strata/migration-report", "version": 3,
+		"source": archivePath, "completedAt": time.Now().Format(time.RFC3339), "warnings": warnings,
+		"imported": counts, "sourceSha256": archivedHashes, "sourceSize": archivedSizes,
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join(backupRoot, "chinachu-"+stamp+"-report.json"), manifest, true); err != nil {
+		fmt.Fprintf(stdout, "Warning: migration report could not be written: %v\n", err)
+	}
+	fmt.Fprintf(stdout, "Migrated Chinachu data to data/. Original files: %s\n", archivePath)
+	for _, warning := range warnings {
+		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+	}
+	return nil
+}
+
+func inspectMigrationFiles(root string) (map[string]string, map[string]int64, error) {
+	hashes := make(map[string]string)
+	sizes := make(map[string]int64)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		hashes[filepath.ToSlash(relative)] = fmt.Sprintf("%x", sum)
+		sizes[filepath.ToSlash(relative)] = int64(len(data))
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("inspect migration input: %w", err)
+	}
+	return hashes, sizes, nil
+}
+
+func convertLegacyConfig(old *config.Config) (config.Document, []string, error) {
+	doc := config.DefaultDocument()
+	doc.Mirakurun.URL = old.EffectiveMirakurunPath()
+	doc.Mirakurun.RecordingPriority = old.RecordingPriority
+	doc.Mirakurun.ConflictedPriority = old.ConflictedPriority
+	doc.Recording.Directory = old.RecordedDir
+	doc.Recording.FilenameFormat = old.RecordedFormat
+	doc.Recording.LowSpace = config.LowSpaceSettings{
+		ThresholdMB: old.StorageLowSpaceThresholdMB, Action: old.StorageLowSpaceAction,
+	}
+	doc.Services.Excluded = old.ExcludeServices
+	doc.Services.Order = old.ServiceOrder
+	doc.Advanced = config.AdvancedSettings{NormalizationForm: old.NormalizationForm}
+	warnings := []string{}
+	if legacyConfigHas(old, "uid", "gid") {
+		warnings = append(warnings, "legacy uid/gid settings are not represented in Strata config; configure the service account in the process manager")
+	}
+	if old.WUIPort != nil {
+		doc.Web.ListenAddress = old.WUIHost
+		doc.Web.Port = *old.WUIPort
+		doc.Web.Authentication.Enabled = len(old.WUIUsers) > 0
+	} else if old.WUIOpenServer {
+		doc.Web.ListenAddress = old.WUIOpenHost
+		doc.Web.Port = old.WUIOpenPort
+	} else {
+		warnings = append(warnings, "no legacy WUI listener was enabled; the default Strata listener was selected")
+	}
+	if old.WUIPort != nil && old.WUIOpenServer {
+		warnings = append(warnings, "legacy authenticated and public WUI listeners were merged; Strata uses the authenticated listener address and port")
+	}
+	if legacyConfigHas(old, "wuiTlsKeyPath", "wuiTlsCertPath", "wuiTlsCaPath", "wuiTlsPassphrase", "wuiTlsRequestCert", "wuiTlsRejectUnauthorized") {
+		warnings = append(warnings, "legacy WUI TLS settings are not represented in Strata config version 1; configure TLS at a reverse proxy")
+	}
+	if legacyConfigHas(old, "wuiXFF") {
+		warnings = append(warnings, "legacy wuiXFF is not represented in Strata config version 1")
+	}
+	if legacyConfigHas(old, "wuiAllowCountries") {
+		warnings = append(warnings, "legacy wuiAllowCountries is unsupported; enforce geographic access policy outside Strata")
+	}
+	if legacyConfigHas(old, "wuiMdnsAdvertisement") {
+		warnings = append(warnings, "legacy WUI mDNS advertisement is unsupported")
+	}
+	if legacyConfigHas(old, "operTweeter", "operTweeterAuth", "operTweeterFormat") {
+		warnings = append(warnings, "legacy Twitter/Tweeter notification settings are unsupported")
+	}
+	if legacyConfigHas(old, "schedulerStartCommand", "schedulerEndCommand", "epgStartCommand", "epgEndCommand", "conflictCommand", "recordedCommand", "storageLowSpaceCommand", "storageLowSpaceNotifyTo") {
+		warnings = append(warnings, "legacy scheduler, EPG, conflict, or recorded hook commands are not represented in Strata config version 1")
+	}
+	for _, credential := range old.WUIUsers {
+		username, password, ok := strings.Cut(credential, ":")
+		if !ok || username == "" || password == "" {
+			return config.Document{}, nil, fmt.Errorf("invalid legacy wuiUsers entry for %q", username)
+		}
+		hash, err := passwordauth.HashPassword(password)
+		if err != nil {
+			return config.Document{}, nil, err
+		}
+		doc.Web.Authentication.Users = append(doc.Web.Authentication.Users, config.WebUser{Username: username, PasswordHash: hash})
+	}
+	return doc, warnings, nil
+}
+
+func legacyConfigHas(cfg *config.Config, keys ...string) bool {
+	for _, key := range keys {
+		if raw, ok := cfg.Raw[key]; ok && string(raw) != "null" && string(raw) != "false" && string(raw) != "[]" && string(raw) != "{}" {
+			return true
+		}
+	}
+	return false
+}
+
+func migrateLegacyJSONFiles(tempDir string) error {
+	type item struct {
+		source string
+		target string
+		value  any
+	}
+	items := []item{
+		{filepath.Join("migrate", "rules.json"), "rules.json", &[]legacy.Rule{}},
+		{filepath.Join("migrate", "data", "reserves.json"), "reserves.json", &[]legacy.Program{}},
+		{filepath.Join("migrate", "data", "recording.json"), "recording.json", &[]legacy.Program{}},
+		{filepath.Join("migrate", "data", "recorded.json"), "recorded.json", &[]legacy.Program{}},
+		{filepath.Join("migrate", "data", "schedule.json"), "schedule.json", &[]legacy.ChannelSchedule{}},
+	}
+	for i := range items {
+		entry := &items[i]
+		if entry.target == "recording.json" {
+			alias := filepath.Join("migrate", "data", "recordings.json")
+			if _, err := os.Stat(entry.source); os.IsNotExist(err) {
+				entry.source = alias
+			}
+		}
+		if _, err := os.Stat(entry.source); os.IsNotExist(err) {
+			if entry.target == "rules.json" {
+				if err := storage.WriteJSONAtomic(filepath.Join(tempDir, entry.target), []any{}, true); err != nil {
+					return err
+				}
+			}
+			continue
+		} else if err != nil {
+			return err
+		}
+		if err := storage.ReadJSON(entry.source, entry.value, ""); err != nil {
+			return fmt.Errorf("validate %s: %w", entry.source, err)
+		}
+		if err := storage.WriteJSONAtomic(filepath.Join(tempDir, entry.target), entry.value, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func testCommand(args []string, stdout io.Writer) error {
@@ -136,8 +485,8 @@ func search(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm(p.config)
-	var schedule []legacy.ChannelSchedule
-	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
+	schedule, err := schedulestore.Read(context.Background(), p.database, p.schedule)
+	if err != nil {
 		return err
 	}
 	now := time.Now()
@@ -158,14 +507,21 @@ func search(p paths, args []string, stdout io.Writer) error {
 	return nil
 }
 
-func programList(path string, args []string, stdout io.Writer) error {
+func programList(path, databasePath, collection string, args []string, stdout io.Writer) error {
 	opts, err := parseSearchArgs(args)
 	if err != nil {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm("config.json")
 	var programs []legacy.Program
-	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+	if databasePath != "" && collection == "reservations" {
+		programs, err = reservationstore.Read(context.Background(), databasePath, path)
+	} else if databasePath != "" {
+		programs, err = programstore.Read(context.Background(), databasePath, path, collection)
+	} else {
+		err = storage.ReadJSON(path, &programs, "[]")
+	}
+	if err != nil {
 		return err
 	}
 	now := time.Now()
@@ -442,8 +798,8 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var rules []legacy.Rule
-	if err := storage.ReadJSON(p.rules, &rules, "[]"); err != nil {
+	rules, err := rulestore.Read(context.Background(), p.database, p.rules)
+	if err != nil {
 		return err
 	}
 	var target legacy.Rule
@@ -484,17 +840,25 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 	if opts.simulation {
 		return nil
 	}
-	return storage.WriteJSONAtomic(p.rules, rules, true)
+	if !opts.hasNum {
+		return rulestore.Append(context.Background(), p.database, p.rules, target)
+	}
+	if opts.remove {
+		_, err := rulestore.Delete(context.Background(), p.database, p.rules, opts.num)
+		return err
+	}
+	_, err = rulestore.Update(context.Background(), p.database, p.rules, opts.num, target)
+	return err
 }
 
-func ruleList(path string, args []string, stdout io.Writer) error {
+func ruleList(p paths, args []string, stdout io.Writer) error {
 	opts, _, err := parseRuleArgs(args)
 	if err != nil {
 		return err
 	}
 	detail := hasFlag(args, "-detail", "--detail")
-	var rules []legacy.Rule
-	if err := storage.ReadJSON(path, &rules, "[]"); err != nil {
+	rules, err := rulestore.Read(context.Background(), p.database, p.rules)
+	if err != nil {
 		return err
 	}
 	keys := []string{
@@ -747,6 +1111,7 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 	simulation := hasFlag(args, "-s", "--simulation")
 	result, err := scheduler.Run(ctx, scheduler.Paths{
 		Config:   p.config,
+		Database: p.database,
 		Rules:    p.rules,
 		Schedule: p.schedule,
 		Reserves: p.reserves,
@@ -772,12 +1137,12 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
 	oneSeg := hasFlag(rest, "--1seg", "-1seg")
-	var schedule []legacy.ChannelSchedule
-	if err := storage.ReadJSON(p.schedule, &schedule, "[]"); err != nil {
+	schedule, err := schedulestore.Read(context.Background(), p.database, p.schedule)
+	if err != nil {
 		return err
 	}
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
+	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	if err != nil {
 		return err
 	}
 	target := legacy.GetProgramByID(id, schedule, nil)
@@ -791,14 +1156,12 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	if oneSeg {
 		target.OneSeg = true
 	}
-	reserves = append(reserves, *target)
-	sort.SliceStable(reserves, func(i, j int) bool { return reserves[i].Start < reserves[j].Start })
 	if simulation {
 		fmt.Fprintln(stdout, "[simulation] reserve:")
 		writePretty(stdout, target)
 		return nil
 	}
-	if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
+	if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, *target); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "reserve:")
@@ -813,8 +1176,8 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 		return err
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(p.reserves, &reserves, "[]"); err != nil {
+	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	if err != nil {
 		return err
 	}
 	for i := range reserves {
@@ -827,13 +1190,12 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				return fmt.Errorf("自動予約された番組は解除できません。自動予約ルールを編集してください")
 			}
 			target := reserves[i]
-			reserves = append(reserves[:i], reserves[i+1:]...)
 			if simulation {
 				fmt.Fprintln(stdout, "[simulation] unreserve:")
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
+			if _, err := reservationstore.Delete(context.Background(), p.database, p.reserves, id); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "unreserve:")
@@ -854,7 +1216,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
+			if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, reserves[i]); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "skip:")
@@ -872,7 +1234,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := storage.WriteJSONAtomic(p.reserves, reserves, false); err != nil {
+			if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, reserves[i]); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "skip:")
@@ -890,8 +1252,8 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	simulation := hasFlag(rest, "-s", "--simulation")
-	var recording []legacy.Program
-	if err := storage.ReadJSON(p.recording, &recording, "[]"); err != nil {
+	recording, err := programstore.Read(context.Background(), p.database, p.recording, programstore.Recording)
+	if err != nil {
 		return err
 	}
 	for i := range recording {
@@ -904,11 +1266,11 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 				return nil
 			}
 			if !recording[i].IsManualReserved {
-				if err := markReserveSkip(p.reserves, recording[i].ID); err != nil {
+				if err := markReserveSkip(p, recording[i].ID); err != nil {
 					return err
 				}
 			}
-			if err := storage.WriteJSONAtomic(p.recording, recording, false); err != nil {
+			if err := programstore.Upsert(context.Background(), p.database, p.recording, programstore.Recording, target); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "stop:")
@@ -920,34 +1282,34 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	return fmt.Errorf("見つかりません")
 }
 
-func markReserveSkip(path, id string) error {
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(path, &reserves, "[]"); err != nil {
+func markReserveSkip(p paths, id string) error {
+	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	if err != nil {
 		return err
 	}
-	changed := false
+	var target *legacy.Program
 	for i := range reserves {
 		if reserves[i].ID == id {
 			reserves[i].IsSkip = true
-			changed = true
+			target = &reserves[i]
 			break
 		}
 	}
-	if !changed {
+	if target == nil {
 		return nil
 	}
-	return storage.WriteJSONAtomic(path, reserves, false)
+	return reservationstore.Upsert(context.Background(), p.database, p.reserves, *target)
 }
 
 func cleanup(p paths, args []string, stdout io.Writer) error {
 	simulation := hasFlag(args, "-s", "--simulation")
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(p.recorded, &recorded, "[]"); err != nil {
+	recorded, err := programstore.Read(context.Background(), p.database, p.recorded, programstore.Recorded)
+	if err != nil {
 		return err
 	}
 	rows := make([][]string, 0, len(recorded))
 	kept := recorded[:0]
-	removed := false
+	removed := make([]string, 0)
 	for _, program := range recorded {
 		if program.Recorded != "" {
 			if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
@@ -961,7 +1323,7 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 			action = "[simulation] removed"
 			kept = append(kept, program)
 		} else {
-			removed = true
+			removed = append(removed, program.ID)
 		}
 		rows = append(rows, []string{action, program.ID, program.Recorded})
 	}
@@ -969,13 +1331,42 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 	if simulation {
 		return nil
 	}
-	if removed {
-		if _, err := storage.BackupFile(p.recorded); err != nil {
-			return err
+	if len(removed) > 0 {
+		if p.database == "" {
+			if _, err := storage.BackupFile(p.recorded); err != nil {
+				return err
+			}
+			return programstore.Write(context.Background(), "", p.recorded, programstore.Recorded, kept)
 		}
-		return storage.WriteJSONAtomic(p.recorded, kept, false)
+		for _, id := range removed {
+			if err := programstore.Remove(context.Background(), p.database, p.recorded, programstore.Recorded, id); err != nil {
+				return err
+			}
+			removePreviewCache(context.Background(), p.database, id)
+		}
 	}
 	return nil
+}
+
+func removePreviewCache(ctx context.Context, databasePath, programID string) {
+	if databasePath == "" {
+		return
+	}
+	db, err := database.Open(ctx, databasePath)
+	if err != nil {
+		return
+	}
+	files, err := database.RemovePreviewCacheForProgram(ctx, db, programID)
+	db.Close()
+	if err != nil {
+		return
+	}
+	cacheDir := filepath.Join(filepath.Dir(databasePath), ".cache", "previews")
+	for _, fileName := range files {
+		if filepath.Base(fileName) == fileName {
+			_ = os.Remove(filepath.Join(cacheDir, fileName))
+		}
+	}
 }
 
 func dumpJSONFile(path, empty string, stdout io.Writer) error {
@@ -1001,13 +1392,14 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		fmt.Fprint(stdout, serviceInitScript(name))
 		return nil
 	case "execute":
-		if err := prepareServiceRuntime(); err != nil {
+		if err := prepareServiceRuntimeFor(p); err != nil {
 			return err
 		}
 		switch name {
 		case "operator":
 			return operator.Run(ctx, operator.Paths{
 				Config:    p.config,
+				Database:  p.database,
 				Reserves:  p.reserves,
 				Recording: p.recording,
 				Recorded:  p.recorded,
@@ -1017,6 +1409,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		case "scheduler":
 			_, err := scheduler.Run(ctx, scheduler.Paths{
 				Config:   p.config,
+				Database: p.database,
 				Rules:    p.rules,
 				Schedule: p.schedule,
 				Reserves: p.reserves,
@@ -1027,6 +1420,7 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		case "wui":
 			return wui.Run(ctx, wui.Paths{
 				Config:       p.config,
+				Database:     p.database,
 				Rules:        p.rules,
 				Schedule:     p.schedule,
 				Reserves:     p.reserves,
@@ -1046,6 +1440,19 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 }
 
 func prepareServiceRuntime() error {
+	return prepareServiceRuntimeFor(paths{config: "config.json", rules: "rules.json"})
+}
+
+func prepareServiceRuntimeFor(p paths) error {
+	if p.config == filepath.Join("data", "config.json") {
+		if _, err := os.Stat(p.config); err != nil {
+			return fmt.Errorf("Strata is not initialized; run strata-pvr init: %w", err)
+		}
+		if err := os.MkdirAll("log", 0o755); err != nil {
+			return err
+		}
+		return os.MkdirAll("data", 0o755)
+	}
 	if err := copyIfMissing("config.sample.json", "config.json"); err != nil {
 		return err
 	}
@@ -1304,17 +1711,13 @@ func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {
 			openServer = fmt.Sprintf("auto:%d", cfg.WUIOpenPort)
 		}
 	}
-	tls := "disabled"
-	if cfg.WUITlsKeyPath != "" || cfg.WUITlsCertPath != "" {
-		tls = "enabled"
-	}
 	fmt.Fprintf(stdout, "CONFIG mirakurunPath=%s\n", cfg.EffectiveMirakurunPath())
 	fmt.Fprintf(stdout, "CONFIG recordedDir=%s\n", cfg.RecordedDir)
 	if abs, err := filepath.Abs(cfg.RecordedDir); err == nil {
 		fmt.Fprintf(stdout, "CONFIG recordedDirResolved=%s\n", abs)
 	}
 	fmt.Fprintf(stdout, "CONFIG recordedFormat=%s\n", cfg.RecordedFormat)
-	fmt.Fprintf(stdout, "CONFIG wui=%s:%s tls=%s open=%s\n", cfg.WUIHost, wuiPort, tls, openServer)
+	fmt.Fprintf(stdout, "CONFIG wui=%s:%s open=%s\n", cfg.WUIHost, wuiPort, openServer)
 	fmt.Fprintf(stdout, "CONFIG storageLowSpace=%dMB action=%s\n", cfg.StorageLowSpaceThresholdMB, cfg.StorageLowSpaceAction)
 	if cfg.NormalizationForm != "" {
 		fmt.Fprintf(stdout, "CONFIG normalizationForm=%s\n", cfg.NormalizationForm)
@@ -1394,24 +1797,8 @@ func compatWarnings(cfg *config.Config) []string {
 			break
 		}
 	}
-	if len(cfg.WUIAllowCountries) > 0 {
-		warnings = append(warnings, "wuiAllowCountries: GeoIP country filtering is not implemented; restrict access at firewall/reverse proxy if needed")
-	}
 	if cfg.WUIOpenServer {
 		warnings = append(warnings, "wuiOpenServer: unauthenticated WUI listener is enabled; bind it to a trusted network or disable it for authenticated-only access")
-	}
-	if cfg.WUIMdnsAdvertisement {
-		warnings = append(warnings, "wuiMdnsAdvertisement: mDNS advertisement is intentionally not implemented")
-	}
-	if cfg.OperTweeter {
-		warnings = append(warnings, "operTweeter: Twitter notification integration is retired because the legacy Twitter API is unavailable")
-	}
-	for _, path := range []string{cfg.WUITlsKeyPath, cfg.WUITlsCertPath} {
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".pfx" || ext == ".p12" {
-			warnings = append(warnings, "wui TLS PFX/P12 material is not implemented; use PEM key/cert files")
-			break
-		}
 	}
 	return warnings
 }
@@ -1858,6 +2245,9 @@ Usage: strata-pvr <cmd> ...
 
 Commands:
 
+init                    Initialize a new Strata installation in data/.
+migrate                 Convert migrate/ Chinachu files into a Strata installation.
+migration               Alias of migrate.
 installer               Run a Installer.
 updater                 Run a Updater.
 service <name> <action> Service-utility.

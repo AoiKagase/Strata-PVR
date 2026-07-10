@@ -4,17 +4,10 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -23,11 +16,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	passwordauth "strata-pvr/internal/auth"
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/storage"
 )
 
@@ -813,6 +811,42 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardStrataConfigForm(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "index.html"): {
+			`id="strataConfigPanel"`,
+			`id="strataListenAddress"`,
+			`id="strataAuthEnabled"`,
+			`id="strataAuthUsers"`,
+			`id="legacyConfigPanel"`,
+		},
+		filepath.Join("..", "..", "web", "app.js"): {
+			`cfg.schema === "strata/config"`,
+			`body: strata ? raw : undefined`,
+			`function renderStrataConfigForm(cfg)`,
+			`function readStrataConfigForm()`,
+			`passwordConfigured`,
+			`autocomplete="new-password"`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.config-fieldset`,
+			`.config-user-row`,
+			`@media (max-width: 620px)`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(body), want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {
@@ -959,40 +993,14 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 func TestNativeDashboardConfigControlsCoverRuntimeFields(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {
-			`id="configUid"`,
-			`id="configGid"`,
 			`id="configSchedulerMirakurunPath"`,
-			`id="configWuiXFF"`,
-			`id="configWuiMdnsAdvertisement"`,
-			`id="configVaapiDevice"`,
 			`id="configRecordingPriority"`,
 			`id="configConflictedPriority"`,
-			`id="configWuiTlsCaPath"`,
-			`id="configWuiTlsRequestCert"`,
-			`id="configWuiTlsRejectUnauthorized"`,
-			`id="configStorageLowSpaceCommand"`,
-			`id="configSchedulerStartCommand"`,
-			`id="configEpgEndCommand"`,
-			`id="configRecordedCommand"`,
 		},
 		filepath.Join("..", "..", "web", "app.js"): {
 			`cfg.schedulerMirakurunPath`,
-			`cfg.wuiXFF`,
-			`cfg.wuiMdnsAdvertisement`,
-			`cfg.vaapiDevice`,
 			`cfg.recordingPriority`,
 			`cfg.conflictedPriority`,
-			`cfg.wuiTlsCaPath`,
-			`cfg.wuiTlsRequestCert`,
-			`cfg.wuiTlsRejectUnauthorized`,
-			`cfg.storageLowSpaceCommand`,
-			`cfg.schedulerStartCommand`,
-			`cfg.epgEndCommand`,
-			`cfg.recordedCommand`,
-			`setOptionalBooleanSelect(config, "wuiXFF"`,
-			`setOptionalBooleanSelect(config, "wuiMdnsAdvertisement"`,
-			`setOptionalString(config, "schedulerStartCommand"`,
-			`setOptionalString(config, "recordedCommand"`,
 		},
 	}
 	for path, wants := range files {
@@ -1187,6 +1195,71 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	}
 }
 
+func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	auto := legacy.Program{ID: "auto", Title: "Automatic"}
+	manual := legacy.Program{ID: "manual", Title: "Manual", IsManualReserved: true}
+	for _, program := range []legacy.Program{auto, manual} {
+		if err := reservationstore.Upsert(context.Background(), paths.Database, paths.Reserves, program); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := programstore.Upsert(context.Background(), paths.Database, paths.Recording, programstore.Recording, auto); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+
+	for _, target := range []string{"/api/reserves.json", "/api/reserves/auto.json"} {
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, target, nil))
+		if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Automatic") {
+			t.Fatalf("GET %s status=%d body=%s", target, res.Code, res.Body.String())
+		}
+	}
+	for _, action := range []string{"skip", "unskip"} {
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/reserves/auto/"+action+".json", nil))
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", action, res.Code, res.Body.String())
+		}
+	}
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/recording/auto.json", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("recording delete status=%d body=%s", res.Code, res.Body.String())
+	}
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/reserves/manual.json", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("manual delete status=%d body=%s", res.Code, res.Body.String())
+	}
+
+	reserves, err := reservationstore.Read(context.Background(), paths.Database, paths.Reserves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recording, err := programstore.Read(context.Background(), paths.Database, paths.Recording, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].ID != "auto" || !reserves[0].IsSkip {
+		t.Fatalf("SQLite reserves = %#v", reserves)
+	}
+	if len(recording) != 1 || !recording[0].Abort {
+		t.Fatalf("SQLite recording = %#v", recording)
+	}
+	for _, path := range []string{paths.Reserves, paths.Recording} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("compatibility JSON %s unexpectedly written: %v", path, err)
+		}
+	}
+}
+
 func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -1298,6 +1371,36 @@ func TestAPIRulesMutation(t *testing.T) {
 	}
 	if len(rules) != 0 {
 		t.Fatalf("rules were not deleted: %#v", rules)
+	}
+}
+
+func TestAPIRulesUsesSQLiteForStrata(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "strata.db")
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if err := storage.WriteJSONAtomic(paths.Rules, []map[string]any{{"reserve_titles": []string{"stale"}}}, true); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/rules.json", strings.NewReader(`{"reserve_titles":["database"]}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("post status = %d body=%s", res.Code, res.Body.String())
+	}
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	documents, err := database.ReadRules(context.Background(), db)
+	db.Close()
+	if err != nil || len(documents) != 1 || !strings.Contains(string(documents[0]), "database") {
+		t.Fatalf("SQLite rules = %s error=%v", documents, err)
 	}
 }
 
@@ -2307,39 +2410,6 @@ func TestLegacyBitrateBits(t *testing.T) {
 	}
 }
 
-func TestAPIRecordedWatchMP4UsesVAAPIOptions(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	recordedPath := filepath.Join(dir, "recorded.m2ts")
-	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
-		t.Fatal(err)
-	}
-	var gotArgs []string
-	restore := installFakeFFmpegFileStream(t, "mp4data", &gotArgs)
-	defer restore()
-	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
-	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{VAAPIEnabled: true, VAAPIDevice: "/dev/dri/test"})
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=1280x720", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
-	}
-	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-vaapi_device /dev/dri/test", "-hwaccel vaapi", "-vf format=nv12|vaapi,hwupload,deinterlace_vaapi,scale_vaapi=w=1280:h=720", "-c:v h264_vaapi"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
-		}
-	}
-	if strings.Contains(joined, "-i pipe:0") || !strings.Contains(joined, "-i "+recordedPath) {
-		t.Fatalf("recorded mp4 should use file input for fast seek: %s", joined)
-	}
-}
-
 func TestAPIProgramPreview(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -2395,6 +2465,154 @@ func TestAPIProgramPreview(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("missing preview status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	programs := []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}
+	if err := programstore.Write(context.Background(), paths.Database, paths.Recorded, programstore.Recorded, programs); err != nil {
+		t.Fatal(err)
+	}
+	old := runFFmpegPreview
+	calls := 0
+	runFFmpegPreview = func(context.Context, io.Reader, ...string) ([]byte, error) {
+		calls++
+		return []byte("cached-preview"), nil
+	}
+	defer func() { runFFmpegPreview = old }()
+	handler := NewHandler(paths, &config.Config{})
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.jpg?size=320x180&pos=5", nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK || res.Body.String() != "cached-preview" {
+			t.Fatalf("request %d status=%d body=%q", i, res.Code, res.Body.String())
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("FFmpeg calls = %d, want 1", calls)
+	}
+	cacheFiles, err := filepath.Glob(filepath.Join(dir, "data", ".cache", "previews", "*.jpg"))
+	if err != nil || len(cacheFiles) != 1 {
+		t.Fatalf("preview cache files = %v error=%v", cacheFiles, err)
+	}
+	if err := os.WriteFile(recordedPath, []byte("changed-size"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.jpg?size=320x180&pos=5", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || calls != 2 {
+		t.Fatalf("invalidated preview status=%d calls=%d", res.Code, calls)
+	}
+}
+
+func TestNewHandlerRemovesOrphanPreviewImages(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	cacheDir := filepath.Join(dir, "data", ".cache", "previews")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"referenced.jpg", "orphan.png", "keep.txt"} {
+		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = database.StorePreviewCache(context.Background(), db, database.PreviewCacheEntry{
+		CacheKey: "key", ProgramID: "program", SourcePath: "recorded.m2ts", FileName: "referenced.jpg",
+	})
+	if err == nil {
+		_, err = database.StorePreviewCache(context.Background(), db, database.PreviewCacheEntry{
+			CacheKey: "missing-key", ProgramID: "missing-program", SourcePath: "missing.m2ts", FileName: "missing.jpg",
+		})
+	}
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = NewHandler(paths, &config.Config{})
+	for _, name := range []string{"referenced.jpg", "keep.txt"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, name)); err != nil {
+			t.Fatalf("%s should remain: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "orphan.png")); !os.IsNotExist(err) {
+		t.Fatalf("orphan preview should be removed: %v", err)
+	}
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, found, err := database.FindPreviewCache(context.Background(), db, "missing-key")
+	db.Close()
+	if err != nil || found {
+		t.Fatalf("missing preview metadata found=%v err=%v", found, err)
+	}
+}
+
+func TestNewHandlerAppliesPreviewCacheRetention(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	cacheDir := filepath.Join(dir, "data", ".cache", "previews")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct{ key, file, accessed string }{
+		{"expired", "expired.jpg", "2020-01-01T00:00:00.000Z"},
+		{"older", "older.jpg", "2026-07-08T00:00:00.000Z"},
+		{"newer", "newer.jpg", "2026-07-09T00:00:00.000Z"},
+	} {
+		if err := os.WriteFile(filepath.Join(cacheDir, item.file), make([]byte, 600*1024), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.StorePreviewCache(context.Background(), db, database.PreviewCacheEntry{CacheKey: item.key, ProgramID: item.key, FileName: item.file}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`UPDATE preview_cache SET accessed_at = ? WHERE cache_key = ?`, item.accessed, item.key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	_ = NewHandler(paths, &config.Config{PreviewCacheMaxAgeDays: 7, PreviewCacheMaxSizeMB: 1})
+	for _, name := range []string{"expired.jpg", "older.jpg"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "newer.jpg")); err != nil {
+		t.Fatalf("newer preview should remain: %v", err)
+	}
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	entries, err := database.ListPreviewCacheEntries(context.Background(), db)
+	if err != nil || len(entries) != 1 || entries[0].CacheKey != "newer" {
+		t.Fatalf("retained entries=%v err=%v", entries, err)
 	}
 }
 
@@ -3242,6 +3460,40 @@ func TestAPIAuth(t *testing.T) {
 	}
 }
 
+func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
+	hash, err := passwordauth.HashPassword("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(testPaths(t.TempDir()), &config.Config{
+		WUIAccounts: []config.WebUser{{Username: "admin", PasswordHash: hash}},
+	})
+	authorization := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	start := make(chan struct{})
+	statuses := make(chan int, 8)
+	var wait sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+			req.Header.Set("Authorization", authorization)
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+			statuses <- res.Code
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(statuses)
+	for status := range statuses {
+		if status != http.StatusOK {
+			t.Fatalf("concurrent authenticated request status = %d", status)
+		}
+	}
+}
+
 func TestAPIConfigGetAndPut(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -3276,6 +3528,96 @@ func TestAPIConfigGetAndPut(t *testing.T) {
 	}
 }
 
+func TestAPIStrataConfigRedactsPasswordHashAndRejectsInvalidPut(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	doc := config.DefaultDocument()
+	doc.Web.Authentication = config.AuthenticationSettings{
+		Enabled: true,
+		Users:   []config.WebUser{{Username: "admin", PasswordHash: "$argon2id$secret"}},
+	}
+	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/config.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET status = %d", res.Code)
+	}
+	body := res.Body.String()
+	if strings.Contains(body, "passwordHash") || !strings.Contains(body, `"passwordConfigured": true`) {
+		t.Fatalf("password hash was not redacted: %s", body)
+	}
+	req = httptest.NewRequest(http.MethodPut, "/api/config.json?json=%7B%7D", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("PUT status = %d", res.Code)
+	}
+}
+
+func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	existingHash, err := passwordauth.HashPassword("old-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := config.DefaultDocument()
+	doc.Web.Authentication.Users = []config.WebUser{{Username: "admin", PasswordHash: existingHash}}
+	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{})
+	public, err := publicStrataConfig(mustReadFile(t, paths.Config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var update map[string]any
+	if err := json.Unmarshal(public, &update); err != nil {
+		t.Fatal(err)
+	}
+	authentication := update["web"].(map[string]any)["authentication"].(map[string]any)
+	authentication["users"] = []any{
+		map[string]any{"username": "admin", "passwordConfigured": true},
+		map[string]any{"username": "viewer", "password": "new-secret"},
+	}
+	body, err := json.Marshal(update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/config.json", bytes.NewReader(body))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d body=%s", res.Code, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "passwordHash") || strings.Contains(res.Body.String(), "new-secret") {
+		t.Fatalf("PUT exposed password data: %s", res.Body.String())
+	}
+	saved, err := config.ParseDocument(mustReadFile(t, paths.Config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Web.Authentication.Users[0].PasswordHash != existingHash {
+		t.Fatal("existing password hash was not preserved")
+	}
+	if !passwordauth.VerifyPassword(saved.Web.Authentication.Users[1].PasswordHash, "new-secret") {
+		t.Fatal("new password was not hashed")
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
 func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -3305,136 +3647,21 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 	}
 }
 
-func TestBuildTLSConfigClientAuth(t *testing.T) {
+func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 	dir := t.TempDir()
-	certPath, keyPath := writeTestCertificate(t, dir, "")
-	cfg := &config.Config{
-		WUITlsKeyPath:            keyPath,
-		WUITlsCertPath:           certPath,
-		WUITlsRequestCert:        true,
-		WUITlsRejectUnauthorized: true,
-	}
-	tlsConfig, err := buildTLSConfig(cfg)
+	paths := testPaths(dir)
+	port := 20772
+	cfg := &config.Config{Strata: true, WUIHost: "127.0.0.1", WUIPort: &port, WUIAuthenticationEnabled: true}
+	servers, err := buildHTTPServers(paths, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tlsConfig == nil {
-		t.Fatal("tls config was nil")
-	}
-	if tlsConfig.ClientAuth != tls.RequireAndVerifyClientCert {
-		t.Fatalf("client auth = %s", tlsConfig.ClientAuth)
-	}
-	if len(tlsConfig.Certificates) != 1 {
-		t.Fatalf("certificates = %d", len(tlsConfig.Certificates))
-	}
-}
-
-func TestBuildTLSConfigEncryptedKeyPassphrase(t *testing.T) {
-	dir := t.TempDir()
-	certPath, keyPath := writeTestCertificate(t, dir, "secret")
-	cfg := &config.Config{
-		WUITlsKeyPath:     keyPath,
-		WUITlsCertPath:    certPath,
-		WUITlsPassphrase:  "secret",
-		WUITlsRequestCert: true,
-	}
-	tlsConfig, err := buildTLSConfig(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tlsConfig.Certificates) != 1 {
-		t.Fatalf("certificates = %d", len(tlsConfig.Certificates))
-	}
-	if tlsConfig.ClientAuth != tls.RequestClientCert {
-		t.Fatalf("client auth = %s", tlsConfig.ClientAuth)
-	}
-}
-
-func TestBuildTLSConfigEncryptedKeyWrongPassphrase(t *testing.T) {
-	dir := t.TempDir()
-	certPath, keyPath := writeTestCertificate(t, dir, "secret")
-	cfg := &config.Config{
-		WUITlsKeyPath:    keyPath,
-		WUITlsCertPath:   certPath,
-		WUITlsPassphrase: "wrong",
-	}
-	if _, err := buildTLSConfig(cfg); err == nil {
-		t.Fatal("expected encrypted key passphrase error")
-	}
-}
-
-func TestBuildTLSConfigCAError(t *testing.T) {
-	dir := t.TempDir()
-	certPath, keyPath := writeTestCertificate(t, dir, "")
-	caPath := filepath.Join(dir, "ca.pem")
-	if err := os.WriteFile(caPath, []byte("not a certificate"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg := &config.Config{
-		WUITlsKeyPath:  keyPath,
-		WUITlsCertPath: certPath,
-		WUITlsCaPath:   caPath,
-	}
-	if _, err := buildTLSConfig(cfg); err == nil {
-		t.Fatal("expected CA parse error")
-	}
-}
-
-func writeTestCertificate(t *testing.T, dir, passphrase string) (certPath, keyPath string) {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		t.Fatal(err)
-	}
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "localhost"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-	}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	keyDER := x509.MarshalPKCS1PrivateKey(key)
-	keyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER}
-	if passphrase != "" {
-		keyBlock, err = x509.EncryptPEMBlock(rand.Reader, keyBlock.Type, keyDER, []byte(passphrase), x509.PEMCipherAES256)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	certPath = filepath.Join(dir, "cert.pem")
-	keyPath = filepath.Join(dir, "key.pem")
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(keyPath, pem.EncodeToMemory(keyBlock), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return certPath, keyPath
-}
-
-func TestPrivateIPv4FromAddrs(t *testing.T) {
-	_, publicNet, err := net.ParseCIDR("203.0.113.10/24")
-	if err != nil {
-		t.Fatal(err)
-	}
-	publicNet.IP = net.ParseIP("203.0.113.10")
-	_, privateNet, err := net.ParseCIDR("192.168.10.20/24")
-	if err != nil {
-		t.Fatal(err)
-	}
-	privateNet.IP = net.ParseIP("192.168.10.20")
-	got := privateIPv4FromAddrs([]net.Addr{
-		&net.IPAddr{IP: net.ParseIP("2001:db8::1")},
-		publicNet,
-		privateNet,
-	})
-	if got != "192.168.10.20" {
-		t.Fatalf("private IPv4 = %q", got)
+	cfg.WUIAccounts = []config.WebUser{{Username: "admin", PasswordHash: "$argon2id$configured"}}
+	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	res := httptest.NewRecorder()
+	servers[0].server.Handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status after enabling authentication = %d", res.Code)
 	}
 }
 
@@ -3455,32 +3682,6 @@ func TestStaticServingUsesWebRoot(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || strings.TrimSpace(res.Body.String()) != "ok" {
 		t.Fatalf("static response status=%d body=%q", res.Code, res.Body.String())
-	}
-}
-
-func TestAccessLogTrustsXForwardedForWhenEnabled(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	paths.LogDir = filepath.Join(dir, "log")
-	handler := NewHandler(paths, &config.Config{WUIXFF: true})
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json?foo=bar", nil)
-	req.RemoteAddr = "[::ffff:10.0.0.1]:12345"
-	req.Header.Set("X-Forwarded-For", "203.0.113.7, 198.51.100.2")
-	req.Header.Set("User-Agent", "test-agent")
-	res := httptest.NewRecorder()
-
-	handler.ServeHTTP(res, req)
-
-	if res.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
-	}
-	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	log := string(logBytes)
-	if !strings.Contains(log, `200 GET:/api/status.json?foo=bar 203.0.113.7 "test-agent"`) {
-		t.Fatalf("access log did not use X-Forwarded-For: %q", log)
 	}
 }
 

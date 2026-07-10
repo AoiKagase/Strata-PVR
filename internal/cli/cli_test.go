@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,8 +15,12 @@ import (
 	"testing"
 	"time"
 
+	passwordauth "strata-pvr/internal/auth"
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/storage"
 )
 
@@ -22,8 +29,308 @@ func TestHelp(t *testing.T) {
 	if err := Run(context.Background(), nil, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "reserve <pgid>") {
+	if !strings.Contains(out.String(), "reserve <pgid>") || !strings.Contains(out.String(), "migrate") {
 		t.Fatalf("help missing reserve: %s", out.String())
+	}
+}
+
+func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join("migrate", "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyConfig := `{"mirakurunPath":"http://127.0.0.1:40772","recordedDir":"./recorded/","recordedFormat":"<title>.m2ts","wuiHost":"0.0.0.0","wuiPort":20772,"wuiUsers":["admin:secret"]}`
+	if err := os.WriteFile(filepath.Join("migrate", "config.json"), []byte(legacyConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "rules.json"), []byte(`[{"reserve_titles":["News"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "data", "recordings.json"), []byte(`[{"id":"active-1","start":100,"end":200}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "data", "recorded.json"), []byte(`[{"id":"recorded-1","start":100,"end":200,"recorded":"video.m2ts"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "data", "reserves.json"), []byte(`[{"id":"reserve-1","start":100,"end":200}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "data", "schedule.json"), []byte(`[{"id":"channel-1","programs":[{"id":"program-1","start":100,"end":200}]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"migrate"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := config.ParseDocument(mustReadCLIFile(t, filepath.Join("data", "config.json")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Web.Authentication.Users) != 1 || !passwordauth.VerifyPassword(doc.Web.Authentication.Users[0].PasswordHash, "secret") {
+		t.Fatal("legacy WUI password was not converted to Argon2id")
+	}
+	if _, err := os.Stat(filepath.Join("data", "strata.db")); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := database.ReadRules(context.Background(), db)
+	db.Close()
+	if err != nil || len(rules) != 1 || !strings.Contains(string(rules[0]), "News") {
+		t.Fatalf("rules were not imported into SQLite: %s %v", rules, err)
+	}
+	db, err = database.Open(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservations, err := database.ReadReservations(context.Background(), db)
+	db.Close()
+	if err != nil || len(reservations) != 1 || !strings.Contains(string(reservations[0]), "reserve-1") {
+		t.Fatalf("reservations were not imported into SQLite: %s %v", reservations, err)
+	}
+	db, err = database.Open(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedule, err := database.ReadSchedule(context.Background(), db)
+	db.Close()
+	if err != nil || len(schedule) != 1 || schedule[0].ChannelKey != "channel-1" || len(schedule[0].Programs) != 1 {
+		t.Fatalf("schedule was not imported into SQLite: %#v %v", schedule, err)
+	}
+	db, err = database.Open(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, activeErr := database.ReadProgramCollection(context.Background(), db, "recording")
+	recorded, recordedErr := database.ReadProgramCollection(context.Background(), db, "recorded")
+	db.Close()
+	if activeErr != nil || recordedErr != nil || len(active) != 1 || len(recorded) != 1 || !strings.Contains(string(active[0]), "active-1") || !strings.Contains(string(recorded[0]), "recorded-1") {
+		t.Fatalf("program collections were not imported: active=%s recorded=%s errors=%v/%v", active, recorded, activeErr, recordedErr)
+	}
+	archives, err := filepath.Glob(filepath.Join("backup", "chinachu-*", "config.json"))
+	if err != nil || len(archives) != 1 {
+		t.Fatalf("legacy input was not archived: %v %v", archives, err)
+	}
+	if _, err := os.Stat("migrate"); !os.IsNotExist(err) {
+		t.Fatalf("migrate input still exists: %v", err)
+	}
+	reports, err := filepath.Glob(filepath.Join("backup", "chinachu-*-report.json"))
+	if err != nil || len(reports) != 1 {
+		t.Fatalf("migration report = %v error=%v", reports, err)
+	}
+	var report struct {
+		Version      int               `json:"version"`
+		Imported     map[string]int    `json:"imported"`
+		SourceSHA256 map[string]string `json:"sourceSha256"`
+		SourceSize   map[string]int64  `json:"sourceSize"`
+	}
+	if err := json.Unmarshal(mustReadCLIFile(t, reports[0]), &report); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]int{"rules": 1, "reservations": 1, "scheduleChannels": 1, "schedulePrograms": 1, "recording": 1, "recorded": 1} {
+		if report.Imported[key] != want {
+			t.Fatalf("report imported[%s]=%d, want %d: %#v", key, report.Imported[key], want, report.Imported)
+		}
+	}
+	if report.Version != 3 || len(report.SourceSHA256["config.json"]) != 64 || len(report.SourceSHA256["data/recordings.json"]) != 64 {
+		t.Fatalf("migration report metadata = %#v", report)
+	}
+	archivedHashes, archivedSizes, err := inspectMigrationFiles(filepath.Dir(archives[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(report.SourceSHA256, archivedHashes) || !maps.Equal(report.SourceSize, archivedSizes) {
+		t.Fatalf("migration report does not match archive: hashes=%v sizes=%v", report.SourceSHA256, report.SourceSize)
+	}
+}
+
+func TestMigrateChinachuValidationFailureLeavesInputUntouched(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll("migrate", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "config.json"), []byte(`{`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"migration"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+		t.Fatal("migration accepted invalid config")
+	}
+	if _, err := os.Stat(filepath.Join("migrate", "config.json")); err != nil {
+		t.Fatal("migration input was modified")
+	}
+	if _, err := os.Stat("data"); !os.IsNotExist(err) {
+		t.Fatalf("partial data directory exists: %v", err)
+	}
+}
+
+func TestMigrateChinachuCorruptDataLeavesInputUntouched(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join("migrate", "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyConfig := `{"mirakurunPath":"http://127.0.0.1:40772","recordedDir":"./recorded/","wuiOpenServer":true,"wuiOpenPort":20772}`
+	if err := os.WriteFile(filepath.Join("migrate", "config.json"), []byte(legacyConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	corruptPath := filepath.Join("migrate", "data", "recordings.json")
+	if err := os.WriteFile(corruptPath, []byte(`[{"id":"broken"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"migrate"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+		t.Fatal("migration accepted corrupt recording data")
+	}
+	if got := string(mustReadCLIFile(t, corruptPath)); got != `[{"id":"broken"}` {
+		t.Fatalf("migration input changed: %q", got)
+	}
+	if _, err := os.Stat("data"); !os.IsNotExist(err) {
+		t.Fatalf("partial data directory exists: %v", err)
+	}
+	if matches, _ := filepath.Glob(filepath.Join("backup", "chinachu-*")); len(matches) != 0 {
+		t.Fatalf("failed migration created backup: %v", matches)
+	}
+}
+
+func TestMigrateChinachuImportsLargeReservationSet(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join("migrate", "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyConfig := `{"mirakurunPath":"http://127.0.0.1:40772","recordedDir":"./recorded/","wuiOpenServer":true,"wuiOpenPort":20772}`
+	if err := os.WriteFile(filepath.Join("migrate", "config.json"), []byte(legacyConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const count = 2500
+	reservations := make([]legacy.Program, count)
+	for i := range reservations {
+		reservations[i] = legacy.Program{ID: fmt.Sprintf("reservation-%04d", i), Start: int64(i * 1000), End: int64(i*1000 + 500)}
+	}
+	if err := storage.WriteJSONAtomic(filepath.Join("migrate", "data", "reserves.json"), reservations, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"migrate"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	documents, err := database.ReadReservations(context.Background(), db)
+	if err != nil || len(documents) != count {
+		t.Fatalf("large reservation import count=%d err=%v", len(documents), err)
+	}
+}
+
+func TestConvertLegacyConfigWarnsAboutUnsupportedSettings(t *testing.T) {
+	port := 20772
+	_, warnings, err := convertLegacyConfig(&config.Config{
+		WUIPort: &port, WUIHost: "127.0.0.1", WUIOpenServer: true,
+		Raw: map[string]json.RawMessage{
+			"wuiTlsKeyPath": []byte(`"server.key"`), "wuiXFF": []byte(`true`), "wuiAllowCountries": []byte(`["JP"]`), "wuiMdnsAdvertisement": []byte(`true`), "operTweeter": []byte(`true`), "schedulerStartCommand": []byte(`"hook"`),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(warnings, "\n")
+	for _, want := range []string{"listeners were merged", "TLS settings", "wuiXFF", "wuiAllowCountries", "mDNS", "Twitter/Tweeter", "hook commands"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("migration warnings missing %q: %s", want, text)
+		}
+	}
+}
+
+func mustReadCLIFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestInitializeStrataCreatesConfigAndDatabase(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"init"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join("data", "config.json"),
+		filepath.Join("data", "rules.json"),
+		filepath.Join("data", "strata.db"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s was not created: %v", path, err)
+		}
+	}
+	cfg, err := config.Load(filepath.Join("data", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EffectiveMirakurunPath() != "http://127.0.0.1:40772" {
+		t.Fatalf("unexpected Mirakurun URL: %s", cfg.EffectiveMirakurunPath())
+	}
+}
+
+func TestInitializeStrataRejectsLegacyConfig(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("config.json", []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err = Run(context.Background(), []string{"init"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "legacy config.json detected") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -298,7 +605,7 @@ func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
 		"CONFIG mirakurunPath=" + mirakurun.URL,
 		"CONFIG recordedDir=recorded",
 		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
-		"CONFIG wui=0.0.0.0:disabled tls=disabled open=disabled",
+		"CONFIG wui=0.0.0.0:disabled open=disabled",
 		"CONFIG storageLowSpace=3000MB action=remove",
 		"STATE scheduleChannels=0",
 		"STATE reserves=0",
@@ -405,8 +712,6 @@ func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 		WUIPort:                    &port,
 		WUIOpenServer:              true,
 		WUIOpenPort:                20773,
-		WUITlsKeyPath:              "key.pem",
-		WUITlsPassphrase:           "secret-passphrase",
 		WUIUsers:                   []string{"user:secret"},
 		StorageLowSpaceThresholdMB: 1024,
 		StorageLowSpaceAction:      "stop",
@@ -423,7 +728,7 @@ func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 		"CONFIG mirakurunPath=http://mirakurun.example/",
 		"CONFIG recordedDir=recorded",
 		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
-		"CONFIG wui=127.0.0.1:20772 tls=enabled open=auto:20773",
+		"CONFIG wui=127.0.0.1:20772 open=auto:20773",
 		"CONFIG storageLowSpace=1024MB action=stop",
 		"CONFIG normalizationForm=NFKC",
 	} {
@@ -431,7 +736,7 @@ func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 			t.Fatalf("summary missing %q: %s", want, text)
 		}
 	}
-	for _, secret := range []string{"secret-passphrase", "user:secret"} {
+	for _, secret := range []string{"user:secret"} {
 		if strings.Contains(text, secret) {
 			t.Fatalf("summary leaked %q: %s", secret, text)
 		}
@@ -690,11 +995,7 @@ func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
 	for _, want := range []string{
 		"WARN native settings editing",
 		"WARN wuiUsers",
-		"WARN wuiAllowCountries",
 		"WARN wuiOpenServer",
-		"WARN wuiMdnsAdvertisement",
-		"WARN operTweeter",
-		"WARN wui TLS PFX/P12",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("compat check warning missing %q: %s", want, text)
@@ -1000,6 +1301,77 @@ func TestCleanupBacksUpRecordedListBeforeRemoval(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "exists" {
 		t.Fatalf("cleanup should remove only missing entry: %#v", got)
+	}
+}
+
+func TestCleanupRemovesStrataRecordedRowAndPreviewCache(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"init"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join("data", "strata.db")
+	existingPath := filepath.Join(dir, "existing.m2ts")
+	if err := os.WriteFile(existingPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	programs := []legacy.Program{
+		{ID: "existing", Recorded: filepath.ToSlash(existingPath)},
+		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
+	}
+	for _, program := range programs {
+		if err := programstore.Upsert(context.Background(), databasePath, filepath.Join("data", "recorded.json"), programstore.Recorded, program); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cacheDir := filepath.Join("data", ".cache", "previews")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cacheName := "missing-preview.jpg"
+	if err := os.WriteFile(filepath.Join(cacheDir, cacheName), []byte("preview"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = database.StorePreviewCache(context.Background(), db, database.PreviewCacheEntry{
+		CacheKey: "missing-key", ProgramID: "missing", SourcePath: programs[1].Recorded, FileName: cacheName,
+	})
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(context.Background(), []string{"cleanup"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := programstore.Read(context.Background(), databasePath, filepath.Join("data", "recorded.json"), programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].ID != "existing" {
+		t.Fatalf("SQLite recorded = %#v", recorded)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, cacheName)); !os.IsNotExist(err) {
+		t.Fatalf("preview cache file remains: %v", err)
+	}
+	db, err = database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, found, err := database.FindPreviewCache(context.Background(), db, "missing-key")
+	db.Close()
+	if err != nil || found {
+		t.Fatalf("preview cache metadata found=%v err=%v", found, err)
+	}
+	if _, err := os.Stat(filepath.Join("data", "recorded.json")); !os.IsNotExist(err) {
+		t.Fatalf("compatibility recorded JSON unexpectedly written: %v", err)
 	}
 }
 
@@ -1508,6 +1880,45 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 	}
 	if !reserves[0].IsSkip || reserves[1].IsSkip {
 		t.Fatalf("auto reserve skip was not updated correctly: %#v", reserves)
+	}
+}
+
+func TestStopUsesStrataDatabaseWithoutRewritingJSON(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"init"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join("data", "strata.db")
+	recording := legacy.Program{ID: "auto", Title: "Database recording"}
+	if err := programstore.Upsert(context.Background(), databasePath, filepath.Join("data", "recording.json"), programstore.Recording, recording); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservationstore.Upsert(context.Background(), databasePath, filepath.Join("data", "reserves.json"), legacy.Program{ID: "auto"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"stop", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	recordings, err := programstore.Read(context.Background(), databasePath, filepath.Join("data", "recording.json"), programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserves, err := reservationstore.Read(context.Background(), databasePath, filepath.Join("data", "reserves.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recordings) != 1 || !recordings[0].Abort || len(reserves) != 1 || !reserves[0].IsSkip {
+		t.Fatalf("recordings=%#v reserves=%#v", recordings, reserves)
+	}
+	for _, path := range []string{filepath.Join("data", "recording.json"), filepath.Join("data", "reserves.json")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("compatibility JSON %s unexpectedly written: %v", path, err)
+		}
 	}
 }
 

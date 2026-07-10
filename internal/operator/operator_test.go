@@ -14,22 +14,11 @@ import (
 
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/legacy"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
 )
-
-func TestMain(m *testing.M) {
-	if output := os.Getenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT"); output != "" && len(os.Args) == 3 {
-		_ = os.WriteFile(output, []byte(os.Args[1]+"\n"+os.Args[2]), 0o644)
-		os.Exit(0)
-	}
-	if output := os.Getenv("STRATA_PVR_SENDMAIL_OUTPUT"); output != "" && len(os.Args) == 2 && os.Args[1] == "-t" {
-		data, _ := io.ReadAll(os.Stdin)
-		_ = os.WriteFile(output, data, 0o644)
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
-}
 
 type fakeStreamer struct {
 	id     int64
@@ -227,6 +216,50 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		"FIN: 21i3v9",
 		"FIN: #21i3v9 ",
 	)
+}
+
+func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := Paths{
+		Database: filepath.Join(dir, "data", "strata.db"), Reserves: filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"), Recorded: filepath.Join(dir, "data", "recorded.json"), Log: filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{ID: "21i3v9", Title: "Database", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "27"}, IsManualReserved: true}
+	if err := reservationstore.Upsert(context.Background(), paths.Database, paths.Reserves, program); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "database-ts"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Completed != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	recording, err := programstore.Read(context.Background(), paths.Database, paths.Recording, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := programstore.Read(context.Background(), paths.Database, paths.Recorded, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database, paths.Reserves)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 0 || len(recorded) != 1 || recorded[0].ID != program.ID || len(reserves) != 0 {
+		t.Fatalf("recording=%#v recorded=%#v reserves=%#v", recording, recorded, reserves)
+	}
+	for _, path := range []string{paths.Recording, paths.Recorded, paths.Reserves} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("compatibility JSON %s unexpectedly written: %v", path, err)
+		}
+	}
 }
 
 func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
@@ -482,15 +515,12 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(dir, "recorded-command.txt")
-	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
 		result, err := RunOnce(ctx, paths, &config.Config{
-			RecordedDir:     filepath.Join(dir, "recorded"),
-			RecordedFormat:  "<id>.m2ts",
-			RecordedCommand: os.Args[0],
+			RecordedDir:    filepath.Join(dir, "recorded"),
+			RecordedFormat: "<id>.m2ts",
 		}, &abortableStreamer{}, now)
 		if err != nil {
 			done <- err
@@ -538,27 +568,11 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
 		t.Fatalf("recorded entry missing after cancel: %#v", recorded)
 	}
-	var content []byte
-	var err error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		content, err = os.ReadFile(output)
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(content), recorded[0].Recorded) {
-		t.Fatalf("recorded command did not receive recorded path: %q", content)
-	}
 	logData, err := os.ReadFile(paths.Log)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"SPAWN: " + os.Args[0] + " (pid=",
 		"FIN: 21i3v9",
 		"FIN: #21i3v9 ",
 	} {
@@ -575,109 +589,9 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 		"WRITE: "+paths.Recording,
 		"WRITE: "+paths.Recording,
 		"WRITE: "+paths.Recorded,
-		"SPAWN: "+os.Args[0]+" (pid=",
 		"FIN: 21i3v9",
 		"FIN: #21i3v9 ",
 	)
-}
-
-func TestRunOnceStartsRecordedCommandWithFileAndProgramJSON(t *testing.T) {
-	dir := t.TempDir()
-	now := time.Unix(1000, 0)
-	paths := Paths{
-		Reserves:  filepath.Join(dir, "data", "reserves.json"),
-		Recording: filepath.Join(dir, "data", "recording.json"),
-		Recorded:  filepath.Join(dir, "data", "recorded.json"),
-		Log:       filepath.Join(dir, "log", "operator"),
-	}
-	program := legacy.Program{
-		ID:      "21i3v9",
-		Title:   "Hooked",
-		Start:   now.UnixMilli(),
-		End:     now.Add(time.Hour).UnixMilli(),
-		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
-	}
-	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
-		t.Fatal(err)
-	}
-	output := filepath.Join(dir, "recorded-command.txt")
-	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
-	cfg := &config.Config{
-		RecordedDir:     filepath.Join(dir, "recorded"),
-		RecordedFormat:  "<id>.m2ts",
-		RecordedCommand: os.Args[0],
-	}
-	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "tsdata"}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Completed != 1 {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	var content []byte
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		content, err = os.ReadFile(output)
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.SplitN(string(content), "\n", 2)
-	if len(lines) != 2 {
-		t.Fatalf("unexpected command output: %q", content)
-	}
-	if !strings.HasSuffix(filepath.ToSlash(lines[0]), "/recorded/21i3v9.m2ts") {
-		t.Fatalf("unexpected recorded command path: %s", lines[0])
-	}
-	var passed legacy.Program
-	if err := json.Unmarshal([]byte(lines[1]), &passed); err != nil {
-		t.Fatal(err)
-	}
-	if passed.ID != program.ID || passed.Recorded == "" {
-		t.Fatalf("unexpected recorded command payload: %#v", passed)
-	}
-	logData, err := os.ReadFile(paths.Log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(logData), "SPAWN: "+os.Args[0]+" (pid=") {
-		t.Fatalf("recorded command spawn log missing: %s", string(logData))
-	}
-}
-
-func TestRunRecordedCommandStartsAfterContextCancellation(t *testing.T) {
-	dir := t.TempDir()
-	output := filepath.Join(dir, "recorded-command.txt")
-	t.Setenv("STRATA_PVR_RECORDED_COMMAND_OUTPUT", output)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	program := legacy.Program{
-		ID:       "21i3v9",
-		Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "21i3v9.m2ts")),
-	}
-	if err := runRecordedCommand(ctx, "", os.Args[0], program); err != nil {
-		t.Fatal(err)
-	}
-
-	var content []byte
-	var err error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		content, err = os.ReadFile(output)
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(content), program.Recorded) {
-		t.Fatalf("recorded command did not receive recorded path: %q", content)
-	}
 }
 
 func TestPIDFileLifecycle(t *testing.T) {
@@ -768,52 +682,6 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	}
 }
 
-func TestLowStorageSendsNotification(t *testing.T) {
-	dir := t.TempDir()
-	lowStorageLastNotified = time.Time{}
-	oldGetDiskUsage := getDiskUsage
-	getDiskUsage = func(string) (system.DiskUsage, error) {
-		return system.DiskUsage{Avail: 42 * 1024 * 1024}, nil
-	}
-	defer func() { getDiskUsage = oldGetDiskUsage }()
-	oldSendmailPath := sendmailPath
-	sendmailPath = os.Args[0]
-	defer func() { sendmailPath = oldSendmailPath }()
-	output := filepath.Join(dir, "sendmail.txt")
-	t.Setenv("STRATA_PVR_SENDMAIL_OUTPUT", output)
-	recordedDir := filepath.Join(dir, "recorded")
-	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	paths := Paths{Log: filepath.Join(dir, "log", "operator")}
-	cfg := &config.Config{
-		RecordedDir:                recordedDir,
-		StorageLowSpaceThresholdMB: 100,
-		StorageLowSpaceNotifyTo:    "admin@example.test",
-	}
-
-	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	message := string(data)
-	for _, want := range []string{
-		"From: Chinachu <chinachu@localhost>",
-		"To: admin@example.test",
-		"Subject: [Chinachu] ALERT: Storage Low Space!",
-		"Current Free Space is 42 MB.",
-		"Threshold is 100 MB.",
-	} {
-		if !strings.Contains(message, want) {
-			t.Fatalf("notification missing %q: %q", want, message)
-		}
-	}
-}
-
 func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	dir := t.TempDir()
 	oldGetDiskUsage := getDiskUsage
@@ -852,58 +720,5 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "WRITE: "+paths.Recording) {
 		t.Fatalf("operator log missing recording write: %s", string(logData))
-	}
-}
-
-func TestLowStorageNotificationIsThrottled(t *testing.T) {
-	dir := t.TempDir()
-	oldGetDiskUsage := getDiskUsage
-	getDiskUsage = func(string) (system.DiskUsage, error) {
-		return system.DiskUsage{Avail: 42 * 1024 * 1024}, nil
-	}
-	defer func() { getDiskUsage = oldGetDiskUsage }()
-	oldSendmailPath := sendmailPath
-	sendmailPath = os.Args[0]
-	defer func() { sendmailPath = oldSendmailPath }()
-	baseTime := time.Unix(1000, 0)
-	oldLowStorageNow := lowStorageNow
-	lowStorageNow = func() time.Time { return baseTime }
-	defer func() { lowStorageNow = oldLowStorageNow }()
-	lowStorageLastNotified = time.Time{}
-	defer func() { lowStorageLastNotified = time.Time{} }()
-	output := filepath.Join(dir, "sendmail.txt")
-	t.Setenv("STRATA_PVR_SENDMAIL_OUTPUT", output)
-	recordedDir := filepath.Join(dir, "recorded")
-	if err := os.MkdirAll(recordedDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	paths := Paths{Log: filepath.Join(dir, "log", "operator")}
-	cfg := &config.Config{
-		RecordedDir:                recordedDir,
-		StorageLowSpaceThresholdMB: 100,
-		StorageLowSpaceNotifyTo:    "admin@example.test",
-	}
-
-	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(output); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(output); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(output); !os.IsNotExist(err) {
-		t.Fatalf("notification was not throttled: %v", err)
-	}
-	baseTime = baseTime.Add(lowStorageNotifyInterval + time.Second)
-	if _, err := handleLowStorage(context.Background(), paths, cfg, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(output); err != nil {
-		t.Fatalf("notification was not sent after interval: %v", err)
 	}
 }

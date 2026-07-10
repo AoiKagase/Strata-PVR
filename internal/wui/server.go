@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -21,33 +22,40 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	passwordauth "strata-pvr/internal/auth"
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/programstore"
+	"strata-pvr/internal/reservationstore"
+	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/scheduler"
+	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
 )
 
 type Paths struct {
-	Config       string
-	Rules        string
-	Schedule     string
-	Reserves     string
-	Recording    string
-	Recorded     string
-	WebRoot      string
-	LogDir       string
-	SchedulerPID string
-	OperatorPID  string
-	Scheduler    func(context.Context, bool) error
+	Config         string
+	Database       string
+	Rules          string
+	Schedule       string
+	Reserves       string
+	Recording      string
+	Recorded       string
+	WebRoot        string
+	LogDir         string
+	SchedulerPID   string
+	OperatorPID    string
+	Scheduler      func(context.Context, bool) error
+	databaseHandle *sql.DB
 }
 
 const legacyRecordingPreviewTailBytes int64 = 3200000
@@ -102,8 +110,13 @@ func Run(ctx context.Context, paths Paths) error {
 	if err != nil {
 		return err
 	}
-	if err := system.DropPrivileges(cfg.UID, cfg.GID); err != nil {
-		return err
+	if paths.Database != "" {
+		db, err := database.Open(ctx, paths.Database)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		paths.databaseHandle = db
 	}
 	servers, err := buildHTTPServers(paths, cfg)
 	if err != nil {
@@ -119,11 +132,7 @@ func Run(ctx context.Context, paths Paths) error {
 		}
 		go func(s runningServer) {
 			var err error
-			if s.tls {
-				err = s.server.ListenAndServeTLS("", "")
-			} else {
-				err = s.server.ListenAndServe()
-			}
+			err = s.server.ListenAndServe()
 			errCh <- serverError{server: s, err: err}
 		}(srv)
 	}
@@ -150,12 +159,22 @@ func NewHandler(paths Paths, cfg *config.Config) http.Handler {
 
 func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	mux := http.NewServeMux()
-	server := &server{paths: paths, cfg: cfg, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory()}
+	server := &server{
+		paths: paths, cfg: cfg, db: paths.databaseHandle, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory(),
+		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
+	}
+	server.cleanupPreviewCache(context.Background())
 	server.socket = newSocketHub(server)
 	mux.HandleFunc("/api/", server.handleAPI)
 	mux.HandleFunc("/socket.io/", server.handleSocketIO)
 	mux.HandleFunc("/", server.handleStatic)
 	var handler http.Handler = mux
+	if server.db != nil {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverContext := database.WithHandle(r.Context(), server.db)
+			mux.ServeHTTP(w, r.WithContext(serverContext))
+		})
+	}
 	if auth {
 		handler = server.withAuth(handler)
 	}
@@ -166,11 +185,16 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 }
 
 type server struct {
-	paths   Paths
-	cfg     *config.Config
-	webRoot string
-	metrics *metricHistory
-	socket  *socketHub
+	paths       Paths
+	cfg         *config.Config
+	db          *sql.DB
+	webRoot     string
+	metrics     *metricHistory
+	socket      *socketHub
+	configMu    sync.Mutex
+	authMu      sync.Mutex
+	authCache   map[[sha256.Size]byte]time.Time
+	authWorkers chan struct{}
 }
 
 type metricHistory struct {
@@ -286,7 +310,6 @@ func clampPercent(value float64) float64 {
 type runningServer struct {
 	server *http.Server
 	label  string
-	tls    bool
 }
 
 type serverError struct {
@@ -297,158 +320,16 @@ type serverError struct {
 func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) {
 	servers := []runningServer{}
 	if cfg.WUIPort != nil {
-		tls := cfg.WUITlsKeyPath != "" && cfg.WUITlsCertPath != ""
-		label := "HTTP Server"
-		if tls {
-			label = "HTTPS Server"
-		}
-		tlsConfig, err := buildTLSConfig(cfg)
-		if err != nil {
-			return nil, err
-		}
 		servers = append(servers, runningServer{
 			server: &http.Server{
 				Addr:              listenAddress(cfg.WUIHost, *cfg.WUIPort),
-				Handler:           newHandler(paths, cfg, true),
-				TLSConfig:         tlsConfig,
+				Handler:           newHandler(paths, cfg, cfg.WUIAuthenticationEnabled || len(cfg.WUIUsers) > 0),
 				ReadHeaderTimeout: 10 * time.Second,
 			},
-			label: label,
-			tls:   tls,
-		})
-	}
-	if cfg.WUIOpenServer {
-		port := cfg.WUIOpenPort
-		if port == 0 {
-			port = 20772
-		}
-		host := cfg.WUIOpenHost
-		if host == "" {
-			host = detectPrivateIPv4()
-		}
-		servers = append(servers, runningServer{
-			server: &http.Server{
-				Addr:              listenAddress(host, port),
-				Handler:           newHandler(paths, cfg, false),
-				ReadHeaderTimeout: 10 * time.Second,
-			},
-			label: "HTTP Open Server",
+			label: "HTTP Server",
 		})
 	}
 	return servers, nil
-}
-
-func detectPrivateIPv4() string {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		if ip := privateIPv4FromAddrs(addrs); ip != "" {
-			return ip
-		}
-	}
-	return ""
-}
-
-func privateIPv4FromAddrs(addrs []net.Addr) string {
-	for _, addr := range addrs {
-		var ip net.IP
-		switch v := addr.(type) {
-		case *net.IPNet:
-			ip = v.IP
-		case *net.IPAddr:
-			ip = v.IP
-		}
-		ip = ip.To4()
-		if ip != nil && ip.IsPrivate() {
-			return ip.String()
-		}
-	}
-	return ""
-}
-
-func buildTLSConfig(cfg *config.Config) (*tls.Config, error) {
-	if cfg.WUITlsKeyPath == "" || cfg.WUITlsCertPath == "" {
-		return nil, nil
-	}
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS10}
-	cert, err := loadTLSCertificate(cfg.WUITlsCertPath, cfg.WUITlsKeyPath, cfg.WUITlsPassphrase)
-	if err != nil {
-		return nil, err
-	}
-	tlsConfig.Certificates = []tls.Certificate{cert}
-	if cfg.WUITlsRequestCert {
-		tlsConfig.ClientAuth = tls.RequestClientCert
-		if cfg.WUITlsRejectUnauthorized {
-			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
-		}
-	}
-	if cfg.WUITlsCaPath != "" {
-		caBytes, err := os.ReadFile(cfg.WUITlsCaPath)
-		if err != nil {
-			return nil, err
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caBytes) {
-			return nil, fmt.Errorf("failed to parse WUI TLS CA file: %s", cfg.WUITlsCaPath)
-		}
-		tlsConfig.ClientCAs = pool
-	}
-	return tlsConfig, nil
-}
-
-func loadTLSCertificate(certPath, keyPath, passphrase string) (tls.Certificate, error) {
-	certPEM, err := os.ReadFile(certPath)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	keyPEM, err := os.ReadFile(keyPath)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	if passphrase != "" {
-		decrypted, err := decryptPEMKey(keyPEM, []byte(passphrase))
-		if err != nil {
-			return tls.Certificate{}, err
-		}
-		keyPEM = decrypted
-	}
-	return tls.X509KeyPair(certPEM, keyPEM)
-}
-
-func decryptPEMKey(keyPEM, passphrase []byte) ([]byte, error) {
-	var out []byte
-	rest := keyPEM
-	decryptedAny := false
-	for {
-		block, next := pem.Decode(rest)
-		if block == nil {
-			out = append(out, rest...)
-			break
-		}
-		if x509.IsEncryptedPEMBlock(block) {
-			der, err := x509.DecryptPEMBlock(block, passphrase)
-			if err != nil {
-				return nil, err
-			}
-			block = &pem.Block{Type: block.Type, Bytes: der}
-			decryptedAny = true
-		}
-		out = append(out, pem.EncodeToMemory(block)...)
-		rest = next
-	}
-	if !decryptedAny {
-		return keyPEM, nil
-	}
-	return out, nil
 }
 
 func shutdownServers(paths Paths, servers []runningServer) error {
@@ -488,13 +369,59 @@ func (s *server) withCommonHeaders(next http.Handler) http.Handler {
 
 func (s *server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(s.cfg.WUIUsers) == 0 {
+		s.configMu.Lock()
+		legacyUsers := append([]string(nil), s.cfg.WUIUsers...)
+		accounts := append([]config.WebUser(nil), s.cfg.WUIAccounts...)
+		s.configMu.Unlock()
+		if len(legacyUsers) == 0 && len(accounts) == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}
-		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Basic ")
-		decoded, err := base64.StdEncoding.DecodeString(auth)
-		if err != nil || !stringIn(s.cfg.WUIUsers, string(decoded)) {
+		valid := false
+		if len(accounts) > 0 {
+			authorization := r.Header.Get("Authorization")
+			cacheKey := sha256.Sum256([]byte(authorization))
+			s.authMu.Lock()
+			expires, cached := s.authCache[cacheKey]
+			if cached && time.Now().Before(expires) {
+				valid = true
+			} else if cached {
+				delete(s.authCache, cacheKey)
+			}
+			s.authMu.Unlock()
+			username, password, ok := r.BasicAuth()
+			if ok && !valid {
+				select {
+				case s.authWorkers <- struct{}{}:
+				case <-r.Context().Done():
+					return
+				}
+				s.authMu.Lock()
+				expires, cached = s.authCache[cacheKey]
+				valid = cached && time.Now().Before(expires)
+				s.authMu.Unlock()
+				if !valid {
+					for _, account := range accounts {
+						if account.Username == username && passwordauth.VerifyPassword(account.PasswordHash, password) {
+							valid = true
+							s.authMu.Lock()
+							if len(s.authCache) >= 256 {
+								s.authCache = make(map[[sha256.Size]byte]time.Time)
+							}
+							s.authCache[cacheKey] = time.Now().Add(5 * time.Minute)
+							s.authMu.Unlock()
+							break
+						}
+					}
+				}
+				<-s.authWorkers
+			}
+		} else {
+			authHeader := strings.TrimPrefix(r.Header.Get("Authorization"), "Basic ")
+			decoded, err := base64.StdEncoding.DecodeString(authHeader)
+			valid = err == nil && stringIn(legacyUsers, string(decoded))
+		}
+		if !valid {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Authentication."`)
 			legacyHTTPError(w, r, http.StatusUnauthorized)
 			return
@@ -577,11 +504,6 @@ func legacyLogMethod(r *http.Request) string {
 
 func (s *server) remoteAddress(r *http.Request) string {
 	remote := r.RemoteAddr
-	if s.cfg.WUIXFF {
-		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			remote = strings.TrimSpace(strings.Split(forwarded, ",")[0])
-		}
-	}
 	if host, _, err := net.SplitHostPort(remote); err == nil {
 		remote = host
 	}
@@ -790,13 +712,25 @@ type socketWatchFile struct {
 
 func (h *socketHub) watchFilesLocked() []socketWatchFile {
 	s := h.server
+	rulesPath := s.paths.Rules
+	reservesPath := s.paths.Reserves
+	schedulePath := s.paths.Schedule
+	recordingPath := s.paths.Recording
+	recordedPath := s.paths.Recorded
+	if s.paths.Database != "" {
+		rulesPath = s.paths.Database
+		reservesPath = s.paths.Database
+		schedulePath = s.paths.Database
+		recordingPath = s.paths.Database
+		recordedPath = s.paths.Database
+	}
 	return []socketWatchFile{
 		{event: "notify-config", path: s.paths.Config},
-		{event: "notify-rules", path: s.paths.Rules},
-		{event: "notify-schedule", path: s.paths.Schedule},
-		{event: "notify-reserves", path: s.paths.Reserves},
-		{event: "notify-recording", path: s.paths.Recording},
-		{event: "notify-recorded", path: s.paths.Recorded},
+		{event: "notify-rules", path: rulesPath},
+		{event: "notify-schedule", path: schedulePath},
+		{event: "notify-reserves", path: reservesPath},
+		{event: "notify-recording", path: recordingPath},
+		{event: "notify-recorded", path: recordedPath},
 	}
 }
 
@@ -1201,7 +1135,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
-		s.handleJSONFile(w, r, s.paths.Reserves, "[]")
+		s.handleReservations(w, r)
 	case len(parts) >= 2 && parts[0] == "reserves":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -1211,7 +1145,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
-		s.handleJSONFile(w, r, s.paths.Recording, "[]")
+		s.handleProgramCollection(w, r, s.paths.Recording)
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "preview":
 		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
 			return
@@ -1295,19 +1229,67 @@ func (s *server) handleJSONFile(w http.ResponseWriter, r *http.Request, path, em
 	writeCompactJSON(w, http.StatusOK, v)
 }
 
+func (s *server) handleReservations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	reservations, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writeCompactJSON(w, http.StatusOK, reservations)
+}
+
+func (s *server) handleProgramCollection(w http.ResponseWriter, r *http.Request, path string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	programs, err := s.readPrograms(r.Context(), path)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writeCompactJSON(w, http.StatusOK, programs)
+}
+
+func (s *server) readPrograms(ctx context.Context, path string) ([]legacy.Program, error) {
+	collection := programstore.Recorded
+	if path == s.paths.Recording {
+		collection = programstore.Recording
+	}
+	return programstore.Read(ctx, s.paths.Database, path, collection)
+}
+
+func (s *server) writePrograms(ctx context.Context, path string, programs []legacy.Program) error {
+	collection := programstore.Recorded
+	if path == s.paths.Recording {
+		collection = programstore.Recording
+	}
+	return programstore.Write(ctx, s.paths.Database, path, collection, programs)
+}
+
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	info, err := os.Stat(s.paths.Schedule)
+	schedulePath := s.paths.Schedule
+	if s.paths.Database != "" {
+		schedulePath = s.paths.Database
+	}
+	info, err := os.Stat(schedulePath)
 	if err != nil && !os.IsNotExist(err) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	var schedule []legacy.ChannelSchedule
-	if err := storage.ReadJSON(s.paths.Schedule, &schedule, "[]"); err != nil {
+	schedule, readErr := schedulestore.Read(r.Context(), s.paths.Database, s.paths.Schedule)
+	if readErr != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1366,7 +1348,8 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	if _, err := os.Stat(s.paths.Config); err != nil {
+	data, err := os.ReadFile(s.paths.Config)
+	if err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
 			return
@@ -1374,7 +1357,12 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
+	strataConfig := isStrataConfig(data)
 	if r.Method == http.MethodPut {
+		if strataConfig {
+			s.updateStrataConfig(w, r, data)
+			return
+		}
 		raw := r.URL.Query().Get("json")
 		if raw == "" {
 			legacyHTTPError(w, r, http.StatusBadRequest)
@@ -1395,15 +1383,158 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	data, err := os.ReadFile(s.paths.Config)
-	if err != nil {
-		legacyHTTPError(w, r, http.StatusInternalServerError)
-		return
+	if strataConfig {
+		data, err = publicStrataConfig(data)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(data)
 	}
+}
+
+func isStrataConfig(data []byte) bool {
+	var marker struct {
+		Schema string `json:"schema"`
+	}
+	return json.Unmarshal(data, &marker) == nil && marker.Schema == config.StrataSchema
+}
+
+func publicStrataConfig(data []byte) ([]byte, error) {
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, err
+	}
+	web, _ := document["web"].(map[string]any)
+	authentication, _ := web["authentication"].(map[string]any)
+	users, _ := authentication["users"].([]any)
+	for _, value := range users {
+		user, _ := value.(map[string]any)
+		if _, configured := user["passwordHash"]; configured {
+			delete(user, "passwordHash")
+			user["passwordConfigured"] = true
+		}
+	}
+	return json.MarshalIndent(document, "", "  ")
+}
+
+type strataConfigUpdate struct {
+	Schema       string                      `json:"schema"`
+	Version      int                         `json:"version"`
+	Mirakurun    config.MirakurunSettings    `json:"mirakurun"`
+	Recording    config.RecordingSettings    `json:"recording"`
+	PreviewCache config.PreviewCacheSettings `json:"previewCache"`
+	Web          struct {
+		ListenAddress  string `json:"listenAddress"`
+		Port           int    `json:"port"`
+		Authentication struct {
+			Enabled bool `json:"enabled"`
+			Users   []struct {
+				Username           string `json:"username"`
+				Password           string `json:"password"`
+				PasswordConfigured bool   `json:"passwordConfigured"`
+			} `json:"users"`
+		} `json:"authentication"`
+	} `json:"web"`
+	Services config.ServiceSettings  `json:"services"`
+	Advanced config.AdvancedSettings `json:"advanced"`
+}
+
+func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, currentData []byte) {
+	var raw []byte
+	if query := r.URL.Query().Get("json"); query != "" {
+		raw = []byte(query)
+	} else {
+		var err error
+		raw, err = io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+	}
+	var update strataConfigUpdate
+	if len(raw) == 0 || json.Unmarshal(raw, &update) != nil {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	current, err := config.ParseDocument(currentData)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	if update.Schema != config.StrataSchema || update.Version != current.Version {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	existing := make(map[string]string, len(current.Web.Authentication.Users))
+	for _, user := range current.Web.Authentication.Users {
+		existing[user.Username] = user.PasswordHash
+	}
+	users := make([]config.WebUser, 0, len(update.Web.Authentication.Users))
+	seen := make(map[string]bool, len(update.Web.Authentication.Users))
+	for _, user := range update.Web.Authentication.Users {
+		if user.Username == "" || seen[user.Username] {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		seen[user.Username] = true
+		hash := existing[user.Username]
+		if user.Password != "" {
+			hash, err = passwordauth.HashPassword(user.Password)
+			if err != nil {
+				legacyHTTPError(w, r, http.StatusBadRequest)
+				return
+			}
+		}
+		if hash == "" {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		users = append(users, config.WebUser{Username: user.Username, PasswordHash: hash})
+	}
+	doc := config.Document{
+		Schema: update.Schema, Version: update.Version, Mirakurun: update.Mirakurun,
+		Recording: update.Recording, PreviewCache: update.PreviewCache, Services: update.Services, Advanced: update.Advanced,
+		Web: config.WebSettings{
+			ListenAddress: update.Web.ListenAddress, Port: update.Web.Port,
+			Authentication: config.AuthenticationSettings{Enabled: update.Web.Authentication.Enabled, Users: users},
+		},
+	}
+	encoded, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	if _, err := config.ParseDocument(encoded); err != nil {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	loaded, err := config.Parse(encoded)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	if err := storage.WriteFileAtomic(s.paths.Config, encoded); err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	*s.cfg = *loaded
+	s.authMu.Lock()
+	s.authCache = make(map[[sha256.Size]byte]time.Time)
+	s.authMu.Unlock()
+	public, err := publicStrataConfig(encoded)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(public)
 }
 
 func (s *server) handleSchedulePrograms(w http.ResponseWriter, r *http.Request) {
@@ -1533,8 +1664,8 @@ func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) storageUsage() (int64, system.DiskUsage, error) {
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := s.readPrograms(context.Background(), s.paths.Recorded)
+	if err != nil {
 		return 0, system.DiskUsage{}, err
 	}
 	var recordedSize int64
@@ -1723,6 +1854,7 @@ func (s *server) runScheduler(ctx context.Context, simulation bool) error {
 	}
 	_, err := scheduler.Run(ctx, scheduler.Paths{
 		Config:   s.paths.Config,
+		Database: s.paths.Database,
 		Rules:    s.paths.Rules,
 		Schedule: s.paths.Schedule,
 		Reserves: s.paths.Reserves,
@@ -1790,8 +1922,8 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 }
 
 func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
-	var rules []map[string]json.RawMessage
-	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1805,8 +1937,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		normalizeRuleEnabled(rule)
-		rules = append(rules, rule)
-		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
+		if err := rulestore.Append(r.Context(), s.paths.Database, s.paths.Rules, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1823,8 +1954,8 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	var rules []map[string]json.RawMessage
-	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1842,15 +1973,13 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 			return
 		}
 		normalizeRuleEnabled(rule)
-		rules[index] = rule
-		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
+		if _, err := rulestore.Update(r.Context(), s.paths.Database, s.paths.Rules, index, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, rule)
 	case http.MethodDelete:
-		rules = append(rules[:index], rules[index+1:]...)
-		if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
+		if _, err := rulestore.Delete(r.Context(), s.paths.Database, s.paths.Rules, index); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1872,8 +2001,8 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	var rules []map[string]json.RawMessage
-	if err := storage.ReadJSON(s.paths.Rules, &rules, "[]"); err != nil {
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1890,7 +2019,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	if err := storage.WriteJSONAtomic(s.paths.Rules, rules, true); err != nil {
+	if _, err := rulestore.Update(r.Context(), s.paths.Database, s.paths.Rules, index, rules[index]); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1903,8 +2032,8 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1930,12 +2059,13 @@ type recordedCleanupItem struct {
 }
 
 type recordedCleanupResult struct {
-	Total    int                   `json:"total"`
-	Removed  int                   `json:"removed"`
-	Kept     int                   `json:"kept"`
-	Backup   string                `json:"backup,omitempty"`
-	Items    []recordedCleanupItem `json:"items"`
-	Recorded []legacy.Program      `json:"-"`
+	Total      int                   `json:"total"`
+	Removed    int                   `json:"removed"`
+	Kept       int                   `json:"kept"`
+	Backup     string                `json:"backup,omitempty"`
+	Items      []recordedCleanupItem `json:"items"`
+	Recorded   []legacy.Program      `json:"-"`
+	removedIDs []string
 }
 
 func (s *server) handleRecordedCleanup(w http.ResponseWriter, r *http.Request) {
@@ -1944,8 +2074,8 @@ func (s *server) handleRecordedCleanup(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1972,24 +2102,37 @@ func (s *server) runRecordedCleanup(recorded []legacy.Program, apply bool) (reco
 		if program.Recorded == "" {
 			item.Action = "remove"
 			result.Removed++
+			result.removedIDs = append(result.removedIDs, program.ID)
 		} else if _, err := os.Stat(filepath.FromSlash(program.Recorded)); err == nil {
 			kept = append(kept, program)
 			result.Kept++
 		} else {
 			item.Action = "remove"
 			result.Removed++
+			result.removedIDs = append(result.removedIDs, program.ID)
 		}
 		result.Items = append(result.Items, item)
 	}
 	result.Recorded = kept
 	if apply && result.Removed > 0 {
-		backup, err := storage.BackupFile(s.paths.Recorded)
-		if err != nil {
-			return result, err
+		if s.paths.Database == "" {
+			backup, err := storage.BackupFile(s.paths.Recorded)
+			if err != nil {
+				return result, err
+			}
+			result.Backup = backup
 		}
-		result.Backup = backup
-		if err := storage.WriteJSONAtomic(s.paths.Recorded, kept, false); err != nil {
-			return result, err
+		if s.paths.Database == "" {
+			if err := s.writePrograms(context.Background(), s.paths.Recorded, kept); err != nil {
+				return result, err
+			}
+		} else {
+			for _, id := range result.removedIDs {
+				if err := programstore.Remove(context.Background(), s.paths.Database, s.paths.Recorded, programstore.Recorded, id); err != nil {
+					return result, err
+				}
+				s.removeProgramPreviewCache(context.Background(), id)
+			}
 		}
 	}
 	return result, nil
@@ -2001,8 +2144,8 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	if len(parts) > 1 {
 		action = parts[1]
 	}
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
+	reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2019,8 +2162,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			legacyHTTPError(w, r, http.StatusConflict)
 			return
 		}
-		reserves = removeProgram(reserves, id)
-		if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
+		if _, err := reservationstore.Delete(r.Context(), s.paths.Database, s.paths.Reserves, id); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -2034,7 +2176,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			legacyHTTPError(w, r, http.StatusNotFound)
 			return
 		}
-		if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
+		if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, reserves[index]); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -2047,8 +2189,8 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 
 func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	var recording []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recording, &recording, "[]"); err != nil {
+	recording, err := s.readPrograms(r.Context(), s.paths.Recording)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2062,21 +2204,21 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 		writePrettyJSON(w, http.StatusOK, recording[index])
 	case http.MethodDelete:
 		if !recording[index].IsManualReserved {
-			var reserves []legacy.Program
-			if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
+			reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+			if err != nil {
 				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
 			}
 			if reserveIndex := findProgram(reserves, id); reserveIndex != -1 {
 				reserves[reserveIndex].IsSkip = true
-				if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
+				if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, reserves[reserveIndex]); err != nil {
 					legacyHTTPError(w, r, http.StatusInternalServerError)
 					return
 				}
 			}
 		}
 		recording[index].Abort = true
-		if err := storage.WriteJSONAtomic(s.paths.Recording, recording, false); err != nil {
+		if err := programstore.Upsert(r.Context(), s.paths.Database, s.paths.Recording, programstore.Recording, recording[index]); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -2089,8 +2231,8 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 
 func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2106,15 +2248,17 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 		if recorded[index].Recorded != "" {
 			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
 		}
-		if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
+		if s.paths.Database == "" {
+			if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
+				legacyHTTPError(w, r, http.StatusInternalServerError)
+				return
+			}
+		}
+		if err := programstore.Remove(r.Context(), s.paths.Database, s.paths.Recorded, programstore.Recorded, id); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		recorded = removeProgram(recorded, id)
-		if err := storage.WriteJSONAtomic(s.paths.Recorded, recorded, false); err != nil {
-			legacyHTTPError(w, r, http.StatusInternalServerError)
-			return
-		}
+		s.removeProgramPreviewCache(r.Context(), id)
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
@@ -2123,8 +2267,8 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 }
 
 func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
-	var recorded []legacy.Program
-	if err := storage.ReadJSON(s.paths.Recorded, &recorded, "[]"); err != nil {
+	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2187,8 +2331,8 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	var programs []legacy.Program
-	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+	programs, err := s.readPrograms(r.Context(), path)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2694,8 +2838,8 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
 	}
-	var programs []legacy.Program
-	if err := storage.ReadJSON(path, &programs, "[]"); err != nil {
+	programs, err := s.readPrograms(r.Context(), path)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2718,7 +2862,8 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	filePath := filepath.FromSlash(program.Recorded)
-	if _, err := os.Stat(filePath); err != nil {
+	info, err := os.Stat(filePath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
 			return
@@ -2732,14 +2877,31 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	if r.URL.Query().Get("type") == "png" || apiType == "png" {
 		codec = "png"
 	}
+	recording := path == s.paths.Recording
+	cacheKey := previewCacheKey(id, width, height, codec, previewPosition(r))
+	if !recording && s.paths.Database != "" {
+		if output, ok := s.readPreviewCache(r.Context(), cacheKey, filePath, info); ok {
+			s.writePreviewResponse(w, apiType, codec, output)
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	output, err := s.runProgramPreview(ctx, path == s.paths.Recording, filePath, width, height, codec, r)
+	output, err := s.runProgramPreview(ctx, recording, filePath, width, height, codec, r)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
+	if !recording && s.paths.Database != "" {
+		if err := s.storePreviewCache(r.Context(), cacheKey, id, filePath, info, codec, output); err != nil {
+			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[preview-cache] %v", err)
+		}
+	}
+	s.writePreviewResponse(w, apiType, codec, output)
+}
+
+func (s *server) writePreviewResponse(w http.ResponseWriter, apiType, codec string, output []byte) {
 	switch apiType {
 	case "png":
 		w.Header().Set("Content-Type", "image/png")
@@ -2759,6 +2921,166 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	_, _ = w.Write(output)
+}
+
+func previewCacheKey(programID, width, height, codec, position string) string {
+	value := sha256.Sum256([]byte(strings.Join([]string{programID, width, height, codec, position}, "\x00")))
+	return hex.EncodeToString(value[:])
+}
+
+func (s *server) previewCacheDir() string {
+	return filepath.Join(filepath.Dir(s.paths.Database), ".cache", "previews")
+}
+
+func (s *server) cleanupPreviewCache(ctx context.Context) {
+	if s.paths.Database == "" {
+		return
+	}
+	entries, err := os.ReadDir(s.previewCacheDir())
+	if err != nil && !os.IsNotExist(err) {
+		return
+	}
+	ctx = database.WithHandle(ctx, s.db)
+	db, release, err := database.Acquire(ctx, s.paths.Database)
+	if err != nil {
+		return
+	}
+	defer release()
+	referenced, err := database.ListPreviewCacheFiles(ctx, db)
+	if err != nil {
+		return
+	}
+	existing := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			existing[entry.Name()] = struct{}{}
+		}
+	}
+	_, _ = database.RemoveMissingPreviewCacheFiles(ctx, db, existing)
+	cacheEntries, _ := database.ListPreviewCacheEntries(ctx, db)
+	removed := s.previewCacheRetention(cacheEntries, entries, time.Now())
+	cacheKeys := make([]string, 0, len(removed))
+	for _, entry := range removed {
+		cacheKeys = append(cacheKeys, entry.CacheKey)
+	}
+	_ = database.DeletePreviewCacheEntries(ctx, db, cacheKeys)
+	for _, entry := range removed {
+		if filepath.Base(entry.FileName) == entry.FileName {
+			_ = os.Remove(filepath.Join(s.previewCacheDir(), entry.FileName))
+		}
+	}
+	for _, entry := range entries {
+		extension := strings.ToLower(filepath.Ext(entry.Name()))
+		if entry.IsDir() || (extension != ".jpg" && extension != ".png") {
+			continue
+		}
+		if _, ok := referenced[entry.Name()]; !ok {
+			_ = os.Remove(filepath.Join(s.previewCacheDir(), entry.Name()))
+		}
+	}
+}
+
+func (s *server) previewCacheRetention(cacheEntries []database.PreviewCacheEntry, files []os.DirEntry, now time.Time) []database.PreviewCacheEntry {
+	if s.cfg.PreviewCacheMaxAgeDays == 0 && s.cfg.PreviewCacheMaxSizeMB == 0 {
+		return nil
+	}
+	sizes := make(map[string]int64, len(files))
+	var total int64
+	for _, file := range files {
+		info, err := file.Info()
+		if err == nil && !file.IsDir() {
+			sizes[file.Name()] = info.Size()
+			total += info.Size()
+		}
+	}
+	maxSize := int64(s.cfg.PreviewCacheMaxSizeMB) * 1024 * 1024
+	cutoff := now.AddDate(0, 0, -s.cfg.PreviewCacheMaxAgeDays)
+	removed := make([]database.PreviewCacheEntry, 0)
+	for _, entry := range cacheEntries {
+		accessed, err := time.Parse("2006-01-02T15:04:05.000Z", entry.AccessedAt)
+		expired := s.cfg.PreviewCacheMaxAgeDays > 0 && err == nil && accessed.Before(cutoff)
+		overSize := maxSize > 0 && total > maxSize
+		if !expired && !overSize {
+			continue
+		}
+		removed = append(removed, entry)
+		total -= sizes[entry.FileName]
+	}
+	return removed
+}
+
+func (s *server) removeProgramPreviewCache(ctx context.Context, programID string) {
+	if s.paths.Database == "" {
+		return
+	}
+	db, release, err := database.Acquire(ctx, s.paths.Database)
+	if err != nil {
+		return
+	}
+	defer release()
+	files, err := database.RemovePreviewCacheForProgram(ctx, db, programID)
+	if err != nil {
+		return
+	}
+	for _, fileName := range files {
+		if filepath.Base(fileName) == fileName {
+			_ = os.Remove(filepath.Join(s.previewCacheDir(), fileName))
+		}
+	}
+}
+
+func (s *server) readPreviewCache(ctx context.Context, cacheKey, sourcePath string, info os.FileInfo) ([]byte, bool) {
+	db, release, err := database.Acquire(ctx, s.paths.Database)
+	if err != nil {
+		return nil, false
+	}
+	defer release()
+	entry, found, err := database.FindPreviewCache(ctx, db, cacheKey)
+	if err != nil || !found || entry.SourcePath != sourcePath || entry.SourceSize != info.Size() || entry.SourceMTime != info.ModTime().UnixNano() || filepath.Base(entry.FileName) != entry.FileName {
+		return nil, false
+	}
+	data, err := os.ReadFile(filepath.Join(s.previewCacheDir(), entry.FileName))
+	if err != nil {
+		_ = database.DeletePreviewCache(ctx, db, cacheKey)
+	}
+	return data, err == nil
+}
+
+func (s *server) storePreviewCache(ctx context.Context, cacheKey, programID, sourcePath string, info os.FileInfo, codec string, output []byte) error {
+	if err := os.MkdirAll(s.previewCacheDir(), 0o755); err != nil {
+		return err
+	}
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return err
+	}
+	extension := ".jpg"
+	if codec == "png" {
+		extension = ".png"
+	}
+	fileName := hex.EncodeToString(random) + extension
+	cachePath := filepath.Join(s.previewCacheDir(), fileName)
+	if err := storage.WriteFileAtomic(cachePath, output); err != nil {
+		return err
+	}
+	db, release, err := database.Acquire(ctx, s.paths.Database)
+	if err != nil {
+		_ = os.Remove(cachePath)
+		return err
+	}
+	defer release()
+	previous, err := database.StorePreviewCache(ctx, db, database.PreviewCacheEntry{
+		CacheKey: cacheKey, ProgramID: programID, SourcePath: sourcePath,
+		SourceSize: info.Size(), SourceMTime: info.ModTime().UnixNano(), FileName: fileName,
+	})
+	if err != nil {
+		_ = os.Remove(cachePath)
+		return err
+	}
+	if previous != "" && previous != fileName && filepath.Base(previous) == previous {
+		_ = os.Remove(filepath.Join(s.previewCacheDir(), previous))
+	}
+	return nil
 }
 
 func (s *server) runProgramPreview(ctx context.Context, recording bool, filePath, width, height, codec string, r *http.Request) ([]byte, error) {
@@ -2885,8 +3207,8 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 }
 
 func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program legacy.Program) {
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(s.paths.Reserves, &reserves, "[]"); err != nil {
+	reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -2896,9 +3218,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	}
 	program.IsManualReserved = true
 	program.OneSeg = r.URL.Query().Get("mode") == "1seg"
-	reserves = append(reserves, program)
-	sort.SliceStable(reserves, func(i, j int) bool { return reserves[i].Start < reserves[j].Start })
-	if err := storage.WriteJSONAtomic(s.paths.Reserves, reserves, false); err != nil {
+	if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, program); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -3029,13 +3349,13 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 }
 
 func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
-	args := watchFFmpegArgs(r, s.cfg, format, live)
+	args := watchFFmpegArgs(r, format, live)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status)
 }
 
 func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
-	args := watchFFmpegFileArgs(r, s.cfg, format, filePath)
+	args := watchFFmpegFileArgs(r, format, filePath)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK)
 }
@@ -3061,15 +3381,15 @@ func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, outp
 	}
 }
 
-func watchFFmpegArgs(r *http.Request, cfg *config.Config, format string, live bool) []string {
-	return watchFFmpegArgsForInput(r, cfg, format, live, "pipe:0", false)
+func watchFFmpegArgs(r *http.Request, format string, live bool) []string {
+	return watchFFmpegArgsForInput(r, format, live, "pipe:0", false)
 }
 
-func watchFFmpegFileArgs(r *http.Request, cfg *config.Config, format string, filePath string) []string {
-	return watchFFmpegArgsForInput(r, cfg, format, false, filePath, true)
+func watchFFmpegFileArgs(r *http.Request, format string, filePath string) []string {
+	return watchFFmpegArgsForInput(r, format, false, filePath, true)
 }
 
-func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string, live bool, input string, seekBeforeInput bool) []string {
+func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
 	q := r.URL.Query()
 	videoCodec := q.Get("c:v")
 	audioCodec := q.Get("c:a")
@@ -3101,13 +3421,6 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 	if !q.Has("debug") {
 		args = append(args, "-v", "error")
 	}
-	if cfg.VAAPIEnabled {
-		device := cfg.VAAPIDevice
-		if device == "" {
-			device = "/dev/dri/renderD128"
-		}
-		args = append(args, "-vaapi_device", device, "-hwaccel", "vaapi", "-hwaccel_output_format", "yuv420p")
-	}
 	if live {
 		args = append(args, "-re")
 	}
@@ -3127,25 +3440,7 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 	if format == "mp4" {
 		args = append(args, "-map", "0:v:0", "-map", watchAudioMap(q.Get("audio")), "-sn", "-dn")
 	}
-	if cfg.VAAPIEnabled {
-		filter := "format=nv12|vaapi,hwupload,deinterlace_vaapi"
-		if size := q.Get("s"); size != "" {
-			if parts := strings.Split(size, "x"); len(parts) == 2 {
-				filter += ",scale_vaapi=w=" + parts[0] + ":h=" + parts[1]
-			}
-		}
-		args = append(args, "-vf", filter, "-aspect", "16:9")
-	} else {
-		args = append(args, "-filter:v", "yadif")
-	}
-	if cfg.VAAPIEnabled {
-		if videoCodec == "mpeg2video" {
-			videoCodec = "mpeg2_vaapi"
-		}
-		if videoCodec == "h264" || videoCodec == "libx264" {
-			videoCodec = "h264_vaapi"
-		}
-	}
+	args = append(args, "-filter:v", "yadif")
 	if videoCodec != "" {
 		args = append(args, "-c:v", videoCodec)
 	}
@@ -3155,7 +3450,7 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 			args = append(args, "-ac", "2")
 		}
 	}
-	if size := q.Get("s"); size != "" && !cfg.VAAPIEnabled {
+	if size := q.Get("s"); size != "" {
 		args = append(args, "-s", size)
 	}
 	for _, key := range []string{"r", "ar"} {
@@ -3177,9 +3472,6 @@ func watchFFmpegArgsForInput(r *http.Request, cfg *config.Config, format string,
 	}
 	if videoCodec == "libx264" {
 		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
-	}
-	if videoCodec == "h264_vaapi" {
-		args = append(args, "-profile", "77", "-level", "41")
 	}
 	if container == "mp4" {
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
@@ -3245,9 +3537,7 @@ func logDir(paths Paths) string {
 }
 
 func (s *server) readSchedule() ([]legacy.ChannelSchedule, error) {
-	var schedules []legacy.ChannelSchedule
-	err := storage.ReadJSON(s.paths.Schedule, &schedules, "[]")
-	return schedules, err
+	return schedulestore.Read(context.Background(), s.paths.Database, s.paths.Schedule)
 }
 
 func (s *server) findScheduleChannel(id string) (*legacy.ChannelSchedule, error) {

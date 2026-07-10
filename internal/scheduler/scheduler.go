@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -13,10 +12,13 @@ import (
 	"time"
 
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
-	"strata-pvr/internal/storage"
+	"strata-pvr/internal/reservationstore"
+	"strata-pvr/internal/rulestore"
+	"strata-pvr/internal/schedulestore"
 )
 
 type Source interface {
@@ -27,6 +29,7 @@ type Source interface {
 
 type Paths struct {
 	Config   string
+	Database string
 	Rules    string
 	Schedule string
 	Reserves string
@@ -59,6 +62,14 @@ func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
 		return Result{}, err
 	}
 	client.UserAgent = mirakurun.StrataUserAgent("scheduler")
+	if paths.Database != "" {
+		db, err := database.Open(ctx, paths.Database)
+		if err != nil {
+			return Result{}, err
+		}
+		defer db.Close()
+		ctx = database.WithHandle(ctx, db)
+	}
 	return RunWithSource(ctx, paths, cfg, client, simulation, time.Now())
 }
 
@@ -81,11 +92,6 @@ func removePIDFile(path string) {
 func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
 	if err := logging.AppendLine(paths.Log, "RUNNING SCHEDULER."); err != nil {
 		return Result{}, err
-	}
-	if !simulation {
-		if err := runHook(ctx, paths.Log, cfg.EPGStartCommand, schedulerHookArgs(paths)); err != nil {
-			return Result{}, err
-		}
 	}
 	if err := logging.AppendLine(paths.Log, "GETTING EPG from Mirakurun."); err != nil {
 		return Result{}, err
@@ -124,29 +130,18 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	if err := logging.AppendLine(paths.Log, "Mirakurun -> tuners: %d", len(tuners)); err != nil {
 		return Result{}, err
 	}
-	if !simulation {
-		if err := runHookAsync(ctx, paths.Log, cfg.EPGEndCommand, schedulerHookArgs(paths)); err != nil {
-			return Result{}, err
-		}
-	}
 
 	schedule := BuildSchedule(cfg, services, programs)
 	if err := logDuplicateIDs(paths.Log, schedule); err != nil {
 		return Result{}, err
 	}
 
-	if !simulation {
-		if err := runHook(ctx, paths.Log, cfg.SchedulerStartCommand, schedulerHookArgs(paths)); err != nil {
-			return Result{}, err
-		}
-	}
-
-	var rules []legacy.Rule
-	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {
+	rules, err := rulestore.Read(ctx, paths.Database, paths.Rules)
+	if err != nil {
 		return Result{}, err
 	}
-	var oldReserves []legacy.Program
-	if err := storage.ReadJSON(paths.Reserves, &oldReserves, "[]"); err != nil {
+	oldReserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves)
+	if err != nil {
 		return Result{}, err
 	}
 	if err := logging.AppendLine(paths.Log, "TUNERS: %s", tunerTypesJSON(tuners)); err != nil {
@@ -171,21 +166,6 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 			if err := logging.AppendLine(paths.Log, "!CONFLICT: %s %s [%s] %s", reserve.ID, startText, reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
 			}
-			payload, err := json.Marshal(reserve)
-			if err != nil {
-				return Result{}, err
-			}
-			args := []string{
-				strconv.Itoa(os.Getpid()),
-				reserve.ID,
-				startText,
-				reserve.Channel.Name,
-				reserve.Title,
-				string(payload),
-			}
-			if err := runHookAsync(ctx, paths.Log, cfg.ConflictCommand, args); err != nil {
-				return Result{}, err
-			}
 		case reserve.IsSkip:
 			if err := logging.AppendLine(paths.Log, "SKIP: %s %s [%s] %s", reserve.ID, startText, reserve.Channel.Name, reserve.Title); err != nil {
 				return Result{}, err
@@ -200,26 +180,36 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 	if !simulation {
-		if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
-			return Result{}, err
+		if paths.Database != "" {
+			scheduleDocuments, err := schedulestore.Documents(schedule)
+			if err != nil {
+				return Result{}, err
+			}
+			reservationDocuments, err := reservationstore.Documents(reserves)
+			if err != nil {
+				return Result{}, err
+			}
+			db, release, err := database.Acquire(ctx, paths.Database)
+			if err != nil {
+				return Result{}, err
+			}
+			err = database.ReplaceSchedulerState(ctx, db, scheduleDocuments, reservationDocuments)
+			release()
+			if err != nil {
+				return Result{}, err
+			}
+		} else {
+			if err := schedulestore.Write(ctx, "", paths.Schedule, schedule); err != nil {
+				return Result{}, err
+			}
+			if err := reservationstore.Write(ctx, "", paths.Reserves, reserves); err != nil {
+				return Result{}, err
+			}
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Schedule); err != nil {
 			return Result{}, err
 		}
-		if err := storage.WriteJSONAtomic(paths.Reserves, reserves, false); err != nil {
-			return Result{}, err
-		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
-			return Result{}, err
-		}
-		args := append(schedulerHookArgs(paths),
-			strconv.Itoa(result.Matches),
-			strconv.Itoa(result.Duplicates),
-			strconv.Itoa(result.Conflicts),
-			strconv.Itoa(result.Skips),
-			strconv.Itoa(result.Reserves),
-		)
-		if err := runHookAsync(ctx, paths.Log, cfg.SchedulerEndCommand, args); err != nil {
 			return Result{}, err
 		}
 	}
@@ -308,53 +298,6 @@ func serviceLogStats(cfg *config.Config, services []mirakurun.Service) (filtered
 		}
 	}
 	return len(filtered), sortedCount
-}
-
-func schedulerHookArgs(paths Paths) []string {
-	return []string{
-		strconv.Itoa(os.Getpid()),
-		paths.Rules,
-		paths.Reserves,
-		paths.Schedule,
-	}
-}
-
-func runHook(ctx context.Context, logPath, command string, args []string) error {
-	if command == "" {
-		return nil
-	}
-	cmd := exec.CommandContext(ctx, command, args...)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start hook %s: %w", command, err)
-	}
-	if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		return err
-	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("wait hook %s: %w", command, err)
-	}
-	return nil
-}
-
-func runHookAsync(ctx context.Context, logPath, command string, args []string) error {
-	if command == "" {
-		return nil
-	}
-	cmd := exec.CommandContext(ctx, command, args...)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start hook %s: %w", command, err)
-	}
-	if err := logging.AppendLine(logPath, "SPAWN: %s (pid=%d)", command, cmd.Process.Pid); err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		return err
-	}
-	go func() {
-		_ = cmd.Wait()
-	}()
-	return nil
 }
 
 func BuildReserves(schedule []legacy.ChannelSchedule, rules []legacy.Rule, oldReserves []legacy.Program, tuners []mirakurun.Tuner, now time.Time) ([]legacy.Program, Result) {

@@ -18,7 +18,7 @@ PVR 実装です。Go 製の単体バイナリとして動作し、既存の
 - オペレータによる録画実行、録画中/録画済み状態の更新
 - 既存形式の JSON 状態ファイル読み書き
 - `http`、`http+unix`、旧形式 `http://unix:` の Mirakurun URL
-- Basic 認証、公開リスナー、TLS PEM 証明書に対応した WUI/API サーバ
+- Basic 認証をON/OFFできる単一リスナーのWUI/APIサーバ
 - 録画済み/録画中/チャンネルの M2TS、MP4、XSPF、プレビュー配信
 - 旧 API 互換の予約、録画、ルール、設定、ログ、ストレージ系エンドポイント
 - Node.js や npm に依存しないネイティブ Web UI
@@ -31,11 +31,12 @@ PVR 実装です。Go 製の単体バイナリとして動作し、既存の
 
 ## 必要なもの
 
-- Go 1.22 以上
 - Mirakurun
 - MP4 再生、プレビュー、変換配信を使う場合は `ffmpeg` と `ffprobe`
 
-通常の実行に Node.js、npm、webpack は不要です。旧 Node 時代の
+配布済みバイナリの実行にGo、SQLite、Cコンパイラは不要です。ソースから
+ビルドする場合だけGo 1.25以上が必要です。通常の実行にNode.js、npm、
+webpackは不要です。旧Node時代の
 `installer`、`updater`、`test <app>`、`ircbot` 相当の自動処理は Go
 ランタイムでは意図的に実行しません。
 
@@ -55,6 +56,97 @@ go build -o strata-pvr ./cmd/strata-pvr
 ```
 
 ## 基本的な使い方
+
+新規インストールでは、最初にStrata形式の設定とSQLiteデータベースを
+初期化します。
+
+```sh
+./strata-pvr init
+```
+
+このコマンドは次のファイルを生成します。
+
+```text
+data/config.json
+data/rules.json
+data/strata.db
+```
+
+`data/config.json`は`strata/config`スキーマのバージョン付き設定です。
+`data/strata.db`はWALモードで作成され、今後の番組表、予約、録画履歴の
+Strata形式ストレージとして使用します。Strata環境のルールはSQLiteを
+正本とし、予約データもSQLiteへ保存します。CLI、WUI、スケジューラ、
+オペレータから同じリポジトリを使用します。番組表キャッシュはチャンネルと
+番組を別テーブルへ格納し、番組ID、チャンネル、放送時間で索引化します。
+WUIとオペレータはプロセス内でSQLite接続を共有し、スケジューラも1回の
+実行中は同じ接続を再利用します。
+録画中状態と録画済みライブラリのメタデータもSQLiteを正本とします。録画
+ファイル本体は従来どおり設定された録画ディレクトリに保存されます。
+`data/rules.json`は初期化・移行時の互換ファイルであり、Strata実行中の
+更新先にはなりません。`data/reserves.json`も移行時の互換コピーであり、
+Strata実行中の予約状態は`strata.db`が正本です。ルートに旧形式の`config.json`が
+存在する場合、`init`は上書きせずエラーにします。
+
+録画済みプレビューは初回生成後に`data/.cache/previews/`へUUID名で保存し、
+`previewCache.maxAgeDays`（最終参照からの日数）と`previewCache.maxSizeMB`（LRU上限）で保持量を制御できます。`0`は該当制限を無効にします。
+元ファイル、生成条件、キャッシュファイル名を`strata.db`で管理します。同じ
+条件ではFFmpegを再実行せず、元ファイルのサイズまたは更新時刻が変わると
+自動的に再生成します。録画中プレビューは最新状態を優先するためキャッシュ
+しません。
+
+### Chinachuからの移行
+
+旧環境のファイルを次の配置でコピーしてから移行します。
+
+```text
+migrate/
+  config.json
+  rules.json
+  data/
+    reserves.json
+    recording.json
+    recorded.json
+    schedule.json
+```
+
+```sh
+./strata-pvr migrate
+```
+
+`recordings.json`も`recording.json`の入力別名として受け付けます。コマンドは
+全JSONを検証し、一時領域にStrata設定、互換JSON、`strata.db`を生成してから
+`data/`へ配置します。旧ファイルは成功時にだけ`backup/chinachu-<日時>/`へ
+元の構成のまま移動され、移行レポートが`backup/`へ保存されます。既存の
+`data/`がある場合や検証に失敗した場合は移行しません。
+
+移行レポートは`strata/migration-report` version 3形式です。ルール、予約、
+番組表チャンネル、番組、録画中、録画済みの取込件数に加え、移行元の各
+ファイルについてSHA-256とバイト数を記録します。バックアップ移動後に
+再計算し、移動前と一致しない場合は移行を中止します。移行後はレポートの
+件数とCLIの一覧を照合してください。
+
+```sh
+./strata-pvr rules
+./strata-pvr reserves
+./strata-pvr recording
+./strata-pvr recorded
+```
+
+### 移行の切り戻し
+
+移行後に問題が見つかった場合は、Strataのscheduler、operator、WUIを停止して
+から切り戻します。生成された`data/`を別の場所へ退避し、
+`backup/chinachu-<日時>/`を`migrate/`へ戻してください。旧Chinachuを再開する
+場合は、バックアップ内の`config.json`、`rules.json`、`data/`を旧作業
+ディレクトリへ戻します。録画ファイル本体は移行処理の対象外なので、削除や
+移動は行われません。
+
+`strata.db`を手動でJSONへ変換して復旧する運用は推奨しません。Strata側の
+復旧では、停止中に`data/`ディレクトリ全体をバックアップから戻してください。
+SQLiteのWAL利用中に`strata.db`だけをコピーすると未反映データを失う可能性が
+あるため、稼働中の単一ファイルコピーは避けてください。
+
+### 旧互換環境
 
 `config.json`、`rules.json`、`data/` がある PVR 作業ディレクトリで
 バイナリを実行します。Strata PVR は Mirakurun の設定やチューナー設定を
@@ -176,22 +268,26 @@ WUI と operator は最初は別ターミナルで手動起動し、次のファ
 - `data/recording.json`
 - `data/recorded.json`
 
+Strata形式では状態JSONの代わりに`data/strata.db`が正本です。次の項目をCLIと
+WUIの両方で確認してください。
+
+- scheduler実行後に番組表と予約が表示される
+- 手動予約、skip、unskipが再起動後も保持される
+- 録画完了後に録画中一覧から録画済み一覧へ移動する
+- `cleanup`で存在しない録画ファイルの行と関連プレビューが削除される
+- `data/.cache/previews/`の録画済みプレビューが再利用される
+
 問題がないことを確認してから、生成した init script や互換ラッパーを
 導入してください。
 
 ## 設定上の注意
 
-- `config.sample.json` の `wuiUsers` はサンプル資格情報です。公開前に必ず
-  変更してください。
-- `wuiOpenServer` は未認証の公開リスナーです。信頼できるネットワークに
-  バインドするか、不要なら無効化してください。
-- `wuiAllowCountries` の GeoIP 国フィルタ、`wuiMdnsAdvertisement` の mDNS
-  広告は Go ランタイムでは意図的に実装していません。必要な制限は
-  firewall、reverse proxy、VPN、Basic 認証で行ってください。
-- TLS は PEM の key/cert/CA を対象にしています。PFX/P12 は PEM へ変換して
-  使用してください。
-- 旧 Twitter/Tweeter 通知フィールドは読み込みと保存互換のため保持しますが、
-  旧 Twitter API が利用できないため送信機能としては扱いません。
+- StrataのWUIは単一のHTTPリスナーを使用し、Basic認証をON/OFFできます。
+- インターネットへ公開する場合はreverse proxyまたはVPNを使用し、TLS、
+  転送元IPの信頼範囲、アクセス制限をStrataの外側で管理してください。
+- 容量不足時の動作は、古い録画の削除または録画停止に限定しています。
+- 旧設定のTLS、GeoIP、mDNS、Twitter通知、外部フック、UID/GIDは移行されず、
+  `migrate`実行時に警告されます。
 
 ## ディレクトリ構成
 
