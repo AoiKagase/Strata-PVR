@@ -557,6 +557,24 @@ func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T
 	}
 }
 
+func TestNativeDashboardMutationRoutesAreExtensionless(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, legacy := range []string{
+		`encodeURIComponent(program.id) + ".json"`,
+		`(rule.isDisabled ? "enable" : "disable") + ".json"`,
+		`index + ".json"`,
+		`state.editingRuleFormIndex + ".json"`,
+	} {
+		if strings.Contains(source, legacy) {
+			t.Fatalf("web/app.js still uses removed API extension in %q", legacy)
+		}
+	}
+}
+
 func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {

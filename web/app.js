@@ -1958,7 +1958,7 @@
           var title = onAir ? "この放送中の番組を手動予約して録画開始を待つ" : "この番組を予約";
           row.appendChild(actionButton(label, title, function () {
             setBusy("Working");
-            request("program/" + encodeURIComponent(program.id) + ".json", "PUT").then(refresh).then(function () {
+            request("program/" + encodeURIComponent(program.id), "PUT").then(refresh).then(function () {
               if (onAir && !operatorAlive()) {
                 showError(new Error("オペレータが停止中です。録画を開始するには service operator execute を起動してください"));
               }
@@ -1967,7 +1967,7 @@
         }
       } else if (name === "unreserve" && program.isManualReserved && !program.isRecording) {
         row.appendChild(actionButton("予約削除", "手動予約を削除", function () {
-          runAction("reserves/" + encodeURIComponent(program.id) + ".json", "DELETE", "この手動予約を削除しますか？", actionConfirmOptions("DELETE", "この手動予約を削除しますか？", program, "予約削除の確認"));
+          runAction("reserves/" + encodeURIComponent(program.id), "DELETE", "この手動予約を削除しますか？", actionConfirmOptions("DELETE", "この手動予約を削除しますか？", program, "予約削除の確認"));
         }));
       } else if (name === "skip" && program.isReserved && !program.isManualReserved && !program.isSkip && !program.isRecording) {
         row.appendChild(actionButton("スキップ", "自動予約をスキップ", function () {
@@ -1979,7 +1979,7 @@
         }));
       } else if (name === "stop" && program.isRecording) {
         row.appendChild(actionButton("停止", "録画を停止", function () {
-          runAction("recording/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画を停止しますか？", actionConfirmOptions("DELETE", "この録画を停止しますか？", program, "録画停止の確認"));
+          runAction("recording/" + encodeURIComponent(program.id), "DELETE", "この録画を停止しますか？", actionConfirmOptions("DELETE", "この録画を停止しますか？", program, "録画停止の確認"));
         }));
       } else if (name === "watch-recording-mp4" && program.isRecording) {
         row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {
@@ -2008,7 +2008,7 @@
         }));
       } else if (name === "delete-recorded") {
         row.appendChild(actionButton("削除", "録画済み項目とファイルを削除", function () {
-          runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
+          runAction("recorded/" + encodeURIComponent(program.id), "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
         }));
       } else if (name === "watch-channel-mp4") {
         var channelID = programChannelID(program);
@@ -2052,7 +2052,7 @@
     }
     if (name === "delete-recorded") {
       return actionButton("削除", "録画済み項目とファイルを削除", function () {
-        runAction("recorded/" + encodeURIComponent(program.id) + ".json", "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
+        runAction("recorded/" + encodeURIComponent(program.id), "DELETE", "この録画済み項目とファイルを削除しますか？", actionConfirmOptions("DELETE", "この録画済み項目とファイルを削除しますか？", program, "録画済み削除の確認"));
       }, className || "small-button danger-button");
     }
     if (name === "create-rule-from-program") {
@@ -3203,13 +3203,13 @@
       var row = document.createElement("div");
       row.className = "row-actions";
       row.appendChild(actionButton(rule.isDisabled ? "有効化" : "無効化", "ルールの有効状態を切り替え", function () {
-        runAction("rules/" + index + "/" + (rule.isDisabled ? "enable" : "disable") + ".json", "PUT");
+        runAction("rules/" + index + "/" + (rule.isDisabled ? "enable" : "disable"), "PUT");
       }));
       row.appendChild(actionButton("フォーム編集", "このルールをフォームに読み込む", function () {
         fillRuleFormFromRule(rule, index);
       }));
       row.appendChild(actionButton("削除", "このルールを削除", function () {
-        runAction("rules/" + index + ".json", "DELETE", "このルールを削除しますか？", {
+        runAction("rules/" + index, "DELETE", "このルールを削除しますか？", {
           danger: true,
           meta: ruleSummary(rule),
           okLabel: "削除",
@@ -4025,7 +4025,7 @@
         return;
       }
       setBusy("処理中");
-      sendJSON("rules/" + state.editingRuleFormIndex + ".json", "PUT", rule).then(function () {
+      sendJSON("rules/" + state.editingRuleFormIndex, "PUT", rule).then(function () {
         clearRuleForm();
         state.editingRuleFormIndex = null;
         renderRuleFormState();
