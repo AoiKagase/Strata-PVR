@@ -318,18 +318,14 @@ type serverError struct {
 }
 
 func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) {
-	servers := []runningServer{}
-	if cfg.WUIPort != nil {
-		servers = append(servers, runningServer{
-			server: &http.Server{
-				Addr:              listenAddress(cfg.WUIHost, *cfg.WUIPort),
-				Handler:           newHandler(paths, cfg, cfg.WUIAuthenticationEnabled || len(cfg.WUIUsers) > 0),
-				ReadHeaderTimeout: 10 * time.Second,
-			},
-			label: "HTTP Server",
-		})
-	}
-	return servers, nil
+	return []runningServer{{
+		server: &http.Server{
+			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
+			Handler:           newHandler(paths, cfg, cfg.WUIAuthenticationEnabled),
+			ReadHeaderTimeout: 10 * time.Second,
+		},
+		label: "HTTP Server",
+	}}, nil
 }
 
 func shutdownServers(paths Paths, servers []runningServer) error {
@@ -370,56 +366,47 @@ func (s *server) withCommonHeaders(next http.Handler) http.Handler {
 func (s *server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.configMu.Lock()
-		legacyUsers := append([]string(nil), s.cfg.WUIUsers...)
 		accounts := append([]config.WebUser(nil), s.cfg.WUIAccounts...)
 		s.configMu.Unlock()
-		if len(legacyUsers) == 0 && len(accounts) == 0 {
+		if len(accounts) == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}
-		valid := false
-		if len(accounts) > 0 {
-			authorization := r.Header.Get("Authorization")
-			cacheKey := sha256.Sum256([]byte(authorization))
-			s.authMu.Lock()
-			expires, cached := s.authCache[cacheKey]
-			if cached && time.Now().Before(expires) {
-				valid = true
-			} else if cached {
-				delete(s.authCache, cacheKey)
+		authorization := r.Header.Get("Authorization")
+		cacheKey := sha256.Sum256([]byte(authorization))
+		s.authMu.Lock()
+		expires, cached := s.authCache[cacheKey]
+		valid := cached && time.Now().Before(expires)
+		if cached && !valid {
+			delete(s.authCache, cacheKey)
+		}
+		s.authMu.Unlock()
+		username, password, ok := r.BasicAuth()
+		if ok && !valid {
+			select {
+			case s.authWorkers <- struct{}{}:
+			case <-r.Context().Done():
+				return
 			}
+			s.authMu.Lock()
+			expires, cached = s.authCache[cacheKey]
+			valid = cached && time.Now().Before(expires)
 			s.authMu.Unlock()
-			username, password, ok := r.BasicAuth()
-			if ok && !valid {
-				select {
-				case s.authWorkers <- struct{}{}:
-				case <-r.Context().Done():
-					return
-				}
-				s.authMu.Lock()
-				expires, cached = s.authCache[cacheKey]
-				valid = cached && time.Now().Before(expires)
-				s.authMu.Unlock()
-				if !valid {
-					for _, account := range accounts {
-						if account.Username == username && passwordauth.VerifyPassword(account.PasswordHash, password) {
-							valid = true
-							s.authMu.Lock()
-							if len(s.authCache) >= 256 {
-								s.authCache = make(map[[sha256.Size]byte]time.Time)
-							}
-							s.authCache[cacheKey] = time.Now().Add(5 * time.Minute)
-							s.authMu.Unlock()
-							break
+			if !valid {
+				for _, account := range accounts {
+					if account.Username == username && passwordauth.VerifyPassword(account.PasswordHash, password) {
+						valid = true
+						s.authMu.Lock()
+						if len(s.authCache) >= 256 {
+							s.authCache = make(map[[sha256.Size]byte]time.Time)
 						}
+						s.authCache[cacheKey] = time.Now().Add(5 * time.Minute)
+						s.authMu.Unlock()
+						break
 					}
 				}
-				<-s.authWorkers
 			}
-		} else {
-			authHeader := strings.TrimPrefix(r.Header.Get("Authorization"), "Basic ")
-			decoded, err := base64.StdEncoding.DecodeString(authHeader)
-			valid = err == nil && stringIn(legacyUsers, string(decoded))
+			<-s.authWorkers
 		}
 		if !valid {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Authentication."`)
@@ -429,7 +416,6 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 func (s *server) withMethodOverride(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -1357,50 +1343,23 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	strataConfig := isStrataConfig(data)
-	if r.Method == http.MethodPut {
-		if strataConfig {
-			s.updateStrataConfig(w, r, data)
-			return
-		}
-		raw := r.URL.Query().Get("json")
-		if raw == "" {
-			legacyHTTPError(w, r, http.StatusBadRequest)
-			return
-		}
-		var obj any
-		if err := json.Unmarshal([]byte(raw), &obj); err != nil {
-			legacyHTTPError(w, r, http.StatusBadRequest)
-			return
-		}
-		if err := storage.WriteFileAtomic(s.paths.Config, []byte(raw)); err != nil {
-			legacyHTTPError(w, r, http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		if r.Method != http.MethodHead {
-			_, _ = w.Write([]byte(raw))
-		}
+	if _, err := config.ParseDocument(data); err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	if strataConfig {
-		data, err = publicStrataConfig(data)
-		if err != nil {
-			legacyHTTPError(w, r, http.StatusInternalServerError)
-			return
-		}
+	if r.Method == http.MethodPut {
+		s.updateStrataConfig(w, r, data)
+		return
+	}
+	data, err = publicStrataConfig(data)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(data)
 	}
-}
-
-func isStrataConfig(data []byte) bool {
-	var marker struct {
-		Schema string `json:"schema"`
-	}
-	return json.Unmarshal(data, &marker) == nil && marker.Schema == config.StrataSchema
 }
 
 func publicStrataConfig(data []byte) ([]byte, error) {

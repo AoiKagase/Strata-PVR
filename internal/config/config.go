@@ -67,15 +67,33 @@ type AdvancedSettings struct {
 }
 
 type Config struct {
-	Strata                     bool                       `json:"-"`
+	MirakurunPath              string
+	RecordedDir                string
+	ExcludeServices            []int64
+	ServiceOrder               []int64
+	WUIAccounts                []WebUser
+	WUIAuthenticationEnabled   bool
+	WUIPort                    int
+	WUIHost                    string
+	NormalizationForm          string
+	RecordedFormat             string
+	RecordingPriority          int
+	ConflictedPriority         int
+	StorageLowSpaceThresholdMB int
+	StorageLowSpaceAction      string
+	PreviewCacheMaxAgeDays     int
+	PreviewCacheMaxSizeMB      int
+}
+
+type LegacyConfig struct {
+	UID                        any                        `json:"uid"`
+	GID                        any                        `json:"gid"`
 	MirakurunPath              string                     `json:"mirakurunPath"`
 	SchedulerMirakurunPath     string                     `json:"schedulerMirakurunPath"`
 	RecordedDir                string                     `json:"recordedDir"`
 	ExcludeServices            []int64                    `json:"excludeServices"`
 	ServiceOrder               []int64                    `json:"serviceOrder"`
 	WUIUsers                   []string                   `json:"wuiUsers"`
-	WUIAccounts                []WebUser                  `json:"-"`
-	WUIAuthenticationEnabled   bool                       `json:"-"`
 	WUIPort                    *int                       `json:"wuiPort"`
 	WUIHost                    string                     `json:"wuiHost"`
 	WUIOpenServer              bool                       `json:"wuiOpenServer"`
@@ -87,8 +105,6 @@ type Config struct {
 	ConflictedPriority         int                        `json:"conflictedPriority"`
 	StorageLowSpaceThresholdMB int                        `json:"storageLowSpaceThresholdMB"`
 	StorageLowSpaceAction      string                     `json:"storageLowSpaceAction"`
-	PreviewCacheMaxAgeDays     int                        `json:"-"`
-	PreviewCacheMaxSizeMB      int                        `json:"-"`
 	Raw                        map[string]json.RawMessage `json:"-"`
 }
 
@@ -107,28 +123,33 @@ func Parse(b []byte) (*Config, error) {
 	if err := json.Unmarshal(b, &marker); err != nil {
 		return nil, err
 	}
-	if marker.Schema != "" {
-		return loadDocument(b)
+	if marker.Schema == "" {
+		return nil, fmt.Errorf("legacy config is not a Strata runtime config; run strata-pvr migrate")
 	}
+	return loadDocument(b)
+}
+
+func LoadLegacy(path string) (*LegacyConfig, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLegacy(b)
+}
+
+func ParseLegacy(b []byte) (*LegacyConfig, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, err
 	}
-	cfg := defaultConfig()
+	if _, ok := raw["schema"]; ok {
+		return nil, fmt.Errorf("Strata config cannot be used as legacy migration input")
+	}
+	cfg := defaultLegacyConfig()
 	if err := json.Unmarshal(b, cfg); err != nil {
 		return nil, err
 	}
 	cfg.Raw = raw
-	if cfg.WUIPort != nil {
-		cfg.WUIAuthenticationEnabled = len(cfg.WUIUsers) > 0
-	} else if cfg.WUIOpenServer {
-		port := cfg.WUIOpenPort
-		if port == 0 {
-			port = 20772
-		}
-		cfg.WUIHost = cfg.WUIOpenHost
-		cfg.WUIPort = &port
-	}
 	return cfg, nil
 }
 
@@ -167,7 +188,6 @@ func loadDocument(b []byte) (*Config, error) {
 		return nil, fmt.Errorf("recording.lowSpace.action must be remove or stop")
 	}
 	cfg := defaultConfig()
-	cfg.Strata = true
 	cfg.MirakurunPath = doc.Mirakurun.URL
 	cfg.RecordingPriority = doc.Mirakurun.RecordingPriority
 	cfg.ConflictedPriority = doc.Mirakurun.ConflictedPriority
@@ -176,7 +196,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.StorageLowSpaceThresholdMB = doc.Recording.LowSpace.ThresholdMB
 	cfg.StorageLowSpaceAction = doc.Recording.LowSpace.Action
 	cfg.WUIHost = doc.Web.ListenAddress
-	cfg.WUIPort = &doc.Web.Port
+	cfg.WUIPort = doc.Web.Port
 	cfg.WUIAuthenticationEnabled = doc.Web.Authentication.Enabled
 	if doc.Web.Authentication.Enabled {
 		if len(doc.Web.Authentication.Users) == 0 {
@@ -218,6 +238,24 @@ func DefaultDocument() Document {
 
 func defaultConfig() *Config {
 	return &Config{
+		MirakurunPath:              "http://127.0.0.1:40772",
+		RecordedDir:                "./recorded/",
+		WUIHost:                    "0.0.0.0",
+		WUIPort:                    20772,
+		RecordedFormat:             "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+		RecordingPriority:          2,
+		ConflictedPriority:         1,
+		StorageLowSpaceThresholdMB: 3000,
+		StorageLowSpaceAction:      "remove",
+	}
+}
+
+func (c *Config) EffectiveMirakurunPath() string {
+	return c.MirakurunPath
+}
+
+func defaultLegacyConfig() *LegacyConfig {
+	return &LegacyConfig{
 		MirakurunPath:              "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/",
 		RecordedDir:                "./recorded/",
 		WUIHost:                    "0.0.0.0",
@@ -230,7 +268,7 @@ func defaultConfig() *Config {
 	}
 }
 
-func (c *Config) EffectiveMirakurunPath() string {
+func (c *LegacyConfig) EffectiveMirakurunPath() string {
 	if c.MirakurunPath != "" {
 		return c.MirakurunPath
 	}

@@ -146,11 +146,11 @@ migrate/
 SQLiteのWAL利用中に`strata.db`だけをコピーすると未反映データを失う可能性が
 あるため、稼働中の単一ファイルコピーは避けてください。
 
-### 旧互換環境
+### Strataの実行
 
-`config.json`、`rules.json`、`data/` がある PVR 作業ディレクトリで
-バイナリを実行します。Strata PVR は Mirakurun の設定やチューナー設定を
-置き換えません。
+新規環境では`init`、旧Chinachu環境では`migrate`を完了してから実行します。
+ルート直下の旧`config.json`や`data/*.json`を直接使用する互換モードは
+ありません。
 
 ```sh
 ./strata-pvr update
@@ -160,9 +160,9 @@ SQLiteのWAL利用中に`strata.db`だけをコピーすると未反映データ
 ./strata-pvr service wui execute
 ```
 
-`service ... execute` は、`config.json` または `rules.json` がない場合に
-同梱の `config.sample.json`、`rules.sample.json` をコピーし、`data/` と
-`log/` を作成します。
+運用コマンドは`data/config.json`と`data/strata.db`がない場合、`init`または
+`migrate`を要求して終了します。`service ... initscript`は初期化前でも生成
+できます。
 
 ## 主な CLI
 

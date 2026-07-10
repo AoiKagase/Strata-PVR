@@ -24,6 +24,48 @@ import (
 	"strata-pvr/internal/storage"
 )
 
+func TestMain(m *testing.M) {
+	resolveRuntimePaths = func() paths {
+		if _, err := os.Stat(filepath.Join("data", "config.json")); err == nil {
+			return runtimePaths()
+		}
+		return paths{
+			config: "config.json", rules: "rules.json",
+			schedule: filepath.Join("data", "schedule.json"), reserves: filepath.Join("data", "reserves.json"),
+			recording: filepath.Join("data", "recording.json"), recorded: filepath.Join("data", "recorded.json"),
+		}
+	}
+	validateRuntimePaths = func(paths) error { return nil }
+	os.Exit(m.Run())
+}
+
+func TestRequireStrataRuntimeRejectsLegacyRootConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"mirakurunPath":"http://127.0.0.1:40772"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := requireStrataRuntime(paths{
+		config:   filepath.Join(dir, "data", "config.json"),
+		database: filepath.Join(dir, "data", "strata.db"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "run strata-pvr init or migrate") {
+		t.Fatalf("unexpected runtime validation error: %v", err)
+	}
+}
+
+func TestRuntimePathsUseOnlyNativeData(t *testing.T) {
+	p := runtimePaths()
+	if p.config != filepath.Join("data", "config.json") || p.database != filepath.Join("data", "strata.db") || p.rules != filepath.Join("data", "rules.json") {
+		t.Fatalf("unexpected runtime paths: %#v", p)
+	}
+	if !isRuntimeCommand([]string{"reserves"}) || !isRuntimeCommand([]string{"service", "wui", "execute"}) {
+		t.Fatal("operational commands were not classified as runtime commands")
+	}
+	if isRuntimeCommand([]string{"service", "wui", "initscript"}) || isRuntimeCommand([]string{"compat", "check"}) {
+		t.Fatal("non-runtime commands require initialized data")
+	}
+}
+
 func TestHelp(t *testing.T) {
 	var out bytes.Buffer
 	if err := Run(context.Background(), nil, &out, &bytes.Buffer{}); err != nil {
@@ -181,6 +223,89 @@ func TestMigrateChinachuValidationFailureLeavesInputUntouched(t *testing.T) {
 	}
 }
 
+func TestMigrateArchiveMismatchRollsBackAndCanRetry(t *testing.T) {
+	withMigrationTestDir(t)
+	writeMinimalMigrationInput(t)
+	originalInspect := inspectArchivedMigrationFiles
+	inspectArchivedMigrationFiles = func(root string) (map[string]string, map[string]int64, error) {
+		hashes, sizes, err := inspectMigrationFiles(root)
+		if err == nil {
+			hashes["config.json"] = strings.Repeat("0", 64)
+		}
+		return hashes, sizes, err
+	}
+	err := migrateChinachu(context.Background(), nil, &bytes.Buffer{})
+	inspectArchivedMigrationFiles = originalInspect
+	if err == nil || !strings.Contains(err.Error(), "source files changed") {
+		t.Fatalf("unexpected archive verification error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("migrate", "config.json")); err != nil {
+		t.Fatalf("migration input was not restored: %v", err)
+	}
+	if _, err := os.Stat("data"); !os.IsNotExist(err) {
+		t.Fatalf("failed migration installed data: %v", err)
+	}
+	if err := migrateChinachu(context.Background(), nil, &bytes.Buffer{}); err != nil {
+		t.Fatalf("migration retry failed: %v", err)
+	}
+}
+
+func TestMigrateArchiveMoveFailureLeavesInputUntouched(t *testing.T) {
+	withMigrationTestDir(t)
+	writeMinimalMigrationInput(t)
+	originalRename := renameMigrationPath
+	renameMigrationPath = func(oldPath, newPath string) error {
+		if oldPath == "migrate" {
+			return fmt.Errorf("injected archive move failure")
+		}
+		return os.Rename(oldPath, newPath)
+	}
+	err := migrateChinachu(context.Background(), nil, &bytes.Buffer{})
+	renameMigrationPath = originalRename
+	if err == nil || !strings.Contains(err.Error(), "archive migration input") {
+		t.Fatalf("unexpected archive move error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("migrate", "config.json")); err != nil {
+		t.Fatalf("migration input changed after archive failure: %v", err)
+	}
+	if _, err := os.Stat("data"); !os.IsNotExist(err) {
+		t.Fatalf("archive failure installed data: %v", err)
+	}
+}
+
+func withMigrationTestDir(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+}
+
+func writeMinimalMigrationInput(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join("migrate", "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("migrate", "config.json"):            `{"mirakurunPath":"http://127.0.0.1:40772","recordedDir":"./recorded/","recordedFormat":"<title>.m2ts","wuiOpenServer":true,"wuiOpenPort":20772}`,
+		filepath.Join("migrate", "rules.json"):             `[]`,
+		filepath.Join("migrate", "data", "reserves.json"):  `[]`,
+		filepath.Join("migrate", "data", "recording.json"): `[]`,
+		filepath.Join("migrate", "data", "recorded.json"):  `[]`,
+		filepath.Join("migrate", "data", "schedule.json"):  `[]`,
+	}
+	for path, data := range files {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestMigrateChinachuCorruptDataLeavesInputUntouched(t *testing.T) {
 	dir := t.TempDir()
 	old, err := os.Getwd()
@@ -257,7 +382,7 @@ func TestMigrateChinachuImportsLargeReservationSet(t *testing.T) {
 
 func TestConvertLegacyConfigWarnsAboutUnsupportedSettings(t *testing.T) {
 	port := 20772
-	_, warnings, err := convertLegacyConfig(&config.Config{
+	_, warnings, err := convertLegacyConfig(&config.LegacyConfig{
 		WUIPort: &port, WUIHost: "127.0.0.1", WUIOpenServer: true,
 		Raw: map[string]json.RawMessage{
 			"wuiTlsKeyPath": []byte(`"server.key"`), "wuiXFF": []byte(`true`), "wuiAllowCountries": []byte(`["JP"]`), "wuiMdnsAdvertisement": []byte(`true`), "operTweeter": []byte(`true`), "schedulerStartCommand": []byte(`"hook"`),
@@ -441,60 +566,36 @@ func TestCompatWrapperOutputsSafeLauncher(t *testing.T) {
 	}
 }
 
-func TestPrepareServiceRuntimeCopiesSamplesAndCreatesDirs(t *testing.T) {
+func TestPrepareServiceRuntimeRequiresInitialization(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("config.sample.json", []byte(`{"sample":true}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile("rules.sample.json", []byte(`[{"sample":true}]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := prepareServiceRuntime(); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{"config.json", "rules.json", "log", "data"} {
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("%s was not prepared: %v", path, err)
-		}
-	}
-	if data, _ := os.ReadFile("config.json"); string(data) != `{"sample":true}` {
-		t.Fatalf("config.json = %q", data)
-	}
-	if data, _ := os.ReadFile("rules.json"); string(data) != `[{"sample":true}]` {
-		t.Fatalf("rules.json = %q", data)
+	if err := prepareServiceRuntimeFor(runtimePaths()); err == nil || !strings.Contains(err.Error(), "init or migrate") {
+		t.Fatalf("unexpected preparation error: %v", err)
 	}
 }
 
-func TestPrepareServiceRuntimeDoesNotOverwriteExistingFiles(t *testing.T) {
+func TestPrepareServiceRuntimeCreatesRuntimeDirectories(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	for name, data := range map[string]string{
-		"config.sample.json": `{"sample":true}`,
-		"rules.sample.json":  `[{"sample":true}]`,
-		"config.json":        `{"existing":true}`,
-		"rules.json":         `[{"existing":true}]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := prepareServiceRuntime(); err != nil {
+	if err := os.MkdirAll("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile("config.json"); string(data) != `{"existing":true}` {
-		t.Fatalf("config.json was overwritten: %q", data)
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "config.json"), config.DefaultDocument(), true); err != nil {
+		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile("rules.json"); string(data) != `[{"existing":true}]` {
-		t.Fatalf("rules.json was overwritten: %q", data)
+	if err := prepareServiceRuntimeFor(runtimePaths()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat("log"); err != nil {
+		t.Fatalf("log directory was not prepared: %v", err)
 	}
 }
 
@@ -704,7 +805,7 @@ func installFakeCompatCommand(t *testing.T, dir, name string) {
 
 func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
 	port := 20772
-	cfg := &config.Config{
+	cfg := &config.LegacyConfig{
 		MirakurunPath:              "http://mirakurun.example/",
 		RecordedDir:                "recorded",
 		RecordedFormat:             "<title>.m2ts",
@@ -1828,7 +1929,9 @@ func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 	if err := os.Mkdir("data", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("config.json", []byte(`{"normalizationForm":"NFKC"}`), 0o644); err != nil {
+	doc := config.DefaultDocument()
+	doc.Advanced.NormalizationForm = "NFKC"
+	if err := storage.WriteJSONAtomic(filepath.Join("data", "config.json"), doc, true); err != nil {
 		t.Fatal(err)
 	}
 	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","category":"anime","title":"ＡＢＣ","fullTitle":"ＡＢＣ","start":1893456000000,"end":1893457800000,"seconds":1800,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
@@ -1836,7 +1939,7 @@ func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"search", "-title", "ABC"}, &out, &bytes.Buffer{}); err != nil {
+	if err := search(paths{config: filepath.Join("data", "config.json"), schedule: filepath.Join("data", "schedule.json")}, []string{"-title", "ABC"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "p1") {

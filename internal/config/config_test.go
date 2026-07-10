@@ -9,13 +9,13 @@ import (
 	"strata-pvr/internal/storage"
 )
 
-func TestLoadPreservesUnknownAndDefaults(t *testing.T) {
+func TestLoadLegacyPreservesUnknownAndDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(path, []byte(`{"recordedDir":"./rec/","vaapiEnabled":true,"vaapiDevice":"/dev/dri/renderD128","wuiAllowCountries":["JP","US"],"wuiMdnsAdvertisement":true,"operTweeter":true,"operTweeterAuth":{"consumerKey":"ck","consumerSecret":"cs","accessToken":"at","accessTokenSecret":"ats"},"operTweeterFormat":{"start":"start <title>","end":"end <title>"},"custom":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(path)
+	cfg, err := LoadLegacy(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestSampleConfigLoads(t *testing.T) {
 	if cfg.RecordedFormat == "" {
 		t.Fatal("sample config has no recordedFormat")
 	}
-	if !cfg.Strata || cfg.WUIAuthenticationEnabled {
+	if cfg.WUIAuthenticationEnabled {
 		t.Fatalf("sample config should be native Strata with authentication disabled: %#v", cfg)
 	}
 }
@@ -73,7 +73,7 @@ func TestLoadStrataDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MirakurunPath != doc.Mirakurun.URL || cfg.WUIPort == nil || *cfg.WUIPort != doc.Web.Port {
+	if cfg.MirakurunPath != doc.Mirakurun.URL || cfg.WUIPort != doc.Web.Port {
 		t.Fatalf("Strata document was not mapped: %#v", cfg)
 	}
 	if len(cfg.WUIAccounts) != 1 || cfg.WUIAccounts[0].Username != "admin" {
@@ -91,7 +91,13 @@ func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Strata || cfg.WUIPort == nil || *cfg.WUIPort != 20772 || cfg.WUIAuthenticationEnabled {
+	if cfg.WUIPort != 20772 || cfg.WUIAuthenticationEnabled {
 		t.Fatalf("unexpected unauthenticated listener mapping: %#v", cfg)
+	}
+}
+
+func TestParseRejectsLegacyRuntimeConfig(t *testing.T) {
+	if _, err := Parse([]byte(`{"mirakurunPath":"http://127.0.0.1:40772"}`)); err == nil {
+		t.Fatal("legacy config should not load as a runtime config")
 	}
 }

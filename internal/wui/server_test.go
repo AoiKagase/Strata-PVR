@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -818,11 +817,10 @@ func TestNativeDashboardStrataConfigForm(t *testing.T) {
 			`id="strataListenAddress"`,
 			`id="strataAuthEnabled"`,
 			`id="strataAuthUsers"`,
-			`id="legacyConfigPanel"`,
 		},
 		filepath.Join("..", "..", "web", "app.js"): {
 			`cfg.schema === "strata/config"`,
-			`body: strata ? raw : undefined`,
+			`body: raw`,
 			`function renderStrataConfigForm(cfg)`,
 			`function readStrataConfigForm()`,
 			`passwordConfigured`,
@@ -974,33 +972,6 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 			`.schedule-card.recording`,
 			`.schedule-card.recording .schedule-card-state`,
 			`.schedule-card.reserved`,
-		},
-	}
-	for path, wants := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		source := string(body)
-		for _, want := range wants {
-			if !strings.Contains(source, want) {
-				t.Fatalf("%s missing %q", path, want)
-			}
-		}
-	}
-}
-
-func TestNativeDashboardConfigControlsCoverRuntimeFields(t *testing.T) {
-	files := map[string][]string{
-		filepath.Join("..", "..", "web", "index.html"): {
-			`id="configSchedulerMirakurunPath"`,
-			`id="configRecordingPriority"`,
-			`id="configConflictedPriority"`,
-		},
-		filepath.Join("..", "..", "web", "app.js"): {
-			`cfg.schedulerMirakurunPath`,
-			`cfg.recordingPriority`,
-			`cfg.conflictedPriority`,
 		},
 	}
 	for path, wants := range files {
@@ -3232,7 +3203,10 @@ func TestRunWritesWUILog(t *testing.T) {
 	if err := listener.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.Config, []byte(`{"wuiHost":"127.0.0.1","wuiPort":`+strconv.Itoa(port)+`}`), 0o644); err != nil {
+	doc := config.DefaultDocument()
+	doc.Web.ListenAddress = "127.0.0.1"
+	doc.Web.Port = port
+	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3430,7 +3404,11 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 func TestAPIAuth(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{WUIUsers: []string{"user:pass"}})
+	hash, err := passwordauth.HashPassword("pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3491,40 +3469,6 @@ func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("concurrent authenticated request status = %d", status)
 		}
-	}
-}
-
-func TestAPIConfigGetAndPut(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	if err := os.MkdirAll(filepath.Dir(paths.Config), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	initial := `{"wuiOpenServer":true}`
-	if err := os.WriteFile(paths.Config, []byte(initial), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/config.json", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || strings.TrimSpace(res.Body.String()) != initial {
-		t.Fatalf("config get status=%d body=%q", res.Code, res.Body.String())
-	}
-
-	next := `{"wuiOpenServer":false,"wuiOpenPort":20772}`
-	req = httptest.NewRequest(http.MethodPut, "/api/config.json?json="+url.QueryEscape(next), nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != next {
-		t.Fatalf("config put status=%d body=%q", res.Code, res.Body.String())
-	}
-	data, err := os.ReadFile(paths.Config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != next {
-		t.Fatalf("config file = %q", data)
 	}
 }
 
@@ -3621,7 +3565,7 @@ func mustReadFile(t *testing.T, path string) []byte {
 func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := os.WriteFile(paths.Config, []byte(`{}`), 0o644); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Config, config.DefaultDocument(), true); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewHandler(paths, &config.Config{})
@@ -3638,7 +3582,7 @@ func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := newHandler(paths, &config.Config{WUIUsers: []string{"user:pass"}}, false)
+	handler := newHandler(paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: "unused"}}}, false)
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3650,8 +3594,7 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	port := 20772
-	cfg := &config.Config{Strata: true, WUIHost: "127.0.0.1", WUIPort: &port, WUIAuthenticationEnabled: true}
+	cfg := &config.Config{WUIHost: "127.0.0.1", WUIPort: 20772, WUIAuthenticationEnabled: true}
 	servers, err := buildHTTPServers(paths, cfg)
 	if err != nil {
 		t.Fatal(err)

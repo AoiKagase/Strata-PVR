@@ -33,7 +33,6 @@
   var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
-
   var state = {
     status: null,
     reserves: [],
@@ -67,11 +66,9 @@
     isLoading: false,
     lastError: null
   };
-
   function byId(id) {
     return document.getElementById(id);
   }
-
   function normalizeHiddenChannels(values) {
     var seen = {};
     return (Array.isArray(values) ? values : []).filter(function (value) {
@@ -82,7 +79,6 @@
       return true;
     });
   }
-
   function loadHiddenChannels() {
     try {
       var raw = window.localStorage ? window.localStorage.getItem(hiddenChannelsStorageKey) : "";
@@ -357,12 +353,11 @@
     });
   }
 
-  function sendConfigJSON(raw) {
-    var strata = state.config && state.config.schema === "strata/config";
-    return fetch(strata ? "/api/config.json" : "/api/config.json?json=" + encodeURIComponent(raw), {
-      body: strata ? raw : undefined,
-      credentials: "same-origin",
-      headers: strata ? { "Content-Type": "application/json" } : undefined,
+	function sendConfigJSON(raw) {
+		return fetch("/api/config.json", {
+			body: raw,
+			credentials: "same-origin",
+			headers: { "Content-Type": "application/json" },
       method: "PUT"
     }).then(function (response) {
       if (!response.ok) {
@@ -1138,7 +1133,7 @@
       "reserves": "reserveListQuery",
       "recorded": "recordedListQuery",
       "rules": "ruleListQuery",
-      "settings": "configMirakurunPath"
+		"settings": "strataMirakurunURL"
     };
     var control = byId(focusByView[view]);
     if (!control && view === "schedule") {
@@ -3251,33 +3246,13 @@
 
   function renderConfigForm() {
     var cfg = state.config || {};
-    var strata = cfg.schema === "strata/config";
     var strataPanel = byId("strataConfigPanel");
-    var legacyPanel = byId("legacyConfigPanel");
     if (strataPanel) {
-      strataPanel.hidden = !strata;
+      strataPanel.hidden = cfg.schema !== "strata/config";
     }
-    if (legacyPanel) {
-      legacyPanel.hidden = strata;
-    }
-    if (strata) {
+    if (cfg.schema === "strata/config") {
       renderStrataConfigForm(cfg);
-      return;
     }
-    setControlValue("configMirakurunPath", cfg.mirakurunPath);
-    setControlValue("configSchedulerMirakurunPath", cfg.schedulerMirakurunPath);
-    setControlValue("configRecordedDir", cfg.recordedDir);
-    setControlValue("configRecordedFormat", cfg.recordedFormat);
-    setControlValue("configWuiHost", cfg.wuiHost);
-    setControlValue("configWuiPort", cfg.wuiPort);
-    setControlValue("configNormalizationForm", cfg.normalizationForm);
-    setControlValue("configStorageLowSpaceThresholdMB", cfg.storageLowSpaceThresholdMB);
-    setControlValue("configStorageLowSpaceAction", cfg.storageLowSpaceAction);
-    setControlValue("configExcludeServices", cfg.excludeServices);
-    setControlValue("configWuiUsers", cfg.wuiUsers);
-    setControlValue("configServiceOrder", cfg.serviceOrder);
-    setControlValue("configRecordingPriority", cfg.recordingPriority);
-    setControlValue("configConflictedPriority", cfg.conflictedPriority);
   }
 
   function renderStrataConfigForm(cfg) {
@@ -3285,7 +3260,7 @@
     var authentication = web.authentication || {};
     var recording = cfg.recording || {};
     var lowSpace = recording.lowSpace || {};
-	var previewCache = cfg.previewCache || {};
+    var previewCache = cfg.previewCache || {};
     var services = cfg.services || {};
     var advanced = cfg.advanced || {};
     setControlValue("strataMirakurunURL", (cfg.mirakurun || {}).url);
@@ -3438,29 +3413,14 @@
       return;
     }
     var cfg = state.config || {};
-    var rows = cfg.schema === "strata/config" ? [
+	var rows = [
       ["形式", "Strata config v" + cfg.version],
       ["Mirakurun", (cfg.mirakurun || {}).url],
       ["録画保存先", (cfg.recording || {}).directory],
       ["待受", ((cfg.web || {}).listenAddress || "") + ":" + ((cfg.web || {}).port || "")],
       ["認証", ((cfg.web || {}).authentication || {}).enabled],
-      ["ユーザー", (((cfg.web || {}).authentication || {}).users || []).map(function (user) { return user.username; })]
-    ] : [
-      ["Mirakurun", cfg.mirakurunPath || cfg.schedulerMirakurunPath],
-      ["旧Mirakurun", cfg.schedulerMirakurunPath],
-      ["録画ディレクトリ", cfg.recordedDir],
-      ["録画ファイル名", cfg.recordedFormat],
-      ["WUIホスト", cfg.wuiHost],
-      ["WUIポート", cfg.wuiPort],
-      ["WUIユーザー", cfg.wuiUsers],
-      ["サービス順", cfg.serviceOrder],
-      ["除外サービス", cfg.excludeServices],
-      ["録画優先度", cfg.recordingPriority],
-      ["競合優先度", cfg.conflictedPriority],
-      ["空き容量しきい値MB", cfg.storageLowSpaceThresholdMB],
-      ["空き容量不足時の動作", cfg.storageLowSpaceAction],
-      ["正規化", cfg.normalizationForm],
-    ];
+		["ユーザー", (((cfg.web || {}).authentication || {}).users || []).map(function (user) { return user.username; })]
+	];
     root.innerHTML = "";
     rows.forEach(function (row) {
       var key = document.createElement("dt");
@@ -3676,190 +3636,6 @@
   function controlString(id) {
     var control = byId(id);
     return control ? control.value.trim() : "";
-  }
-
-  function setOptionalString(config, field, id) {
-    var value = controlString(id);
-    if (value) {
-      config[field] = value;
-    } else {
-      delete config[field];
-    }
-  }
-
-  function setOptionalStringOrInteger(config, field, id, label) {
-    var value = controlString(id);
-    if (!value) {
-      delete config[field];
-      return true;
-    }
-    if (/^-?\d+$/.test(value)) {
-      config[field] = Number(value);
-      return true;
-    }
-    if (value.toLowerCase() === "null") {
-      config[field] = null;
-      return true;
-    }
-    if (value.indexOf(",") !== -1) {
-      showError(new Error(label + " はユーザー名/グループ名、整数ID、または null を入力してください"));
-      return false;
-    }
-    config[field] = value;
-    return true;
-  }
-
-  function setOptionalPort(config, field, id) {
-    var value = controlString(id);
-    if (!value) {
-      delete config[field];
-      return true;
-    }
-    var number = Number(value);
-    if (!Number.isInteger(number) || number < 1 || number > 65535) {
-      showError(new Error(field + " は 1-65535 の整数にしてください"));
-      return false;
-    }
-    config[field] = number;
-    return true;
-  }
-
-  function setOptionalNonNegativeInteger(config, field, id) {
-    var value = controlString(id);
-    if (!value) {
-      delete config[field];
-      return true;
-    }
-    var number = Number(value);
-    if (!Number.isInteger(number) || number < 0) {
-      showError(new Error(field + " は 0 以上の整数にしてください"));
-      return false;
-    }
-    config[field] = number;
-    return true;
-  }
-
-  function setOptionalInteger(config, field, id) {
-    var value = controlString(id);
-    if (!value) {
-      delete config[field];
-      return true;
-    }
-    var number = Number(value);
-    if (!Number.isInteger(number)) {
-      showError(new Error(field + " は整数にしてください"));
-      return false;
-    }
-    config[field] = number;
-    return true;
-  }
-
-  function setOptionalBooleanSelect(config, field, id) {
-    var value = controlString(id);
-    if (!value) {
-      delete config[field];
-      return true;
-    }
-    if (value !== "true" && value !== "false") {
-      showError(new Error(field + " は有効または無効を選択してください"));
-      return false;
-    }
-    config[field] = value === "true";
-    return true;
-  }
-
-  function setOptionalStringList(config, field, id) {
-    var values = splitList(controlString(id));
-    if (values.length) {
-      config[field] = values;
-    } else {
-      delete config[field];
-    }
-  }
-
-  function setOptionalPositiveIntegerList(config, field, id, label) {
-    var values = splitList(controlString(id)).map(function (value) {
-      return Number(value);
-    });
-    if (values.some(function (value) {
-      return !Number.isInteger(value) || value <= 0;
-    })) {
-      showError(new Error(label + "はカンマ区切りの正の整数にしてください"));
-      return false;
-    }
-    if (values.length) {
-      config[field] = values;
-    } else {
-      delete config[field];
-    }
-    return true;
-  }
-
-  function readConfigForm() {
-    var config = {};
-    Object.keys(state.config || {}).forEach(function (key) {
-      config[key] = state.config[key];
-    });
-    setOptionalString(config, "mirakurunPath", "configMirakurunPath");
-    setOptionalString(config, "schedulerMirakurunPath", "configSchedulerMirakurunPath");
-    setOptionalString(config, "recordedDir", "configRecordedDir");
-    setOptionalString(config, "recordedFormat", "configRecordedFormat");
-    setOptionalString(config, "wuiHost", "configWuiHost");
-    if (!setOptionalPort(config, "wuiPort", "configWuiPort")) {
-      return null;
-    }
-    setOptionalString(config, "normalizationForm", "configNormalizationForm");
-    if (!setOptionalNonNegativeInteger(config, "storageLowSpaceThresholdMB", "configStorageLowSpaceThresholdMB")) {
-      return null;
-    }
-    setOptionalString(config, "storageLowSpaceAction", "configStorageLowSpaceAction");
-    var excludeServices = splitList(controlString("configExcludeServices")).map(function (value) {
-      return Number(value);
-    });
-    if (excludeServices.some(function (value) {
-      return !Number.isInteger(value) || value <= 0;
-    })) {
-      showError(new Error("除外サービスはカンマ区切りの正の整数にしてください"));
-      return null;
-    }
-    if (excludeServices.length) {
-      config.excludeServices = excludeServices;
-    } else {
-      delete config.excludeServices;
-    }
-    setOptionalStringList(config, "wuiUsers", "configWuiUsers");
-    if (!setOptionalPositiveIntegerList(config, "serviceOrder", "configServiceOrder", "サービス順")) {
-      return null;
-    }
-    if (!setOptionalInteger(config, "recordingPriority", "configRecordingPriority")) {
-      return null;
-    }
-    if (!setOptionalInteger(config, "conflictedPriority", "configConflictedPriority")) {
-      return null;
-    }
-    return config;
-  }
-
-  function saveConfigFromForm() {
-    var config = readConfigForm();
-    if (!config) {
-      return;
-    }
-    confirmAction("フォームの内容で config.json を保存しますか？", {
-      danger: false,
-      okLabel: "保存",
-      title: "設定保存の確認"
-    }).then(function (confirmed) {
-      if (!confirmed) {
-        return;
-      }
-      setBusy("設定保存中");
-      sendConfigJSON(JSON.stringify(config, null, 2)).then(function (savedConfig) {
-        state.config = savedConfig || {};
-        render();
-        setBusy("設定を保存しました");
-      }).catch(showError);
-    });
   }
 
   function splitList(value) {
@@ -4769,16 +4545,6 @@
     var forceSchedulerButton = byId("forceSchedulerButton");
     if (forceSchedulerButton) {
       forceSchedulerButton.addEventListener("click", forceScheduler);
-    }
-    var configForm = byId("configForm");
-    if (configForm) {
-      configForm.addEventListener("submit", function (event) {
-        event.preventDefault();
-      });
-    }
-    var saveConfigFormButton = byId("saveConfigFormButton");
-    if (saveConfigFormButton) {
-      saveConfigFormButton.addEventListener("click", saveConfigFromForm);
     }
     var strataConfigForm = byId("strataConfigForm");
     if (strataConfigForm) {

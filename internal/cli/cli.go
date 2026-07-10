@@ -42,13 +42,18 @@ type paths struct {
 	recorded  string
 }
 
+var resolveRuntimePaths = runtimePaths
+var validateRuntimePaths = requireStrataRuntime
+var renameMigrationPath = os.Rename
+var inspectArchivedMigrationFiles = inspectMigrationFiles
+
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	_ = ctx
 	args, err := normalizeModeArgs(args)
 	if err != nil {
 		return err
 	}
-	p := runtimePaths()
+	p := resolveRuntimePaths()
 	if len(args) > 0 && args[0] == "init" {
 		return initializeStrata(ctx, stdout)
 	}
@@ -58,6 +63,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "help" {
 		printHelp(stdout)
 		return nil
+	}
+	if isRuntimeCommand(args) {
+		if err := validateRuntimePaths(p); err != nil {
+			return err
+		}
 	}
 	switch args[0] {
 	case "installer":
@@ -116,19 +126,33 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 }
 
-func runtimePaths() paths {
-	configPath := "config.json"
-	rulesPath := "rules.json"
-	databasePath := ""
-	if _, err := os.Stat(filepath.Join("data", "config.json")); err == nil {
-		configPath = filepath.Join("data", "config.json")
-		rulesPath = filepath.Join("data", "rules.json")
-		databasePath = filepath.Join("data", "strata.db")
+func requireStrataRuntime(p paths) error {
+	if _, err := config.Load(p.config); err != nil {
+		return fmt.Errorf("Strata runtime is not initialized; run strata-pvr init or migrate: %w", err)
 	}
+	if _, err := os.Stat(p.database); err != nil {
+		return fmt.Errorf("Strata database is unavailable; run strata-pvr init or migrate: %w", err)
+	}
+	return nil
+}
+
+func isRuntimeCommand(args []string) bool {
+	if len(args) == 0 || (args[0] == "service" && len(args) == 3 && args[2] == "initscript") {
+		return false
+	}
+	switch args[0] {
+	case "service", "reserve", "unreserve", "skip", "unskip", "stop", "rules", "reserves", "recording", "recorded", "cleanup", "update", "search", "rule", "enrule", "disrule", "rmrule":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimePaths() paths {
 	return paths{
-		config:    configPath,
-		database:  databasePath,
-		rules:     rulesPath,
+		config:    filepath.Join("data", "config.json"),
+		database:  filepath.Join("data", "strata.db"),
+		rules:     filepath.Join("data", "rules.json"),
 		schedule:  filepath.Join("data", "schedule.json"),
 		reserves:  filepath.Join("data", "reserves.json"),
 		recording: filepath.Join("data", "recording.json"),
@@ -192,7 +216,7 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 		return err
 	}
 	legacyConfigPath := filepath.Join("migrate", "config.json")
-	legacyConfig, err := config.Load(legacyConfigPath)
+	legacyConfig, err := config.LoadLegacy(legacyConfigPath)
 	if err != nil {
 		return fmt.Errorf("validate %s: %w", legacyConfigPath, err)
 	}
@@ -286,19 +310,19 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 	}
 	stamp := time.Now().Format("20060102-150405")
 	archivePath := filepath.Join(backupRoot, "chinachu-"+stamp)
-	if err := os.Rename("migrate", archivePath); err != nil {
+	if err := renameMigrationPath("migrate", archivePath); err != nil {
 		return fmt.Errorf("archive migration input: %w", err)
 	}
-	archivedHashes, archivedSizes, err := inspectMigrationFiles(archivePath)
+	archivedHashes, archivedSizes, err := inspectArchivedMigrationFiles(archivePath)
 	if err != nil || !maps.Equal(sourceHashes, archivedHashes) || !maps.Equal(sourceSizes, archivedSizes) {
-		_ = os.Rename(archivePath, "migrate")
+		_ = renameMigrationPath(archivePath, "migrate")
 		if err != nil {
 			return fmt.Errorf("verify archived migration input: %w", err)
 		}
 		return fmt.Errorf("verify archived migration input: source files changed while migrating")
 	}
-	if err := os.Rename(tempDir, "data"); err != nil {
-		_ = os.Rename(archivePath, "migrate")
+	if err := renameMigrationPath(tempDir, "data"); err != nil {
+		_ = renameMigrationPath(archivePath, "migrate")
 		return fmt.Errorf("install Strata data: %w", err)
 	}
 	manifest := map[string]any{
@@ -345,7 +369,7 @@ func inspectMigrationFiles(root string) (map[string]string, map[string]int64, er
 	return hashes, sizes, nil
 }
 
-func convertLegacyConfig(old *config.Config) (config.Document, []string, error) {
+func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, error) {
 	doc := config.DefaultDocument()
 	doc.Mirakurun.URL = old.EffectiveMirakurunPath()
 	doc.Mirakurun.RecordingPriority = old.RecordingPriority
@@ -407,7 +431,7 @@ func convertLegacyConfig(old *config.Config) (config.Document, []string, error) 
 	return doc, warnings, nil
 }
 
-func legacyConfigHas(cfg *config.Config, keys ...string) bool {
+func legacyConfigHas(cfg *config.LegacyConfig, keys ...string) bool {
 	for _, key := range keys {
 		if raw, ok := cfg.Raw[key]; ok && string(raw) != "null" && string(raw) != "false" && string(raw) != "[]" && string(raw) != "{}" {
 			return true
@@ -1439,43 +1463,14 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 	}
 }
 
-func prepareServiceRuntime() error {
-	return prepareServiceRuntimeFor(paths{config: "config.json", rules: "rules.json"})
-}
-
 func prepareServiceRuntimeFor(p paths) error {
-	if p.config == filepath.Join("data", "config.json") {
-		if _, err := os.Stat(p.config); err != nil {
-			return fmt.Errorf("Strata is not initialized; run strata-pvr init: %w", err)
-		}
-		if err := os.MkdirAll("log", 0o755); err != nil {
-			return err
-		}
-		return os.MkdirAll("data", 0o755)
-	}
-	if err := copyIfMissing("config.sample.json", "config.json"); err != nil {
-		return err
-	}
-	if err := copyIfMissing("rules.sample.json", "rules.json"); err != nil {
-		return err
+	if _, err := os.Stat(p.config); err != nil {
+		return fmt.Errorf("Strata is not initialized; run strata-pvr init or migrate: %w", err)
 	}
 	if err := os.MkdirAll("log", 0o755); err != nil {
 		return err
 	}
 	return os.MkdirAll("data", 0o755)
-}
-
-func copyIfMissing(src, dst string) error {
-	if _, err := os.Stat(dst); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o644)
 }
 
 func serviceInitScript(name string) string {
@@ -1601,7 +1596,7 @@ func compat(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 	switch args[0] {
 	case "check", "doctor":
-		cfg, cfgErr := config.Load("config.json")
+		cfg, cfgErr := config.LoadLegacy("config.json")
 		recordedDirErr := cfgErr
 		if cfgErr == nil {
 			recordedDirErr = validateWritableDir(cfg.RecordedDir)
@@ -1699,7 +1694,7 @@ func compatDoctorWarnings() []string {
 	return []string{"strata-pvr binary not found in the current directory; generated wrappers and initscripts expect it there"}
 }
 
-func writeCompatConfigSummary(stdout io.Writer, cfg *config.Config) {
+func writeCompatConfigSummary(stdout io.Writer, cfg *config.LegacyConfig) {
 	wuiPort := "disabled"
 	if cfg.WUIPort != nil {
 		wuiPort = strconv.Itoa(*cfg.WUIPort)
@@ -1786,7 +1781,7 @@ exec "$DAEMON" "$@"
 `, shellQuote(root))
 }
 
-func compatWarnings(cfg *config.Config) []string {
+func compatWarnings(cfg *config.LegacyConfig) []string {
 	warnings := []string{
 		"native settings editing: the Go dashboard is intentionally read-only; edit config.json directly or use the legacy-compatible /api/config.json PUT endpoint with care",
 	}
@@ -1995,7 +1990,7 @@ func validateCommandAvailable(name string) error {
 	return err
 }
 
-func validateMirakurun(ctx context.Context, cfg *config.Config, cfgErr error) (servicesErr, programsErr, tunersErr error) {
+func validateMirakurun(ctx context.Context, cfg *config.LegacyConfig, cfgErr error) (servicesErr, programsErr, tunersErr error) {
 	if cfgErr != nil {
 		return cfgErr, cfgErr, cfgErr
 	}
