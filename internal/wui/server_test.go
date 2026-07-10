@@ -40,7 +40,7 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 	res := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/reserves.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/reserves", nil)
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
@@ -87,15 +87,15 @@ func TestAPIProgramReadsUseLegacyPrettyJSON(t *testing.T) {
 	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, path := range []string{
-		"/api/program/abc.json",
-		"/api/reserves/abc.json",
-		"/api/recording/abc.json",
-		"/api/recorded/abc.json",
-		"/api/schedule/programs.json",
-		"/api/schedule/broadcasting.json",
-		"/api/schedule/gr101.json",
-		"/api/schedule/gr101/programs.json",
-		"/api/schedule/gr101/broadcasting.json",
+		"/api/program/abc",
+		"/api/reserves/abc",
+		"/api/recording/abc",
+		"/api/recorded/abc",
+		"/api/schedule/programs",
+		"/api/schedule/broadcasting",
+		"/api/schedule/gr101",
+		"/api/schedule/gr101/programs",
+		"/api/schedule/gr101/broadcasting",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		res := httptest.NewRecorder()
@@ -129,7 +129,7 @@ func TestAPIListReadsUseLegacyCompactJSON(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	for _, path := range []string{"/api/reserves.json", "/api/recording.json", "/api/recorded.json"} {
+	for _, path := range []string{"/api/reserves", "/api/recording", "/api/recorded"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
@@ -185,7 +185,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/status.JSON", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusNotFound || res.Body.String() != "Not Found\n" {
+	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
 		t.Fatalf("uppercase extension status=%d body=%q", res.Code, res.Body.String())
 	}
 
@@ -222,7 +222,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		}
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -241,7 +241,7 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodHead, "/api/schedule.json", nil)
+	req := httptest.NewRequest(http.MethodHead, "/api/schedule", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.Len() != 0 {
@@ -252,8 +252,8 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 		path  string
 		allow string
 	}{
-		{"/api/status.json", "GET"},
-		{"/api/config.json", "GET, PUT"},
+		{"/api/status", "GET"},
+		{"/api/config", "GET, PUT"},
 		{"/api/recorded/abc/watch.m2ts", "GET"},
 	} {
 		req = httptest.NewRequest(http.MethodHead, tc.path, nil)
@@ -273,7 +273,7 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	paths := testPaths(dir)
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/schedule/foo/bar/baz.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule/foo/bar/baz", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusBadRequest {
@@ -286,11 +286,11 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/index.html", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusBadRequest || res.Body.String() != "Bad Request\n" {
+	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
 		t.Fatalf("api index status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/status.json", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/status", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusMethodNotAllowed {
@@ -300,7 +300,7 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 		t.Fatalf("method not allowed body=%q", res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource/foo.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/no-such-resource/foo", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
@@ -1018,7 +1018,7 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip.json", nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1035,7 +1035,7 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 		t.Fatalf("reserve was not skipped: %#v", reserves)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/reserves/abc.json", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/reserves/abc", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1071,7 +1071,7 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	for _, target := range []string{"/api/reserves.json", "/api/reserves/auto.json"} {
+	for _, target := range []string{"/api/reserves", "/api/reserves/auto"} {
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, target, nil))
 		if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Automatic") {
@@ -1080,18 +1080,18 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 	}
 	for _, action := range []string{"skip", "unskip"} {
 		res := httptest.NewRecorder()
-		handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/reserves/auto/"+action+".json", nil))
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/reserves/auto/"+action, nil))
 		if res.Code != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", action, res.Code, res.Body.String())
 		}
 	}
 	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/recording/auto.json", nil))
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/recording/auto", nil))
 	if res.Code != http.StatusOK {
 		t.Fatalf("recording delete status=%d body=%s", res.Code, res.Body.String())
 	}
 	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/reserves/manual.json", nil))
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/reserves/manual", nil))
 	if res.Code != http.StatusOK {
 		t.Fatalf("manual delete status=%d body=%s", res.Code, res.Body.String())
 	}
@@ -1125,7 +1125,7 @@ func TestAPIReserveSkipUsesPUT(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip.json", nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1139,7 +1139,7 @@ func TestAPIReserveSkipUsesPUT(t *testing.T) {
 		t.Fatalf("reserve was not skipped: %#v", reserves)
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/reserves/abc/unskip.json", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/reserves/abc/unskip", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1159,7 +1159,7 @@ func TestHostHeaderRequiredMatchesLegacyWUI(t *testing.T) {
 	paths := testPaths(dir)
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Host = ""
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1173,7 +1173,7 @@ func TestAPIRulesMutation(t *testing.T) {
 	paths := testPaths(dir)
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/rules.json", strings.NewReader(`{"isEnabled":false,"categories":["anime"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/rules", strings.NewReader(`{"isEnabled":false,"categories":["anime"]}`))
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -1196,7 +1196,7 @@ func TestAPIRulesMutation(t *testing.T) {
 		t.Fatalf("isDisabled = %s", rules[0]["isDisabled"])
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/rules/0/enable.json", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/rules/0/enable", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1213,7 +1213,7 @@ func TestAPIRulesMutation(t *testing.T) {
 		t.Fatalf("isDisabled was not removed: %#v", rules[0])
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/rules/0.json", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/rules/0", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1244,7 +1244,7 @@ func TestAPIRulesUsesSQLiteForStrata(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/api/rules.json", strings.NewReader(`{"reserve_titles":["database"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/rules", strings.NewReader(`{"reserve_titles":["database"]}`))
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -1268,7 +1268,7 @@ func TestAPIRulesGetUsesLegacyPrettyJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/rules.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/rules", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1277,7 +1277,7 @@ func TestAPIRulesGetUsesLegacyPrettyJSON(t *testing.T) {
 	if got := res.Body.String(); got != "[\n  {\n    \"categories\": [\n      \"anime\"\n    ]\n  }\n]" {
 		t.Fatalf("rules get body = %q", got)
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/rules/0.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/rules/0", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1293,7 +1293,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	paths := testPaths(dir)
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodPost, `/api/rules.json?types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
+	req := httptest.NewRequest(http.MethodPost, `/api/rules?types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -1320,7 +1320,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	if string(rules[0]["isDisabled"]) != "true" {
 		t.Fatalf("isDisabled = %s", rules[0]["isDisabled"])
 	}
-	req = httptest.NewRequest(http.MethodPut, `/api/rules/0.json?categories=["anime"]&sid=101`, nil)
+	req = httptest.NewRequest(http.MethodPut, `/api/rules/0?categories=["anime"]&sid=101`, nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1355,7 +1355,7 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPut, "/api/program/abc.json?mode=1seg", nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/program/abc?mode=1seg", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1383,7 +1383,7 @@ func TestAPIProgramPutSortsManualReserveLikeCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPut, "/api/program/earlier.json", nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/program/earlier", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1415,7 +1415,7 @@ func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/program/abc.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/program/abc", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
@@ -1434,7 +1434,7 @@ func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/schedule.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule", nil)
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1460,7 +1460,7 @@ func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 	if lastModified == "" {
 		t.Fatal("missing Last-Modified")
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/schedule.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule", nil)
 	req.Header.Set("If-Modified-Since", lastModified)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1491,7 +1491,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/schedule/gr101.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/schedule/gr101", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1505,7 +1505,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 		t.Fatalf("unexpected channel: %#v", channel)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/programs.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/programs", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1519,7 +1519,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 		t.Fatalf("unexpected channel programs: %#v", programs)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/schedule/broadcasting.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/broadcasting", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1532,7 +1532,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 		t.Fatalf("unexpected broadcasting programs: %#v", programs)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/broadcasting.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/gr101/broadcasting", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1545,7 +1545,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 		t.Fatalf("unexpected channel broadcasting programs: %#v", programs)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/schedule/missing.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/schedule/missing", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
@@ -1560,7 +1560,7 @@ func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/api/reserves/abc.json", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/reserves/abc", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusConflict {
@@ -1578,7 +1578,7 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/api/recording/abc.json", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/recording/abc", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1611,7 +1611,7 @@ func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/api/recording/manual.json", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/recording/manual", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1650,7 +1650,7 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/cleanup.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/cleanup", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1678,7 +1678,7 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 		t.Fatalf("dry-run should not create backups: %#v", backups)
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/recorded/cleanup.json", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/recorded/cleanup", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1719,7 +1719,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1776,7 +1776,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 		t.Fatalf("file content-length=%q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/recorded/abc/file.json", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/recorded/abc/file", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -1786,7 +1786,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 		t.Fatalf("recorded file still exists or unexpected stat error: %v", err)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusGone {
@@ -2202,10 +2202,9 @@ func TestAPIProgramPreview(t *testing.T) {
 		target      string
 		contentType string
 	}{
-		{"/api/recorded/recorded/preview.png", "image/png"},
-		{"/api/recorded/recorded/preview.jpg", "image/jpeg"},
-		{"/api/recording/recording/preview.png", "image/png"},
-		{"/api/recording/go-operator/preview.png", "image/png"},
+		{"/api/recorded/recorded/preview", "image/png"},
+		{"/api/recording/recording/preview", "image/png"},
+		{"/api/recording/go-operator/preview", "image/png"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.target, nil)
 		res := httptest.NewRecorder()
@@ -2217,17 +2216,8 @@ func TestAPIProgramPreview(t *testing.T) {
 			t.Fatalf("%s Content-Type=%q, want %q", tc.target, got, tc.contentType)
 		}
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.txt?type=png&size=640x360&pos=9", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview", nil)
 	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != "data:image/png;base64,cHJldmlldy1pbWFnZQ==" {
-		t.Fatalf("preview txt status=%d body=%q", res.Code, res.Body.String())
-	}
-	if got := res.Header().Get("Content-Type"); got != "text/plain" {
-		t.Fatalf("preview txt Content-Type=%q", got)
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/api/recorded/missing/preview.png", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
@@ -2259,7 +2249,7 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 	defer func() { runFFmpegPreview = old }()
 	handler := newTestHandler(t, paths, &config.Config{})
 	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.jpg?size=320x180&pos=5", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview?size=320x180&pos=5", nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
 		if res.Code != http.StatusOK || res.Body.String() != "cached-preview" {
@@ -2269,14 +2259,14 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("FFmpeg calls = %d, want 1", calls)
 	}
-	cacheFiles, err := filepath.Glob(filepath.Join(dir, "data", ".cache", "previews", "*.jpg"))
+	cacheFiles, err := filepath.Glob(filepath.Join(dir, "data", ".cache", "previews", "*.png"))
 	if err != nil || len(cacheFiles) != 1 {
 		t.Fatalf("preview cache files = %v error=%v", cacheFiles, err)
 	}
 	if err := os.WriteFile(recordedPath, []byte("changed-size"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.jpg?size=320x180&pos=5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview?size=320x180&pos=5", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || calls != 2 {
@@ -2409,7 +2399,7 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview.jpg?pos=99&size=480x270", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview?pos=99&size=480x270", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
@@ -2419,7 +2409,7 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 		t.Fatalf("recording preview input length=%d", len(gotInput))
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-f mpegts", "-i pipe:0", "-ss 1.5", "-codec:v mjpeg", "-s 480x270"} {
+	for _, want := range []string{"-f mpegts", "-i pipe:0", "-ss 1.5", "-codec:v png", "-s 480x270"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("recording preview args missing %q: %s", want, joined)
 		}
@@ -2447,9 +2437,9 @@ func TestAPIProgramPreviewLegacyErrors(t *testing.T) {
 		path string
 		code int
 	}{
-		{"/api/recording/nopid/preview.png", http.StatusServiceUnavailable},
-		{"/api/recorded/scrambled/preview.png", http.StatusConflict},
-		{"/api/recorded/gone/preview.png", http.StatusGone},
+		{"/api/recording/nopid/preview", http.StatusServiceUnavailable},
+		{"/api/recorded/scrambled/preview", http.StatusConflict},
+		{"/api/recorded/gone/preview", http.StatusGone},
 		{"/api/recorded/gone/preview.gif", http.StatusUnsupportedMediaType},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -2474,7 +2464,7 @@ func TestAPIProgramPreviewFFmpegError(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.png", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusServiceUnavailable {
@@ -2739,7 +2729,7 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	defer mirakurunServer.Close()
 	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo.png", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
@@ -2886,7 +2876,7 @@ func TestAPIStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{RecordedDir: dir})
-	req := httptest.NewRequest(http.MethodGet, "/api/storage.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/storage", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -2918,7 +2908,7 @@ func TestAPILogAndStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/log/wui", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "line\n" {
@@ -2926,7 +2916,7 @@ func TestAPILogAndStream(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req = httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil).WithContext(ctx)
+	req = httptest.NewRequest(http.MethodGet, "/api/log/wui/stream", nil).WithContext(ctx)
 	res = httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
@@ -2947,7 +2937,7 @@ func TestAPILogAndStream(t *testing.T) {
 		t.Fatalf("stream body missing padding or log: %q", res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/log/operator.txt", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/log/operator", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent {
@@ -2969,7 +2959,7 @@ func TestAPILogStreamFollowsAppends(t *testing.T) {
 	handler := newTestHandler(t, paths, &config.Config{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req := httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/api/log/wui/stream", nil).WithContext(ctx)
 	res := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
@@ -3055,7 +3045,7 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/scheduler", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3076,17 +3066,7 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 		t.Fatalf("unexpected scheduler result: %#v", result)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/scheduler.txt", nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != logData {
-		t.Fatalf("scheduler txt status=%d body=%q", res.Code, res.Body.String())
-	}
-	if got := res.Header().Get("Content-Type"); got != "text/plain" {
-		t.Fatalf("scheduler txt content-type=%q", got)
-	}
-
-	req = httptest.NewRequest(http.MethodPut, "/api/scheduler.json", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/scheduler", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || calls != 1 {
@@ -3105,14 +3085,14 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/scheduler", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent {
 		t.Fatalf("scheduler missing log status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/scheduler/force.json", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusAccepted {
@@ -3137,7 +3117,7 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3180,7 +3160,7 @@ func TestAPIAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized {
@@ -3193,14 +3173,14 @@ func TestAPIAuth(t *testing.T) {
 		t.Fatalf("unauthorized body = %q", res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodHead, "/api/schedule.json", nil)
+	req = httptest.NewRequest(http.MethodHead, "/api/schedule", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized || res.Body.Len() != 0 {
 		t.Fatalf("HEAD without auth status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:pass")))
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3226,7 +3206,7 @@ func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 			req.Header.Set("Authorization", authorization)
 			res := httptest.NewRecorder()
 			handler.ServeHTTP(res, req)
@@ -3255,7 +3235,7 @@ func TestAPIStrataConfigRedactsPasswordHashAndRejectsInvalidPut(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/config.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3265,7 +3245,7 @@ func TestAPIStrataConfigRedactsPasswordHashAndRejectsInvalidPut(t *testing.T) {
 	if strings.Contains(body, "passwordHash") || !strings.Contains(body, `"passwordConfigured": true`) {
 		t.Fatalf("password hash was not redacted: %s", body)
 	}
-	req = httptest.NewRequest(http.MethodPut, "/api/config.json?json=%7B%7D", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/config?json=%7B%7D", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusBadRequest {
@@ -3303,7 +3283,7 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPut, "/api/config.json", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/config", bytes.NewReader(body))
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3340,7 +3320,7 @@ func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
-	for _, target := range []string{"/api/config.json", "/api/config.json?json=%7B"} {
+	for _, target := range []string{"/api/config", "/api/config?json=%7B"} {
 		req := httptest.NewRequest(http.MethodPut, target, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
@@ -3354,7 +3334,7 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	handler := newHandler(paths.runtime(), &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: "unused"}}}, false)
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3371,7 +3351,7 @@ func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.WUIAccounts = []config.WebUser{{Username: "admin", PasswordHash: "$argon2id$configured"}}
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	servers[0].server.Handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized {
@@ -3404,7 +3384,7 @@ func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	req.RemoteAddr = "[::ffff:10.0.0.1]:12345"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	res := httptest.NewRecorder()
@@ -3419,7 +3399,7 @@ func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logBytes)
-	if !strings.Contains(log, `200 GET:/api/status.json 10.0.0.1`) {
+	if !strings.Contains(log, `200 GET:/api/status 10.0.0.1`) {
 		t.Fatalf("access log did not use RemoteAddr: %q", log)
 	}
 }
@@ -3429,7 +3409,7 @@ func TestAccessLogUsesRequestMethod(t *testing.T) {
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/api/status.json", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/status", nil)
 	req.RemoteAddr = "10.0.0.1:12345"
 	res := httptest.NewRecorder()
 
@@ -3443,7 +3423,7 @@ func TestAccessLogUsesRequestMethod(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logBytes)
-	if !strings.Contains(log, `405 POST:/api/status.json 10.0.0.1`) {
+	if !strings.Contains(log, `405 POST:/api/status 10.0.0.1`) {
 		t.Fatalf("access log did not use request method: %q", log)
 	}
 }

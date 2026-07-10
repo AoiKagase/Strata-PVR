@@ -547,8 +547,12 @@ func staticContentType(path string) string {
 
 func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/")
-	apiType := apiExtension(path)
-	path = trimLastExtension(path)
+	apiType := streamExtension(path)
+	if apiType == "" && hasUnsupportedAPIExtension(path) {
+		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
+		return
+	}
+	path = trimStreamExtension(path)
 	parts := splitPath(path)
 	if apiType == "" {
 		apiType = nativeAPIType(parts)
@@ -669,7 +673,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
 			return
 		}
-		s.handleProgramPreview(w, r, programstore.Recording, parts[1])
+		s.handleProgramPreview(w, r, programstore.Recording, parts[1], apiType)
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
 			return
@@ -699,7 +703,7 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
 			return
 		}
-		s.handleProgramPreview(w, r, programstore.Recorded, parts[1])
+		s.handleProgramPreview(w, r, programstore.Recorded, parts[1], apiType)
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "mp4", "xspf", "m2ts") {
 			return
@@ -2255,15 +2259,11 @@ func setAttachmentFileName(w http.ResponseWriter, filePath, ext string) {
 	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(base+"."+ext))
 }
 
-func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, collection, id string) {
+func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, collection, id, apiType string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
-	}
-	apiType := apiExtension(r.URL.Path)
-	if apiType == "" {
-		apiType = "png"
 	}
 	if apiType != "png" && apiType != "jpg" && apiType != "txt" {
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
@@ -3389,37 +3389,34 @@ func nativeAPIType(parts []string) string {
 	return "json"
 }
 
-func apiExtension(path string) string {
+func streamExtension(path string) string {
 	slash := strings.LastIndex(path, "/")
 	dot := strings.LastIndex(path, ".")
 	if dot > slash {
 		ext := path[dot+1:]
-		if isLegacyAPIExtension(ext) {
+		if isStreamExtension(ext) {
 			return ext
 		}
 	}
 	return ""
 }
 
-func trimLastExtension(path string) string {
+func trimStreamExtension(path string) string {
 	slash := strings.LastIndex(path, "/")
 	dot := strings.LastIndex(path, ".")
-	if dot > slash && isLegacyAPIExtension(path[dot+1:]) {
+	if dot > slash && isStreamExtension(path[dot+1:]) {
 		return path[:dot]
 	}
 	return path
 }
 
-func isLegacyAPIExtension(ext string) bool {
-	if ext == "" {
-		return false
-	}
-	for _, r := range ext {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
+func isStreamExtension(ext string) bool {
+	return ext == "xspf" || ext == "m2ts" || ext == "mp4"
+}
+
+func hasUnsupportedAPIExtension(path string) bool {
+	last := path[strings.LastIndex(path, "/")+1:]
+	return strings.Contains(last, ".")
 }
 
 func findProgram(programs []legacy.Program, id string) int {
