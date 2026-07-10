@@ -29,7 +29,17 @@ type fakeSource struct {
 	tunersErr   error
 }
 
-func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
+type testPaths struct {
+	Config   string
+	Database string
+	Rules    string
+	Schedule string
+	Reserves string
+	PID      string
+	Log      string
+}
+
+func runWithSourceTest(t *testing.T, ctx context.Context, paths testPaths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
 	t.Helper()
 	legacyFixture := paths.Database == ""
 	if paths.Database == "" {
@@ -50,7 +60,9 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 			t.Fatal(err)
 		}
 	}
-	result, err := RunWithSource(ctx, paths, cfg, source, simulation, now)
+	result, err := RunWithSource(ctx, Paths{
+		Config: paths.Config, Database: paths.Database, PID: paths.PID, Log: paths.Log,
+	}, cfg, source, simulation, now)
 	if legacyFixture {
 		if schedule, readErr := schedulestore.Read(ctx, paths.Database); readErr == nil {
 			_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
@@ -144,7 +156,7 @@ func TestBuildReservesUsesNormalizationForm(t *testing.T) {
 
 func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Config:   filepath.Join(dir, "config.json"),
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
@@ -194,7 +206,8 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 			t.Fatalf("scheduler log missing %q: %s", want, string(logData))
 		}
 	}
-	if !strings.Contains(string(logData), "WRITE: "+paths.Schedule) || !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
+	databasePath := filepath.Join(filepath.Dir(paths.Schedule), "strata.db")
+	if !strings.Contains(string(logData), "WRITE: "+databasePath+" (schedule, reserves)") {
 		t.Fatalf("scheduler log missing write lines: %s", string(logData))
 	}
 	if !strings.Contains(string(logData), `TUNERS: {"GR":1}`) {
@@ -205,7 +218,7 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	paths := Paths{
+	paths := testPaths{
 		Database: filepath.Join(dir, "data", "strata.db"),
 		Rules:    filepath.Join(dir, "data", "rules.json"), Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"), Log: filepath.Join(dir, "log", "scheduler"),
@@ -247,7 +260,7 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 
 func TestRunWithSourceUsesMirakurunFixtures(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
@@ -291,7 +304,7 @@ func TestRunWithSourceUsesMirakurunFixtures(t *testing.T) {
 
 func TestRunWithSourceLogsMirakurunErrorDetails(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
@@ -323,7 +336,7 @@ func TestRunWithSourceLogsMirakurunErrorDetails(t *testing.T) {
 
 func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
@@ -373,7 +386,7 @@ func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
 
 func TestRunWithSourceLogsLegacyDuplicateReservation(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
@@ -423,7 +436,7 @@ func TestRunWithSourceLogsLegacyDuplicateReservation(t *testing.T) {
 
 func TestRunWithSourceLogsManualReserveOverriddenByRule(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),
@@ -465,7 +478,7 @@ func TestRunWithSourceLogsManualReserveOverriddenByRule(t *testing.T) {
 
 func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Rules:    filepath.Join(dir, "rules.json"),
 		Schedule: filepath.Join(dir, "data", "schedule.json"),
 		Reserves: filepath.Join(dir, "data", "reserves.json"),

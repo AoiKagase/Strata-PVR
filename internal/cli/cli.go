@@ -1052,9 +1052,6 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 	result, err := scheduler.Run(ctx, scheduler.Paths{
 		Config:   p.config,
 		Database: p.database,
-		Rules:    p.rules,
-		Schedule: p.schedule,
-		Reserves: p.reserves,
 		PID:      filepath.Join("data", "scheduler.pid"),
 		Log:      filepath.Join("log", "scheduler"),
 	}, simulation)
@@ -1344,9 +1341,6 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 			_, err := scheduler.Run(ctx, scheduler.Paths{
 				Config:   p.config,
 				Database: p.database,
-				Rules:    p.rules,
-				Schedule: p.schedule,
-				Reserves: p.reserves,
 				PID:      filepath.Join("data", "scheduler.pid"),
 				Log:      filepath.Join("log", "scheduler"),
 			}, false)

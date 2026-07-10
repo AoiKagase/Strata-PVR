@@ -30,9 +30,6 @@ type Source interface {
 type Paths struct {
 	Config   string
 	Database string
-	Rules    string
-	Schedule string
-	Reserves string
 	PID      string
 	Log      string
 }
@@ -197,10 +194,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		if err != nil {
 			return Result{}, err
 		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Schedule); err != nil {
-			return Result{}, err
-		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
+		if err := logging.AppendLine(paths.Log, "WRITE: %s (schedule, reserves)", paths.Database); err != nil {
 			return Result{}, err
 		}
 	}

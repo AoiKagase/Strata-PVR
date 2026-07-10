@@ -1371,9 +1371,6 @@ func (s *server) runScheduler(ctx context.Context, simulation bool) error {
 	_, err := scheduler.Run(ctx, scheduler.Paths{
 		Config:   s.paths.Config,
 		Database: s.paths.Database,
-		Rules:    s.paths.Rules,
-		Schedule: s.paths.Schedule,
-		Reserves: s.paths.Reserves,
 		PID:      s.pidPath("scheduler"),
 		Log:      filepath.Join(s.logDir(), "scheduler"),
 	}, simulation)
