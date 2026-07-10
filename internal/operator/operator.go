@@ -35,13 +35,10 @@ type prioritySetter interface {
 }
 
 type Paths struct {
-	Config    string
-	Database  string
-	Reserves  string
-	Recording string
-	Recorded  string
-	PID       string
-	Log       string
+	Config   string
+	Database string
+	PID      string
+	Log      string
 }
 
 type Result struct {
@@ -156,7 +153,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, reserve); err != nil {
 			return result, err
 		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
+		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "START: %s [%s] %s", reserve.ID, reserve.Channel.Name, reserve.Title); err != nil {
@@ -164,7 +161,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		result.Started++
 
-		completed, err := recordProgramWithLog(ctx, paths.Database, paths.Recording, paths.Log, cfg, source, reserve)
+		completed, err := recordProgramWithLog(ctx, paths.Database, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
 		if err != nil {
 			if writeErr := programstore.Remove(ctx, paths.Database, programstore.Recording, reserve.ID); writeErr != nil {
@@ -178,10 +175,10 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed); err != nil {
 			return result, err
 		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
+		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
 			return result, err
 		}
-		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
+		if err := logCollectionWrite(paths, programstore.Recorded); err != nil {
 			return result, err
 		}
 		if completed.IsManualReserved {
@@ -189,7 +186,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			if _, err := reservationstore.Delete(ctx, paths.Database, reserve.ID); err != nil {
 				return result, err
 			}
-			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
+			if err := logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database); err != nil {
 				return result, err
 			}
 		}
@@ -215,11 +212,11 @@ func shouldStart(program legacy.Program, recording []legacy.Program, now time.Ti
 	return !now.Before(startAt)
 }
 
-func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
-	return recordProgramWithLog(ctx, ":memory:", recordingPath, "", cfg, source, program)
+func recordProgram(ctx context.Context, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
+	return recordProgramWithLog(ctx, ":memory:", "", cfg, source, program)
 }
 
-func recordProgramWithLog(ctx context.Context, databasePath, recordingPath, logPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
+func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
 	streamID, err := strconv.ParseInt(program.ID, 36, 64)
 	if err != nil {
 		return program, fmt.Errorf("parse program id %q: %w", program.ID, err)
@@ -237,7 +234,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, recordingPath, logP
 	defer stream.Close()
 	stopContextClose := closeStreamOnContext(recordCtx, stream)
 	defer stopContextClose()
-	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, recordingPath, program.ID, cancel, stream)
+	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, program.ID, cancel, stream)
 	defer stopAbortMonitor()
 
 	format := cfg.RecordedFormat
@@ -268,11 +265,11 @@ func recordProgramWithLog(ctx context.Context, databasePath, recordingPath, logP
 		"isScrambling": false,
 	})
 	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
-	if err := updateRecordingProgram(recordCtx, databasePath, recordingPath, program); err != nil {
+	if err := updateRecordingProgram(recordCtx, databasePath, program); err != nil {
 		return program, err
 	}
 	if logPath != "" {
-		if err := logging.AppendLine(logPath, "WRITE: %s", recordingPath); err != nil {
+		if err := logging.AppendLine(logPath, "WRITE: %s (%s)", databasePath, programstore.Recording); err != nil {
 			return program, err
 		}
 	}
@@ -312,7 +309,7 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 	}
 }
 
-func updateRecordingProgram(ctx context.Context, databasePath, recordingPath string, program legacy.Program) error {
+func updateRecordingProgram(ctx context.Context, databasePath string, program legacy.Program) error {
 	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
 	if err != nil {
 		return err
@@ -363,7 +360,7 @@ func programPriority(cfg *config.Config, program legacy.Program) int {
 	return 2
 }
 
-func watchAbortFlag(ctx context.Context, databasePath, recordingPath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
+func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
 	var aborted atomic.Bool
 	done := make(chan struct{})
 	stopped := make(chan struct{})
@@ -427,7 +424,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			}
 		}
 		if changed {
-			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
+			if err := logCollectionWrite(paths, programstore.Recording); err != nil {
 				return recorded, err
 			}
 		}
@@ -443,12 +440,16 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if err := programstore.Remove(ctx, paths.Database, programstore.Recorded, removed.ID); err != nil {
 				return recorded, err
 			}
-			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {
+			if err := logCollectionWrite(paths, programstore.Recorded); err != nil {
 				return recorded, err
 			}
 		}
 	}
 	return recorded, nil
+}
+
+func logCollectionWrite(paths Paths, collection string) error {
+	return logging.AppendLine(paths.Log, "WRITE: %s (%s)", paths.Database, collection)
 }
 
 func removeProgram(programs []legacy.Program, id string) []legacy.Program {

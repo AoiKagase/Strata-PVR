@@ -1329,13 +1329,10 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		switch name {
 		case "operator":
 			return operator.Run(ctx, operator.Paths{
-				Config:    p.config,
-				Database:  p.database,
-				Reserves:  p.reserves,
-				Recording: p.recording,
-				Recorded:  p.recorded,
-				PID:       filepath.Join("data", "operator.pid"),
-				Log:       filepath.Join("log", "operator"),
+				Config:   p.config,
+				Database: p.database,
+				PID:      filepath.Join("data", "operator.pid"),
+				Log:      filepath.Join("log", "operator"),
 			}, 0)
 		case "scheduler":
 			_, err := scheduler.Run(ctx, scheduler.Paths{

@@ -25,29 +25,51 @@ type fakeStreamer struct {
 	body   string
 }
 
-func runOnceTest(t *testing.T, ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
+type testPaths struct {
+	Config    string
+	Database  string
+	Reserves  string
+	Recording string
+	Recorded  string
+	PID       string
+	Log       string
+}
+
+func (p testPaths) runtime() Paths {
+	return Paths{Config: p.Config, Database: p.Database, PID: p.PID, Log: p.Log}
+}
+
+func (p testPaths) writeLog(collection string) string {
+	databasePath := p.Database
+	if databasePath == "" {
+		databasePath = filepath.Join(filepath.Dir(p.Recording), "strata.db")
+	}
+	return "WRITE: " + databasePath + " (" + collection + ")"
+}
+
+func runOnceTest(t *testing.T, ctx context.Context, paths testPaths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
 	t.Helper()
 	legacyFixture := paths.Database == ""
 	paths = seedOperatorTestDatabase(t, paths)
-	result, err := RunOnce(ctx, paths, cfg, source, now)
+	result, err := RunOnce(ctx, paths.runtime(), cfg, source, now)
 	if legacyFixture {
 		exportOperatorTestState(paths)
 	}
 	return result, err
 }
 
-func initializeRuntimeStateTest(t *testing.T, paths Paths, cfg *config.Config) error {
+func initializeRuntimeStateTest(t *testing.T, paths testPaths, cfg *config.Config) error {
 	t.Helper()
 	legacyFixture := paths.Database == ""
 	paths = seedOperatorTestDatabase(t, paths)
-	err := initializeRuntimeState(paths, cfg)
+	err := initializeRuntimeState(paths.runtime(), cfg)
 	if legacyFixture {
 		exportOperatorTestState(paths)
 	}
 	return err
 }
 
-func seedOperatorTestDatabase(t *testing.T, paths Paths) Paths {
+func seedOperatorTestDatabase(t *testing.T, paths testPaths) testPaths {
 	t.Helper()
 	if paths.Database != "" {
 		return paths
@@ -71,7 +93,7 @@ func seedOperatorTestDatabase(t *testing.T, paths Paths) Paths {
 	return paths
 }
 
-func exportOperatorTestState(paths Paths) {
+func exportOperatorTestState(paths testPaths) {
 	ctx := context.Background()
 	if reserves, err := reservationstore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
@@ -83,7 +105,7 @@ func exportOperatorTestState(paths Paths) {
 	}
 }
 
-func readOperatorTestPrograms(paths Paths, collection string, target *[]legacy.Program) error {
+func readOperatorTestPrograms(paths testPaths, collection string, target *[]legacy.Program) error {
 	databasePath := paths.Database
 	if databasePath == "" {
 		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
@@ -95,7 +117,7 @@ func readOperatorTestPrograms(paths Paths, collection string, target *[]legacy.P
 	return err
 }
 
-func readOperatorTestReserves(paths Paths, target *[]legacy.Program) error {
+func readOperatorTestReserves(paths testPaths, target *[]legacy.Program) error {
 	databasePath := paths.Database
 	if databasePath == "" {
 		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
@@ -124,7 +146,7 @@ func (f *priorityStreamer) SetPriority(priority int) {
 
 func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T) {
 	dir := t.TempDir()
-	paths := Paths{
+	paths := testPaths{
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
@@ -203,7 +225,7 @@ func assertLogSubsequence(t *testing.T, logData []byte, want ...string) {
 func TestRunOnceRecordsDueProgram(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -274,26 +296,26 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		"PREPARE: #21i3v9 ",
 		"RECORD: #21i3v9 ",
 		"STREAM: ",
-		"WRITE: " + paths.Recording,
-		"WRITE: " + paths.Recorded,
+		paths.writeLog(programstore.Recording),
+		paths.writeLog(programstore.Recorded),
 		"FIN: #21i3v9 ",
 	} {
 		if !strings.Contains(string(logData), want) {
 			t.Fatalf("operator log missing %q: %s", want, string(logData))
 		}
 	}
-	if got := strings.Count(string(logData), "WRITE: "+paths.Recording); got < 2 {
+	if got := strings.Count(string(logData), paths.writeLog(programstore.Recording)); got < 2 {
 		t.Fatalf("operator log should include initial and completion recording writes, got %d: %s", got, string(logData))
 	}
 	assertLogSubsequence(t, logData,
 		"PREPARE: #21i3v9 ",
-		"WRITE: "+paths.Recording,
+		paths.writeLog(programstore.Recording),
 		"START: 21i3v9",
 		"RECORD: #21i3v9 ",
 		"STREAM: ",
-		"WRITE: "+paths.Recording,
-		"WRITE: "+paths.Recording,
-		"WRITE: "+paths.Recorded,
+		paths.writeLog(programstore.Recording),
+		paths.writeLog(programstore.Recording),
+		paths.writeLog(programstore.Recorded),
 		"FIN: 21i3v9",
 		"FIN: #21i3v9 ",
 	)
@@ -302,7 +324,7 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Database: filepath.Join(dir, "data", "strata.db"), Reserves: filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"), Recorded: filepath.Join(dir, "data", "recorded.json"), Log: filepath.Join(dir, "log", "operator"),
 	}
@@ -346,7 +368,7 @@ func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
 func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -383,7 +405,7 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(logData), "WRITE: "+paths.Reserves) {
+	if !strings.Contains(string(logData), paths.writeLog("reserves")) {
 		t.Fatalf("manual reserve write log missing: %s", string(logData))
 	}
 }
@@ -402,7 +424,7 @@ func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
 	}
 	program := legacy.Program{ID: "1", Title: "Priority"}
 	normal := &priorityStreamer{fakeStreamer: fakeStreamer{body: "normal"}}
-	if _, err := recordProgram(context.Background(), recordingPath, cfg, normal, program); err != nil {
+	if _, err := recordProgram(context.Background(), cfg, normal, program); err != nil {
 		t.Fatal(err)
 	}
 	if normal.priority != 5 {
@@ -411,7 +433,7 @@ func TestRecordProgramSetsMirakurunPriority(t *testing.T) {
 
 	conflicted := &priorityStreamer{fakeStreamer: fakeStreamer{body: "conflict"}}
 	program.IsConflict = true
-	if _, err := recordProgram(context.Background(), recordingPath, cfg, conflicted, program); err != nil {
+	if _, err := recordProgram(context.Background(), cfg, conflicted, program); err != nil {
 		t.Fatal(err)
 	}
 	if conflicted.priority != 1 {
@@ -433,7 +455,7 @@ func TestOperatorLegacyISODateTimeUsesDateformatOffset(t *testing.T) {
 func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -490,7 +512,7 @@ func TestMergeRecordedProgramMatchesLegacyDuplicateHandling(t *testing.T) {
 func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -554,7 +576,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -636,13 +658,13 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	}
 	assertLogSubsequence(t, logData,
 		"PREPARE: #21i3v9 ",
-		"WRITE: "+paths.Recording,
+		paths.writeLog(programstore.Recording),
 		"START: 21i3v9",
 		"RECORD: #21i3v9 ",
 		"STREAM: ",
-		"WRITE: "+paths.Recording,
-		"WRITE: "+paths.Recording,
-		"WRITE: "+paths.Recorded,
+		paths.writeLog(programstore.Recording),
+		paths.writeLog(programstore.Recording),
+		paths.writeLog(programstore.Recorded),
 		"FIN: 21i3v9",
 		"FIN: #21i3v9 ",
 	)
@@ -682,7 +704,7 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 	if err := os.WriteFile(oldFile, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	paths := Paths{
+	paths := testPaths{
 		Reserves:  filepath.Join(dir, "data", "reserves.json"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
@@ -730,7 +752,7 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	}
 	defer func() { getDiskUsage = oldGetDiskUsage }()
 
-	paths := Paths{
+	paths := testPaths{
 		Database:  filepath.Join(dir, "data", "strata.db"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
@@ -751,7 +773,7 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 		StorageLowSpaceAction:      "stop",
 	}
 
-	if _, err := handleLowStorage(context.Background(), paths, cfg, recording, nil); err != nil {
+	if _, err := handleLowStorage(context.Background(), paths.runtime(), cfg, recording, nil); err != nil {
 		t.Fatal(err)
 	}
 	var updated []legacy.Program
@@ -765,7 +787,7 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(logData), "WRITE: "+paths.Recording) {
+	if !strings.Contains(string(logData), paths.writeLog(programstore.Recording)) {
 		t.Fatalf("operator log missing recording write: %s", string(logData))
 	}
 }
