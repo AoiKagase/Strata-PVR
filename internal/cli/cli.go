@@ -350,9 +350,6 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 	doc.Services.Order = old.ServiceOrder
 	doc.Advanced = config.AdvancedSettings{NormalizationForm: old.NormalizationForm}
 	warnings := []string{}
-	if legacyConfigHas(old, "uid", "gid") {
-		warnings = append(warnings, "legacy uid/gid settings are not represented in Strata config; configure the service account in the process manager")
-	}
 	if old.WUIPort != nil {
 		doc.Web.ListenAddress = old.WUIHost
 		doc.Web.Port = *old.WUIPort
@@ -366,24 +363,6 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 	if old.WUIPort != nil && old.WUIOpenServer {
 		warnings = append(warnings, "legacy authenticated and public WUI listeners were merged; Strata uses the authenticated listener address and port")
 	}
-	if legacyConfigHas(old, "wuiTlsKeyPath", "wuiTlsCertPath", "wuiTlsCaPath", "wuiTlsPassphrase", "wuiTlsRequestCert", "wuiTlsRejectUnauthorized") {
-		warnings = append(warnings, "legacy WUI TLS settings are not represented in Strata config version 1; configure TLS at a reverse proxy")
-	}
-	if legacyConfigHas(old, "wuiXFF") {
-		warnings = append(warnings, "legacy wuiXFF is not represented in Strata config version 1")
-	}
-	if legacyConfigHas(old, "wuiAllowCountries") {
-		warnings = append(warnings, "legacy wuiAllowCountries is unsupported; enforce geographic access policy outside Strata")
-	}
-	if legacyConfigHas(old, "wuiMdnsAdvertisement") {
-		warnings = append(warnings, "legacy WUI mDNS advertisement is unsupported")
-	}
-	if legacyConfigHas(old, "operTweeter", "operTweeterAuth", "operTweeterFormat") {
-		warnings = append(warnings, "legacy Twitter/Tweeter notification settings are unsupported")
-	}
-	if legacyConfigHas(old, "schedulerStartCommand", "schedulerEndCommand", "epgStartCommand", "epgEndCommand", "conflictCommand", "recordedCommand", "storageLowSpaceCommand", "storageLowSpaceNotifyTo") {
-		warnings = append(warnings, "legacy scheduler, EPG, conflict, or recorded hook commands are not represented in Strata config version 1")
-	}
 	for _, credential := range old.WUIUsers {
 		username, password, ok := strings.Cut(credential, ":")
 		if !ok || username == "" || password == "" {
@@ -396,15 +375,6 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 		doc.Web.Authentication.Users = append(doc.Web.Authentication.Users, config.WebUser{Username: username, PasswordHash: hash})
 	}
 	return doc, warnings, nil
-}
-
-func legacyConfigHas(cfg *config.LegacyConfig, keys ...string) bool {
-	for _, key := range keys {
-		if raw, ok := cfg.Raw[key]; ok && string(raw) != "null" && string(raw) != "false" && string(raw) != "[]" && string(raw) != "{}" {
-			return true
-		}
-	}
-	return false
 }
 
 func migrateLegacyJSONFiles(tempDir string) error {

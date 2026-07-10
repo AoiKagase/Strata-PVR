@@ -408,22 +408,17 @@ func TestMigrateChinachuImportsLargeReservationSet(t *testing.T) {
 	}
 }
 
-func TestConvertLegacyConfigWarnsAboutUnsupportedSettings(t *testing.T) {
+func TestConvertLegacyConfigWarnsWhenListenersAreMerged(t *testing.T) {
 	port := 20772
 	_, warnings, err := convertLegacyConfig(&config.LegacyConfig{
 		WUIPort: &port, WUIHost: "127.0.0.1", WUIOpenServer: true,
-		Raw: map[string]json.RawMessage{
-			"wuiTlsKeyPath": []byte(`"server.key"`), "wuiXFF": []byte(`true`), "wuiAllowCountries": []byte(`["JP"]`), "wuiMdnsAdvertisement": []byte(`true`), "operTweeter": []byte(`true`), "schedulerStartCommand": []byte(`"hook"`),
-		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := strings.Join(warnings, "\n")
-	for _, want := range []string{"listeners were merged", "TLS settings", "wuiXFF", "wuiAllowCountries", "mDNS", "Twitter/Tweeter", "hook commands"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("migration warnings missing %q: %s", want, text)
-		}
+	if !strings.Contains(text, "listeners were merged") {
+		t.Fatalf("migration warning missing listener merge: %s", text)
 	}
 }
 

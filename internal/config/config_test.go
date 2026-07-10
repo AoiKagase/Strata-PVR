@@ -9,7 +9,7 @@ import (
 	"strata-pvr/internal/storage"
 )
 
-func TestLoadLegacyPreservesUnknownAndDefaults(t *testing.T) {
+func TestLoadLegacyIgnoresUnknownFieldsAndAppliesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(path, []byte(`{"recordedDir":"./rec/","vaapiEnabled":true,"vaapiDevice":"/dev/dri/renderD128","wuiAllowCountries":["JP","US"],"wuiMdnsAdvertisement":true,"operTweeter":true,"operTweeterAuth":{"consumerKey":"ck","consumerSecret":"cs","accessToken":"at","accessTokenSecret":"ats"},"operTweeterFormat":{"start":"start <title>","end":"end <title>"},"custom":true}`), 0o644); err != nil {
@@ -24,14 +24,6 @@ func TestLoadLegacyPreservesUnknownAndDefaults(t *testing.T) {
 	}
 	if cfg.EffectiveMirakurunPath() != "http+unix://%2Fvar%2Frun%2Fmirakurun.sock/" {
 		t.Fatalf("unexpected mirakurun path: %s", cfg.EffectiveMirakurunPath())
-	}
-	for _, key := range []string{"wuiAllowCountries", "wuiMdnsAdvertisement", "operTweeter", "operTweeterAuth", "operTweeterFormat"} {
-		if _, ok := cfg.Raw[key]; !ok {
-			t.Fatalf("retired legacy field %q was not retained for migration diagnostics", key)
-		}
-	}
-	if _, ok := cfg.Raw["custom"]; !ok {
-		t.Fatal("unknown field was not preserved in Raw")
 	}
 }
 

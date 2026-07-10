@@ -86,26 +86,23 @@ type Config struct {
 }
 
 type LegacyConfig struct {
-	UID                        any                        `json:"uid"`
-	GID                        any                        `json:"gid"`
-	MirakurunPath              string                     `json:"mirakurunPath"`
-	SchedulerMirakurunPath     string                     `json:"schedulerMirakurunPath"`
-	RecordedDir                string                     `json:"recordedDir"`
-	ExcludeServices            []int64                    `json:"excludeServices"`
-	ServiceOrder               []int64                    `json:"serviceOrder"`
-	WUIUsers                   []string                   `json:"wuiUsers"`
-	WUIPort                    *int                       `json:"wuiPort"`
-	WUIHost                    string                     `json:"wuiHost"`
-	WUIOpenServer              bool                       `json:"wuiOpenServer"`
-	WUIOpenHost                string                     `json:"wuiOpenHost"`
-	WUIOpenPort                int                        `json:"wuiOpenPort"`
-	NormalizationForm          string                     `json:"normalizationForm"`
-	RecordedFormat             string                     `json:"recordedFormat"`
-	RecordingPriority          int                        `json:"recordingPriority"`
-	ConflictedPriority         int                        `json:"conflictedPriority"`
-	StorageLowSpaceThresholdMB int                        `json:"storageLowSpaceThresholdMB"`
-	StorageLowSpaceAction      string                     `json:"storageLowSpaceAction"`
-	Raw                        map[string]json.RawMessage `json:"-"`
+	MirakurunPath              string   `json:"mirakurunPath"`
+	SchedulerMirakurunPath     string   `json:"schedulerMirakurunPath"`
+	RecordedDir                string   `json:"recordedDir"`
+	ExcludeServices            []int64  `json:"excludeServices"`
+	ServiceOrder               []int64  `json:"serviceOrder"`
+	WUIUsers                   []string `json:"wuiUsers"`
+	WUIPort                    *int     `json:"wuiPort"`
+	WUIHost                    string   `json:"wuiHost"`
+	WUIOpenServer              bool     `json:"wuiOpenServer"`
+	WUIOpenHost                string   `json:"wuiOpenHost"`
+	WUIOpenPort                int      `json:"wuiOpenPort"`
+	NormalizationForm          string   `json:"normalizationForm"`
+	RecordedFormat             string   `json:"recordedFormat"`
+	RecordingPriority          int      `json:"recordingPriority"`
+	ConflictedPriority         int      `json:"conflictedPriority"`
+	StorageLowSpaceThresholdMB int      `json:"storageLowSpaceThresholdMB"`
+	StorageLowSpaceAction      string   `json:"storageLowSpaceAction"`
 }
 
 func Load(path string) (*Config, error) {
@@ -138,18 +135,19 @@ func LoadLegacy(path string) (*LegacyConfig, error) {
 }
 
 func ParseLegacy(b []byte) (*LegacyConfig, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
+	var marker struct {
+		Schema json.RawMessage `json:"schema"`
+	}
+	if err := json.Unmarshal(b, &marker); err != nil {
 		return nil, err
 	}
-	if _, ok := raw["schema"]; ok {
+	if marker.Schema != nil {
 		return nil, fmt.Errorf("Strata config cannot be used as legacy migration input")
 	}
 	cfg := defaultLegacyConfig()
 	if err := json.Unmarshal(b, cfg); err != nil {
 		return nil, err
 	}
-	cfg.Raw = raw
 	return cfg, nil
 }
 
