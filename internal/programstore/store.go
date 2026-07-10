@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"strata-pvr/internal/database"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 )
 
 const (

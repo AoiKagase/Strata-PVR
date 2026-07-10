@@ -14,7 +14,7 @@ import (
 
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/database"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
 	"strata-pvr/internal/programstore"

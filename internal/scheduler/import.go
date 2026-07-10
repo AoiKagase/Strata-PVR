@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"strata-pvr/internal/config"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/mirakurun"
 )
 

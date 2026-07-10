@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"strata-pvr/internal/database"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 )
 
 func Read(ctx context.Context, databasePath string) ([]legacy.ChannelSchedule, error) {
