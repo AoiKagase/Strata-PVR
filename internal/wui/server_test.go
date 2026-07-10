@@ -3389,7 +3389,7 @@ func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	cfg := &config.Config{WUIHost: "127.0.0.1", WUIPort: 20772, WUIAuthenticationEnabled: true}
+	cfg := &config.Config{WUIHost: "127.0.0.1", WUIPort: 20772}
 	servers, err := buildHTTPServers(paths.runtime(), cfg)
 	if err != nil {
 		t.Fatal(err)

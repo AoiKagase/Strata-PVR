@@ -315,7 +315,7 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 	return []runningServer{{
 		server: &http.Server{
 			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
-			Handler:           newHandler(paths, cfg, cfg.WUIAuthenticationEnabled),
+			Handler:           newHandler(paths, cfg, true),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 		label: "HTTP Server",
