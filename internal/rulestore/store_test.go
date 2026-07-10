@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"strata-pvr/internal/database"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/storage"
 )
 

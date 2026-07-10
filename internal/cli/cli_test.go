@@ -15,7 +15,7 @@ import (
 	passwordauth "strata-pvr/internal/auth"
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/database"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"

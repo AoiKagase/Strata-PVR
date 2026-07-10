@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"strata-pvr/internal/config"
-	"strata-pvr/internal/legacy"
+	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/storage"
