@@ -191,8 +191,8 @@ func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
 	if err != nil || len(archives) != 1 {
 		t.Fatalf("legacy input was not archived: %v %v", archives, err)
 	}
-	if _, err := os.Stat("migrate"); !os.IsNotExist(err) {
-		t.Fatalf("migrate input still exists: %v", err)
+	if got := string(mustReadCLIFile(t, filepath.Join("migrate", "config.json"))); got != legacyConfig {
+		t.Fatalf("migrate input was modified: %q", got)
 	}
 	reports, err := filepath.Glob(filepath.Join("backup", "chinachu-*-report.json"))
 	if err != nil || len(reports) != 1 {
@@ -278,18 +278,15 @@ func TestMigrateArchiveMismatchRollsBackAndCanRetry(t *testing.T) {
 	}
 }
 
-func TestMigrateArchiveMoveFailureLeavesInputUntouched(t *testing.T) {
+func TestMigrateArchiveCopyFailureLeavesInputUntouched(t *testing.T) {
 	withMigrationTestDir(t)
 	writeMinimalMigrationInput(t)
-	originalRename := renameMigrationPath
-	renameMigrationPath = func(oldPath, newPath string) error {
-		if oldPath == "migrate" {
-			return fmt.Errorf("injected archive move failure")
-		}
-		return os.Rename(oldPath, newPath)
+	originalCopy := copyMigrationInput
+	copyMigrationInput = func(oldPath, newPath string) error {
+		return fmt.Errorf("injected archive copy failure")
 	}
 	err := migrateChinachu(context.Background(), nil, &bytes.Buffer{})
-	renameMigrationPath = originalRename
+	copyMigrationInput = originalCopy
 	if err == nil || !strings.Contains(err.Error(), "archive migration input") {
 		t.Fatalf("unexpected archive move error: %v", err)
 	}

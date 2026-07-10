@@ -36,6 +36,7 @@ type paths struct {
 var resolveRuntimePaths = runtimePaths
 var validateRuntimePaths = requireStrataRuntime
 var renameMigrationPath = os.Rename
+var copyMigrationInput = copyDirectory
 var inspectArchivedMigrationFiles = inspectMigrationFiles
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
@@ -277,19 +278,20 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 	}
 	stamp := time.Now().Format("20060102-150405")
 	archivePath := filepath.Join(backupRoot, "chinachu-"+stamp)
-	if err := renameMigrationPath("migrate", archivePath); err != nil {
+	if err := copyMigrationInput("migrate", archivePath); err != nil {
+		_ = os.RemoveAll(archivePath)
 		return fmt.Errorf("archive migration input: %w", err)
 	}
 	archivedHashes, archivedSizes, err := inspectArchivedMigrationFiles(archivePath)
 	if err != nil || !maps.Equal(sourceHashes, archivedHashes) || !maps.Equal(sourceSizes, archivedSizes) {
-		_ = renameMigrationPath(archivePath, "migrate")
+		_ = os.RemoveAll(archivePath)
 		if err != nil {
 			return fmt.Errorf("verify archived migration input: %w", err)
 		}
 		return fmt.Errorf("verify archived migration input: source files changed while migrating")
 	}
 	if err := renameMigrationPath(tempDir, "data"); err != nil {
-		_ = renameMigrationPath(archivePath, "migrate")
+		_ = os.RemoveAll(archivePath)
 		return fmt.Errorf("install Strata data: %w", err)
 	}
 	manifest := map[string]any{
@@ -300,11 +302,50 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 	if err := storage.WriteJSONAtomic(filepath.Join(backupRoot, "chinachu-"+stamp+"-report.json"), manifest, true); err != nil {
 		fmt.Fprintf(stdout, "Warning: migration report could not be written: %v\n", err)
 	}
-	fmt.Fprintf(stdout, "Migrated Chinachu data to data/. Original files: %s\n", archivePath)
+	fmt.Fprintf(stdout, "Migrated Chinachu data to data/. Original files copied to: %s\n", archivePath)
 	for _, warning := range warnings {
 		fmt.Fprintf(stdout, "Warning: %s\n", warning)
 	}
 	return nil
+}
+
+func copyDirectory(sourceRoot, destinationRoot string) error {
+	return filepath.WalkDir(sourceRoot, func(sourcePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(sourceRoot, sourcePath)
+		if err != nil {
+			return err
+		}
+		destinationPath := filepath.Join(destinationRoot, relative)
+		if entry.IsDir() {
+			return os.Mkdir(destinationPath, 0o755)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		input, err := os.Open(sourcePath)
+		if err != nil {
+			return err
+		}
+		output, err := os.OpenFile(destinationPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		_, copyErr := io.Copy(output, input)
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+		return closeInputErr
+	})
 }
 
 func inspectMigrationFiles(root string) (map[string]string, map[string]int64, error) {
