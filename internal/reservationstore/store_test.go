@@ -35,19 +35,3 @@ func TestSQLiteReservationStoreIgnoresLegacyJSON(t *testing.T) {
 		t.Fatalf("reservations = %#v", got)
 	}
 }
-
-func TestJSONReservationStoreRemainsCompatible(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "reserves.json")
-	want := []legacy.Program{{ID: "legacy"}}
-	if err := Write(ctx, "", path, want); err != nil {
-		t.Fatal(err)
-	}
-	got, err := Read(ctx, "", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "legacy" {
-		t.Fatalf("reservations = %#v", got)
-	}
-}

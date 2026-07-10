@@ -19,7 +19,6 @@ import (
 	"strata-pvr/internal/mirakurun"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
-	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
 )
 
@@ -63,14 +62,12 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if err := initializeRuntimeState(paths, cfg); err != nil {
 		return err
 	}
-	if paths.Database != "" {
-		db, err := database.Open(ctx, paths.Database)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-		ctx = database.WithHandle(ctx, db)
+	db, err := database.Open(ctx, paths.Database)
+	if err != nil {
+		return err
 	}
+	defer db.Close()
+	ctx = database.WithHandle(ctx, db)
 
 	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
 	if err != nil {
@@ -167,7 +164,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		result.Started++
 
-		completed, err := recordProgramWithLog(ctx, paths.Recording, paths.Log, cfg, source, reserve)
+		completed, err := recordProgramWithLog(ctx, paths.Database, paths.Recording, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
 		if err != nil {
 			if writeErr := programstore.Remove(ctx, paths.Database, paths.Recording, programstore.Recording, reserve.ID); writeErr != nil {
@@ -178,17 +175,8 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 
 		recorded = mergeRecordedProgram(recorded, completed)
-		if paths.Database != "" {
-			if err := programstore.Complete(ctx, paths.Database, completed); err != nil {
-				return result, err
-			}
-		} else {
-			if err := programstore.Remove(ctx, "", paths.Recording, programstore.Recording, reserve.ID); err != nil {
-				return result, err
-			}
-			if err := programstore.Write(ctx, "", paths.Recorded, programstore.Recorded, recorded); err != nil {
-				return result, err
-			}
+		if err := programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed); err != nil {
+			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
 			return result, err
@@ -228,10 +216,10 @@ func shouldStart(program legacy.Program, recording []legacy.Program, now time.Ti
 }
 
 func recordProgram(ctx context.Context, recordingPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
-	return recordProgramWithLog(ctx, recordingPath, "", cfg, source, program)
+	return recordProgramWithLog(ctx, ":memory:", recordingPath, "", cfg, source, program)
 }
 
-func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
+func recordProgramWithLog(ctx context.Context, databasePath, recordingPath, logPath string, cfg *config.Config, source StreamSource, program legacy.Program) (legacy.Program, error) {
 	streamID, err := strconv.ParseInt(program.ID, 36, 64)
 	if err != nil {
 		return program, fmt.Errorf("parse program id %q: %w", program.ID, err)
@@ -249,7 +237,7 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 	defer stream.Close()
 	stopContextClose := closeStreamOnContext(recordCtx, stream)
 	defer stopContextClose()
-	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, recordingPath, program.ID, cancel, stream)
+	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, recordingPath, program.ID, cancel, stream)
 	defer stopAbortMonitor()
 
 	format := cfg.RecordedFormat
@@ -280,7 +268,7 @@ func recordProgramWithLog(ctx context.Context, recordingPath, logPath string, cf
 		"isScrambling": false,
 	})
 	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
-	if err := updateRecordingProgram(recordingPath, program); err != nil {
+	if err := updateRecordingProgram(recordCtx, databasePath, recordingPath, program); err != nil {
 		return program, err
 	}
 	if logPath != "" {
@@ -324,9 +312,9 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 	}
 }
 
-func updateRecordingProgram(recordingPath string, program legacy.Program) error {
-	var recording []legacy.Program
-	if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
+func updateRecordingProgram(ctx context.Context, databasePath, recordingPath string, program legacy.Program) error {
+	recording, err := programstore.Read(ctx, databasePath, recordingPath, programstore.Recording)
+	if err != nil {
 		return err
 	}
 	changed := false
@@ -340,7 +328,7 @@ func updateRecordingProgram(recordingPath string, program legacy.Program) error 
 	if !changed {
 		return nil
 	}
-	return storage.WriteJSONAtomic(recordingPath, recording, false)
+	return programstore.Upsert(ctx, databasePath, recordingPath, programstore.Recording, program)
 }
 
 func setProgramRawJSON(program *legacy.Program, key string, value any) {
@@ -375,7 +363,7 @@ func programPriority(cfg *config.Config, program legacy.Program) int {
 	return 2
 }
 
-func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
+func watchAbortFlag(ctx context.Context, databasePath, recordingPath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
 	var aborted atomic.Bool
 	done := make(chan struct{})
 	stopped := make(chan struct{})
@@ -390,8 +378,8 @@ func watchAbortFlag(ctx context.Context, recordingPath, programID string, cancel
 			case <-done:
 				return
 			case <-ticker.C:
-				var recording []legacy.Program
-				if err := storage.ReadJSON(recordingPath, &recording, "[]"); err != nil {
+				recording, err := programstore.Read(ctx, databasePath, recordingPath, programstore.Recording)
+				if err != nil {
 					continue
 				}
 				for _, program := range recording {
@@ -433,19 +421,12 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if !recording[i].Abort {
 				recording[i].Abort = true
 				changed = true
-				if paths.Database != "" {
-					if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, recording[i]); err != nil {
-						return recorded, err
-					}
+				if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, recording[i]); err != nil {
+					return recorded, err
 				}
 			}
 		}
 		if changed {
-			if paths.Database == "" {
-				if err := programstore.Write(ctx, "", paths.Recording, programstore.Recording, recording); err != nil {
-					return recorded, err
-				}
-			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
 				return recorded, err
 			}
@@ -458,9 +439,6 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 				if err := os.Remove(filepath.FromSlash(removed.Recorded)); err != nil && !os.IsNotExist(err) {
 					return recorded, err
 				}
-			}
-			if _, err := storage.BackupFile(paths.Recorded); err != nil {
-				return recorded, err
 			}
 			if err := programstore.Remove(ctx, paths.Database, paths.Recorded, programstore.Recorded, removed.ID); err != nil {
 				return recorded, err

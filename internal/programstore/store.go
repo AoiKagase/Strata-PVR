@@ -6,7 +6,6 @@ import (
 
 	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
-	"strata-pvr/internal/storage"
 )
 
 const (
@@ -15,13 +14,6 @@ const (
 )
 
 func Read(ctx context.Context, databasePath, jsonPath, collection string) ([]legacy.Program, error) {
-	if databasePath == "" {
-		var programs []legacy.Program
-		if err := storage.ReadJSON(jsonPath, &programs, "[]"); err != nil {
-			return nil, err
-		}
-		return programs, nil
-	}
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -43,9 +35,6 @@ func Read(ctx context.Context, databasePath, jsonPath, collection string) ([]leg
 }
 
 func Write(ctx context.Context, databasePath, jsonPath, collection string, programs []legacy.Program) error {
-	if databasePath == "" {
-		return storage.WriteJSONAtomic(jsonPath, programs, false)
-	}
 	documents := make([]database.ProgramDocument, 0, len(programs))
 	for _, program := range programs {
 		document, err := json.Marshal(program)
@@ -63,19 +52,6 @@ func Write(ctx context.Context, databasePath, jsonPath, collection string, progr
 }
 
 func Upsert(ctx context.Context, databasePath, jsonPath, collection string, program legacy.Program) error {
-	if databasePath == "" {
-		programs, err := Read(ctx, "", jsonPath, collection)
-		if err != nil {
-			return err
-		}
-		for i := range programs {
-			if programs[i].ID == program.ID {
-				programs[i] = program
-				return Write(ctx, "", jsonPath, collection, programs)
-			}
-		}
-		return Write(ctx, "", jsonPath, collection, append(programs, program))
-	}
 	document, err := encodeProgram(program)
 	if err != nil {
 		return err
@@ -89,19 +65,6 @@ func Upsert(ctx context.Context, databasePath, jsonPath, collection string, prog
 }
 
 func Remove(ctx context.Context, databasePath, jsonPath, collection, programID string) error {
-	if databasePath == "" {
-		programs, err := Read(ctx, "", jsonPath, collection)
-		if err != nil {
-			return err
-		}
-		kept := programs[:0]
-		for _, program := range programs {
-			if program.ID != programID {
-				kept = append(kept, program)
-			}
-		}
-		return Write(ctx, "", jsonPath, collection, kept)
-	}
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return err

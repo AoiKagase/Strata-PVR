@@ -6,11 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +18,8 @@ import (
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
+	"strata-pvr/internal/rulestore"
+	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 )
 
@@ -29,14 +28,45 @@ func TestMain(m *testing.M) {
 		if _, err := os.Stat(filepath.Join("data", "config.json")); err == nil {
 			return runtimePaths()
 		}
-		return paths{
+		p := paths{
 			config: "config.json", rules: "rules.json",
+			database: filepath.Join("data", "strata.db"),
 			schedule: filepath.Join("data", "schedule.json"), reserves: filepath.Join("data", "reserves.json"),
 			recording: filepath.Join("data", "recording.json"), recorded: filepath.Join("data", "recorded.json"),
 		}
+		return p
 	}
-	validateRuntimePaths = func(paths) error { return nil }
+	validateRuntimePaths = func(p paths) error {
+		seedCLITestDatabase(p)
+		return nil
+	}
 	os.Exit(m.Run())
+}
+
+func seedCLITestDatabase(p paths) {
+	if _, err := os.Stat(p.database); err == nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(p.database), 0o755)
+	ctx := context.Background()
+	var rules []legacy.Rule
+	if storage.ReadJSON(p.rules, &rules, "[]") == nil {
+		_ = rulestore.Write(ctx, p.database, p.rules, rules)
+	}
+	var schedule []legacy.ChannelSchedule
+	if storage.ReadJSON(p.schedule, &schedule, "[]") == nil {
+		_ = schedulestore.Write(ctx, p.database, p.schedule, schedule)
+	}
+	var reserves []legacy.Program
+	if storage.ReadJSON(p.reserves, &reserves, "[]") == nil {
+		_ = reservationstore.Write(ctx, p.database, p.reserves, reserves)
+	}
+	for _, item := range []struct{ path, collection string }{{p.recording, programstore.Recording}, {p.recorded, programstore.Recorded}} {
+		var programs []legacy.Program
+		if storage.ReadJSON(item.path, &programs, "[]") == nil {
+			_ = programstore.Write(ctx, p.database, item.path, item.collection, programs)
+		}
+	}
 }
 
 func TestRequireStrataRuntimeRejectsLegacyRootConfig(t *testing.T) {
@@ -61,7 +91,7 @@ func TestRuntimePathsUseOnlyNativeData(t *testing.T) {
 	if !isRuntimeCommand([]string{"reserves"}) || !isRuntimeCommand([]string{"service", "wui", "execute"}) {
 		t.Fatal("operational commands were not classified as runtime commands")
 	}
-	if isRuntimeCommand([]string{"service", "wui", "initscript"}) || isRuntimeCommand([]string{"compat", "check"}) {
+	if isRuntimeCommand([]string{"service", "wui", "initscript"}) {
 		t.Fatal("non-runtime commands require initialized data")
 	}
 }
@@ -543,29 +573,6 @@ func TestShellQuote(t *testing.T) {
 	}
 }
 
-func TestCompatWrapperOutputsSafeLauncher(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "wrapper"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, want := range []string{
-		"#!/bin/bash",
-		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
-		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
-		`cd "$STRATA_PVR_DIR" || exit 1`,
-		`exec "$DAEMON" "$@"`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("wrapper missing %q: %s", want, text)
-		}
-	}
-}
-
 func TestPrepareServiceRuntimeRequiresInitialization(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
@@ -621,516 +628,6 @@ func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
 	}
 }
 
-func TestCompatCheckValidatesStateFilesAndRecordedDir(t *testing.T) {
-	dir := t.TempDir()
-	mirakurun := newCompatMirakurun(t)
-	defer mirakurun.Close()
-	installFakeCompatCommand(t, dir, "ffmpeg")
-	installFakeCompatCommand(t, dir, "ffprobe")
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("recorded", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("log", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("web", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeCompatWebAssets(t, "web")
-	files := map[string]string{
-		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
-		"rules.json":          `[]`,
-		"config.sample.json":  `{"recordedDir":"recorded"}`,
-		"rules.sample.json":   `[]`,
-		"data/schedule.json":  `[]`,
-		"data/reserves.json":  `[]`,
-		"data/recording.json": `[]`,
-		"data/recorded.json":  `[]`,
-		"web/index.html":      `<html></html>`,
-	}
-	for name, data := range files {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, want := range []string{
-		"OK config.json",
-		"OK rules.json",
-		"OK config.sample.json",
-		"OK rules.sample.json",
-		"OK data directory",
-		"OK log directory",
-		"OK recordedDir",
-		"OK data/schedule.json",
-		"OK data/reserves.json",
-		"OK data/recording.json",
-		"OK data/recorded.json",
-		"OK WUI static assets",
-		"OK available disk space",
-		"OK ffmpeg command",
-		"OK ffprobe command",
-		"OK Mirakurun services",
-		"OK Mirakurun programs",
-		"OK Mirakurun tuners",
-		"OK Node.js runtime",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("compat output missing %q: %s", want, text)
-		}
-	}
-
-	out.Reset()
-	if err := Run(context.Background(), []string{"compat", "doctor"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text = out.String()
-	resolvedRecordedDir, err := filepath.Abs("recorded")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		"CONFIG mirakurunPath=" + mirakurun.URL,
-		"CONFIG recordedDir=recorded",
-		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
-		"CONFIG wui=0.0.0.0:disabled open=disabled",
-		"CONFIG storageLowSpace=3000MB action=remove",
-		"STATE scheduleChannels=0",
-		"STATE reserves=0",
-		"STATE recording=0",
-		"STATE recorded=0",
-		"NEXT strata-pvr compat backup",
-		"NEXT strata-pvr update -s",
-		"NEXT strata-pvr reserves",
-		"NEXT strata-pvr service wui execute",
-		"NEXT strata-pvr service operator execute",
-		"WARN strata-pvr binary not found in the current directory",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("compat doctor output missing %q: %s", want, text)
-		}
-	}
-}
-
-func TestCompatStateSummaryReportsArrayLengths(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, data := range map[string]string{
-		"data/schedule.json":  `[{}, {}]`,
-		"data/reserves.json":  `[{}]`,
-		"data/recording.json": `[]`,
-		"data/recorded.json":  `[{}, {}, {}]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var out bytes.Buffer
-	writeCompatStateSummary(&out)
-	text := out.String()
-	for _, want := range []string{
-		"STATE scheduleChannels=2",
-		"STATE reserves=1",
-		"STATE recording=0",
-		"STATE recorded=3",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("state summary missing %q: %s", want, text)
-		}
-	}
-}
-
-func TestCompatStateWarningsDetectActiveRecording(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("data", "recording.json"), []byte(`[{"id":"rec"}]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	warnings := compatStateWarnings()
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "active recordings detected: 1") {
-		t.Fatalf("active recording warnings = %#v", warnings)
-	}
-	if err := os.WriteFile(filepath.Join("data", "recording.json"), []byte(`[]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if warnings := compatStateWarnings(); len(warnings) != 0 {
-		t.Fatalf("idle recording warnings = %#v", warnings)
-	}
-}
-
-func installFakeCompatCommand(t *testing.T, dir, name string) {
-	t.Helper()
-	bin := filepath.Join(dir, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(bin, name)
-	data := []byte("#!/bin/sh\nexit 0\n")
-	if runtime.GOOS == "windows" {
-		path += ".bat"
-		data = []byte("@echo off\r\nexit /b 0\r\n")
-	}
-	if err := os.WriteFile(path, data, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func TestCompatConfigSummaryOmitsSecrets(t *testing.T) {
-	port := 20772
-	cfg := &config.LegacyConfig{
-		MirakurunPath:              "http://mirakurun.example/",
-		RecordedDir:                "recorded",
-		RecordedFormat:             "<title>.m2ts",
-		WUIHost:                    "127.0.0.1",
-		WUIPort:                    &port,
-		WUIOpenServer:              true,
-		WUIOpenPort:                20773,
-		WUIUsers:                   []string{"user:secret"},
-		StorageLowSpaceThresholdMB: 1024,
-		StorageLowSpaceAction:      "stop",
-		NormalizationForm:          "NFKC",
-	}
-	var out bytes.Buffer
-	writeCompatConfigSummary(&out, cfg)
-	text := out.String()
-	resolvedRecordedDir, err := filepath.Abs("recorded")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		"CONFIG mirakurunPath=http://mirakurun.example/",
-		"CONFIG recordedDir=recorded",
-		"CONFIG recordedDirResolved=" + resolvedRecordedDir,
-		"CONFIG wui=127.0.0.1:20772 open=auto:20773",
-		"CONFIG storageLowSpace=1024MB action=stop",
-		"CONFIG normalizationForm=NFKC",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("summary missing %q: %s", want, text)
-		}
-	}
-	for _, secret := range []string{"user:secret"} {
-		if strings.Contains(text, secret) {
-			t.Fatalf("summary leaked %q: %s", secret, text)
-		}
-	}
-}
-
-func TestCompatDoctorWarningsDetectWrapperTarget(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if warnings := compatDoctorWarnings(); len(warnings) != 1 || !strings.Contains(warnings[0], "binary not found") {
-		t.Fatalf("missing binary warnings = %#v", warnings)
-	}
-	name := "strata-pvr"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	if err := os.WriteFile(name, []byte("binary"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if warnings := compatDoctorWarnings(); len(warnings) != 0 {
-		t.Fatalf("existing binary warnings = %#v", warnings)
-	}
-}
-
-func TestCompatCheckFailsWhenStateFileMissing(t *testing.T) {
-	dir := t.TempDir()
-	mirakurun := newCompatMirakurun(t)
-	defer mirakurun.Close()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("recorded", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, data := range map[string]string{
-		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
-		"rules.json":          `[]`,
-		"data/reserves.json":  `[]`,
-		"data/recording.json": `[]`,
-		"data/recorded.json":  `[]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	err := Run(context.Background(), []string{"compat", "doctor"}, &out, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "compat check failed") {
-		t.Fatalf("expected compat failure, got err=%v output=%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "NG data/schedule.json") {
-		t.Fatalf("compat output missing missing schedule failure: %s", out.String())
-	}
-}
-
-func TestCompatCheckRejectsWrongJSONShapes(t *testing.T) {
-	dir := t.TempDir()
-	mirakurun := newCompatMirakurun(t)
-	defer mirakurun.Close()
-	installFakeCompatCommand(t, dir, "ffmpeg")
-	installFakeCompatCommand(t, dir, "ffprobe")
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"data", "recorded", "log", "web"} {
-		if err := os.Mkdir(name, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeCompatWebAssets(t, "web")
-	for name, data := range map[string]string{
-		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `"}`,
-		"rules.json":          `{}`,
-		"data/schedule.json":  `[]`,
-		"data/reserves.json":  `[]`,
-		"data/recording.json": `[]`,
-		"data/recorded.json":  `[]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "compat check failed") {
-		t.Fatalf("expected compat failure, got err=%v output=%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "NG rules.json") {
-		t.Fatalf("compat output missing wrong rules shape failure: %s", out.String())
-	}
-}
-
-func TestCompatCheckFailsWhenMirakurunUnavailable(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("recorded", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, data := range map[string]string{
-		"config.json":         `{"recordedDir":"recorded","mirakurunPath":"http://127.0.0.1:1"}`,
-		"rules.json":          `[]`,
-		"data/schedule.json":  `[]`,
-		"data/reserves.json":  `[]`,
-		"data/recording.json": `[]`,
-		"data/recorded.json":  `[]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{})
-	if err == nil {
-		t.Fatalf("expected Mirakurun failure, output=%s", out.String())
-	}
-	if !strings.Contains(out.String(), "NG Mirakurun services") {
-		t.Fatalf("compat output missing Mirakurun failure: %s", out.String())
-	}
-}
-
-func TestCompatBackupCopiesExistingStateFiles(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{
-		"config.json":         `{"config":true}`,
-		"rules.json":          `[{"rule":true}]`,
-		"data/schedule.json":  `[{"schedule":true}]`,
-		"data/reserves.json":  `[{"reserve":true}]`,
-		"data/recording.json": `[{"recording":true}]`,
-		"data/recorded.json":  `[{"recorded":true}]`,
-	}
-	for name, data := range files {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "backup"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "OK backup: backup"+string(os.PathSeparator)+"strata-pvr-") {
-		t.Fatalf("backup output missing success path: %s", out.String())
-	}
-	for name, want := range files {
-		matches, err := filepath.Glob(filepath.Join("backup", "strata-pvr-*", filepath.FromSlash(name)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(matches) != 1 {
-			t.Fatalf("backup for %s matches = %v", name, matches)
-		}
-		data, err := os.ReadFile(matches[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(data) != want {
-			t.Fatalf("backup %s = %q, want %q", matches[0], data, want)
-		}
-	}
-}
-
-func TestCompatBackupSkipsMissingOptionalStateFiles(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile("config.json", []byte(`{"config":true}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "backup"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	if !strings.Contains(text, "BACKUP config.json ->") || !strings.Contains(text, "SKIP rules.json: not found") || !strings.Contains(text, "OK backup:") {
-		t.Fatalf("unexpected backup output: %s", text)
-	}
-}
-
-func TestCompatCheckWarnsAboutPersonalUseDeprecatedFeatures(t *testing.T) {
-	dir := t.TempDir()
-	mirakurun := newCompatMirakurun(t)
-	defer mirakurun.Close()
-	installFakeCompatCommand(t, dir, "ffmpeg")
-	installFakeCompatCommand(t, dir, "ffprobe")
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("recorded", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("log", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("web", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeCompatWebAssets(t, "web")
-	for name, data := range map[string]string{
-		"config.json":                           `{"recordedDir":"recorded","mirakurunPath":"` + mirakurun.URL + `","wuiUsers":["strata:yoshikawa"],"wuiAllowCountries":["JP"],"wuiOpenServer":true,"wuiMdnsAdvertisement":true,"operTweeter":true,"wuiTlsKeyPath":"server.pfx"}`,
-		"rules.json":                            `[]`,
-		"config.sample.json":                    `{"recordedDir":"recorded"}`,
-		"rules.sample.json":                     `[]`,
-		filepath.Join("data", "schedule.json"):  `[]`,
-		filepath.Join("data", "reserves.json"):  `[]`,
-		filepath.Join("data", "recording.json"): `[]`,
-		filepath.Join("data", "recorded.json"):  `[]`,
-	} {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "check"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, want := range []string{
-		"WARN native settings editing",
-		"WARN wuiUsers",
-		"WARN wuiOpenServer",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("compat check warning missing %q: %s", want, text)
-		}
-	}
-}
-
-func newCompatMirakurun(t *testing.T) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/services", "/api/programs", "/api/tuners":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-}
-
-func writeCompatWebAssets(t *testing.T, root string) {
-	t.Helper()
-	for _, dir := range []string{"icons", "lib", "locales", "page"} {
-		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, file := range []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"} {
-		if err := os.WriteFile(filepath.Join(root, file), []byte("ok"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func writeNativeWebAssets(t *testing.T, root string) {
 	t.Helper()
 	for _, file := range []string{"index.html", "app.js", "styles.css"} {
@@ -1183,79 +680,7 @@ func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
 	}
 }
 
-func TestCompatDiffReportsStateRewriteStatus(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{
-		"rules.json":                            "[\n  {\n    \"types\": [\n      \"GR\"\n    ]\n  }\n]",
-		filepath.Join("data", "schedule.json"):  `[{"type":"GR","channel":"27","name":"Svc","id":"ch","sid":101,"programs":[]}]`,
-		filepath.Join("data", "reserves.json"):  `[{"id":"p","start":1,"end":2,"channel":{}}]`,
-		filepath.Join("data", "recording.json"): `[{"id":"p","end":2,"start":1,"channel":{}}]`,
-		filepath.Join("data", "recorded.json"):  `not-json`,
-	}
-	for name, data := range files {
-		if err := os.WriteFile(name, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"compat", "diff"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, want := range []string{
-		"OK rules.json",
-		"OK " + filepath.Join("data", "schedule.json"),
-		"OK " + filepath.Join("data", "reserves.json"),
-		"DIFF " + filepath.Join("data", "recording.json"),
-		"INVALID " + filepath.Join("data", "recorded.json"),
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("compat diff output missing %q: %s", want, text)
-		}
-	}
-}
-
-func TestCompatCheckAcceptsNativeOrLegacyWUIAssets(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("web", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("web", "index.html"), []byte("ok"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateWUIStaticAssets(); err == nil {
-		t.Fatal("expected missing WUI asset error")
-	}
-	writeNativeWebAssets(t, "web")
-	if err := validateWUIStaticAssets(); err != nil {
-		t.Fatalf("valid native WUI assets rejected: %v", err)
-	}
-	if err := os.Remove(filepath.Join("web", "app.js")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join("web", "styles.css")); err != nil {
-		t.Fatal(err)
-	}
-	writeCompatWebAssets(t, "web")
-	if err := validateWUIStaticAssets(); err != nil {
-		t.Fatalf("valid legacy WUI assets rejected: %v", err)
-	}
-}
-
-func TestProgramListPrintsLegacyColumns(t *testing.T) {
+func TestProgramListPrintsTabSeparatedColumns(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
@@ -1299,10 +724,10 @@ func TestProgramListPrintsLegacyColumns(t *testing.T) {
 			t.Fatalf("program list missing %q: %s", want, text)
 		}
 	}
-	if !strings.Contains(text, "0  earlier") || !strings.Contains(text, "BS:BS1   news   user") {
+	if !strings.Contains(text, "0\tearlier\tBS:BS1\tnews\tuser") {
 		t.Fatalf("manual reserve row missing or unsorted: %s", text)
 	}
-	if !strings.Contains(text, "1  later") || !strings.Contains(text, "GR:27    anime  rule") {
+	if !strings.Contains(text, "1\tlater\tGR:27\tanime\trule") {
 		t.Fatalf("auto reserve row missing: %s", text)
 	}
 }
@@ -1334,9 +759,9 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	}
 	text := out.String()
 	for _, want := range []string{
-		"action                Program ID  Recorded",
-		"exist                 exists",
-		"[simulation] removed  missing",
+		"action\tProgram ID\tRecorded",
+		"exist\texists",
+		"[simulation] removed\tmissing",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("cleanup output missing %q: %s", want, text)
@@ -1355,53 +780,6 @@ func TestCleanupSimulationKeepsRecordedList(t *testing.T) {
 	}
 	if len(backups) != 0 {
 		t.Fatalf("simulation should not create backups: %#v", backups)
-	}
-}
-
-func TestCleanupBacksUpRecordedListBeforeRemoval(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	existing := filepath.Join(dir, "exists.m2ts")
-	if err := os.WriteFile(existing, []byte("ts"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	recorded := []legacy.Program{
-		{ID: "exists", Recorded: filepath.ToSlash(existing)},
-		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
-	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "recorded.json"), recorded, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run(context.Background(), []string{"cleanup"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	backups, err := filepath.Glob(filepath.Join("data", "recorded.json.bak-*"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(backups) != 1 {
-		t.Fatalf("backup count = %d, backups=%#v", len(backups), backups)
-	}
-	var backup []legacy.Program
-	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(backup) != 2 {
-		t.Fatalf("backup should contain original list: %#v", backup)
-	}
-	var got []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "recorded.json"), &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "exists" {
-		t.Fatalf("cleanup should remove only missing entry: %#v", got)
 	}
 }
 
@@ -1476,7 +854,7 @@ func TestCleanupRemovesStrataRecordedRowAndPreviewCache(t *testing.T) {
 	}
 }
 
-func TestRulesPrintsLegacyTable(t *testing.T) {
+func TestRulesPrintsTabSeparatedTable(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
 	defer os.Chdir(old)
@@ -1499,7 +877,7 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, want := range []string{"#                     0", "types                 GR", "categories            anime", "hour                  1, 4", "reserve_titles        [2]"} {
+	for _, want := range []string{"#\t0", "types\tGR", "categories\tanime", "hour\t1, 4", "reserve_titles\t[2]"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("rules output missing %q: %s", want, text)
 		}
@@ -1512,14 +890,14 @@ func TestRulesPrintsLegacyTable(t *testing.T) {
 		t.Fatalf("detailed rules output missing titles: %s", out.String())
 	}
 	rules = append(rules, legacy.Rule{Types: []string{"BS"}})
-	if err := storage.WriteJSONAtomic("rules.json", rules, false); err != nil {
+	if err := rulestore.Write(context.Background(), filepath.Join("data", "strata.db"), "rules.json", rules); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
 	if err := Run(context.Background(), []string{"rules"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "#  types") || !strings.Contains(out.String(), "1  BS     -") {
+	if !strings.Contains(out.String(), "#\ttypes") || !strings.Contains(out.String(), "1\tBS\t-") {
 		t.Fatalf("multi-rule table output missing: %s", out.String())
 	}
 }
@@ -1545,15 +923,15 @@ func TestReserve(t *testing.T) {
 	if err := Run(context.Background(), []string{"reserve", "p1", "--1seg"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile(filepath.Join("data", "reserves.json"))
+	reserves, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "reserves.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"isManualReserved":true`) {
-		t.Fatalf("reserve file not updated: %s", string(b))
+	if len(reserves) != 1 || !reserves[0].IsManualReserved {
+		t.Fatalf("reserve was not stored: %#v", reserves)
 	}
-	if !strings.Contains(string(b), `"1seg":true`) {
-		t.Fatalf("1seg flag not written: %s", string(b))
+	if !reserves[0].OneSeg {
+		t.Fatalf("1seg flag not stored: %#v", reserves[0])
 	}
 }
 
@@ -1612,114 +990,6 @@ func TestReserveSimulationDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestReserveAcceptsLegacyIDOption(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
-	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run(context.Background(), []string{"reserve", "-s", "-id", "p1", "--1seg"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(reserves) != 0 {
-		t.Fatalf("simulation should not write reserves: %#v", reserves)
-	}
-	if err := Run(context.Background(), []string{"reserve", "--id=p1", "--1seg"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	reserves = nil
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(reserves) != 1 || reserves[0].ID != "p1" || !reserves[0].OneSeg {
-		t.Fatalf("reserve did not use legacy id option: %#v", reserves)
-	}
-}
-
-func TestReserveAcceptsFlagsBeforePositionalID(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
-	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"reserve", "-s", "p1"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "[simulation] reserve:") {
-		t.Fatalf("unexpected output: %s", out.String())
-	}
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(reserves) != 0 {
-		t.Fatalf("simulation should not write reserves: %#v", reserves)
-	}
-}
-
-func TestLegacyModeOptionDispatch(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","fullTitle":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
-	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run(context.Background(), []string{"-mode", "reserve", "-id", "p1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	var reserves []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(reserves) != 1 || reserves[0].ID != "p1" {
-		t.Fatalf("legacy mode reserve failed: %#v", reserves)
-	}
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"--mode=search", "-id", "p1"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "p1") {
-		t.Fatalf("legacy mode search failed: %s", out.String())
-	}
-}
-
 func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
@@ -1764,46 +1034,6 @@ func TestReserveMutationsSimulationDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestReserveMutationsAcceptLegacyIDOption(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	reserves := []legacy.Program{{ID: "auto", Title: "Auto"}}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), reserves, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run(context.Background(), []string{"skip", "--id", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	var got []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || !got[0].IsSkip {
-		t.Fatalf("skip did not use legacy id option: %#v", got)
-	}
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"unskip", "-id", "auto"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), `"isSkip": true`) {
-		t.Fatalf("legacy unskip output should show pre-update target: %s", out.String())
-	}
-	got = nil
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].IsSkip {
-		t.Fatalf("unskip did not use legacy id option: %#v", got)
-	}
-}
-
 func TestRuleLifecycle(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()
@@ -1818,26 +1048,26 @@ func TestRuleLifecycle(t *testing.T) {
 	if err := Run(context.Background(), []string{"rule", "-type", "GR", "-title", "笑点"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile("rules.json")
+	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"types": [`) || !strings.Contains(string(b), `"笑点"`) {
-		t.Fatalf("rule not written: %s", string(b))
+	if len(rules) != 1 || len(rules[0].Types) != 1 || rules[0].Types[0] != "GR" || len(rules[0].ReserveTitles) != 1 || rules[0].ReserveTitles[0] != "笑点" {
+		t.Fatalf("rule not stored: %#v", rules)
 	}
 	if err := Run(context.Background(), []string{"disrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	b, _ = os.ReadFile("rules.json")
-	if !strings.Contains(string(b), `"isDisabled": true`) {
-		t.Fatalf("rule not disabled: %s", string(b))
+	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	if len(rules) != 1 || !rules[0].IsDisabled {
+		t.Fatalf("rule not disabled: %#v", rules)
 	}
 	if err := Run(context.Background(), []string{"rmrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	b, _ = os.ReadFile("rules.json")
-	if strings.TrimSpace(string(b)) != "[]" {
-		t.Fatalf("rule not removed: %s", string(b))
+	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	if len(rules) != 0 {
+		t.Fatalf("rule not removed: %#v", rules)
 	}
 }
 
@@ -1855,16 +1085,15 @@ func TestRuleCommandDeletesNullMarkers(t *testing.T) {
 	if err := Run(context.Background(), []string{"rule", "-n", "0", "-title", "null", "-start", "-1", "-mini", "-1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile("rules.json")
+	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(b)
-	if strings.Contains(text, "reserve_titles") || strings.Contains(text, "hour") || strings.Contains(text, "duration") {
-		t.Fatalf("rule deletion markers were not applied: %s", text)
+	if len(rules) != 1 || len(rules[0].ReserveTitles) != 0 || rules[0].Hour != nil || rules[0].Duration != nil {
+		t.Fatalf("rule deletion markers were not applied: %#v", rules)
 	}
-	if !strings.Contains(text, `"types": [`) || !strings.Contains(text, `"GR"`) {
-		t.Fatalf("remaining rule condition was lost: %s", text)
+	if len(rules[0].Types) != 1 || rules[0].Types[0] != "GR" {
+		t.Fatalf("remaining rule condition was lost: %#v", rules[0])
 	}
 }
 
@@ -1938,8 +1167,16 @@ func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	databasePath := filepath.Join("data", "strata.db")
+	var schedules []legacy.ChannelSchedule
+	if err := storage.ReadJSON(filepath.Join("data", "schedule.json"), &schedules, "[]"); err != nil {
+		t.Fatal(err)
+	}
+	if err := schedulestore.Write(context.Background(), databasePath, filepath.Join("data", "schedule.json"), schedules); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
-	if err := search(paths{config: filepath.Join("data", "config.json"), schedule: filepath.Join("data", "schedule.json")}, []string{"-title", "ABC"}, &out); err != nil {
+	if err := search(paths{config: filepath.Join("data", "config.json"), database: databasePath, schedule: filepath.Join("data", "schedule.json")}, []string{"-title", "ABC"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "p1") {
@@ -1971,15 +1208,19 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 		t.Fatalf("unexpected stop output: %s", out.String())
 	}
 	var recording []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &recording, "[]"); err != nil {
+	if values, err := programstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "recording.json"), programstore.Recording); err != nil {
 		t.Fatal(err)
+	} else {
+		recording = values
 	}
 	if !recording[0].Abort {
 		t.Fatalf("recording abort was not set: %#v", recording)
 	}
 	var reserves []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]"); err != nil {
+	if values, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "reserves.json")); err != nil {
 		t.Fatal(err)
+	} else {
+		reserves = values
 	}
 	if !reserves[0].IsSkip || reserves[1].IsSkip {
 		t.Fatalf("auto reserve skip was not updated correctly: %#v", reserves)
@@ -2022,35 +1263,6 @@ func TestStopUsesStrataDatabaseWithoutRewritingJSON(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("compatibility JSON %s unexpectedly written: %v", path, err)
 		}
-	}
-}
-
-func TestStopAcceptsLegacyIDOption(t *testing.T) {
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	defer os.Chdir(old)
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir("data", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	recording := []legacy.Program{{ID: "rec", Title: "Recording"}}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "recording.json"), recording, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.WriteJSONAtomic(filepath.Join("data", "reserves.json"), []legacy.Program{{ID: "rec"}}, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := Run(context.Background(), []string{"stop", "--id=rec"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	var got []legacy.Program
-	if err := storage.ReadJSON(filepath.Join("data", "recording.json"), &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || !got[0].Abort {
-		t.Fatalf("stop did not use legacy id option: %#v", got)
 	}
 }
 

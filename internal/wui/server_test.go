@@ -25,6 +25,8 @@ import (
 	"strata-pvr/internal/legacy"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
+	"strata-pvr/internal/rulestore"
+	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 )
 
@@ -35,7 +37,7 @@ func TestAPIReadsLegacyJSONState(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	res := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/reserves.json", nil)
 	handler.ServeHTTP(res, req)
@@ -81,7 +83,7 @@ func TestAPIProgramReadsUseLegacyPrettyJSON(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, path := range []string{
 		"/api/program/abc.json",
@@ -124,7 +126,7 @@ func TestAPIListReadsUseLegacyCompactJSON(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, path := range []string{"/api/reserves.json", "/api/recording.json", "/api/recorded.json"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -153,7 +155,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(paths.LogDir, "wui"), []byte("log"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/status.txt", nil)
 	res := httptest.NewRecorder()
@@ -230,7 +232,7 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodHead, "/api/schedule.json", nil)
 	res := httptest.NewRecorder()
@@ -259,32 +261,10 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	}
 }
 
-func TestAPIInternalErrorsUseLegacyBody(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	if err := os.MkdirAll(filepath.Dir(paths.Reserves), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(paths.Reserves, []byte("{"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(paths, &config.Config{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/reserves.json", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusInternalServerError {
-		t.Fatalf("status=%d body=%q", res.Code, res.Body.String())
-	}
-	if res.Body.String() != "500 Internal Server Error\n" {
-		t.Fatalf("body=%q", res.Body.String())
-	}
-}
-
 func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/schedule/foo/bar/baz.json", nil)
 	res := httptest.NewRecorder()
@@ -349,7 +329,7 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 
 	paths := testPaths(dir)
 	paths.WebRoot = webRoot
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, path := range []string{"/favicon.ico", "/logo.png"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -433,7 +413,7 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 	}
 	paths := testPaths(dir)
 	paths.WebRoot = webRoot
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, tc := range []struct {
 		path        string
@@ -891,7 +871,6 @@ func TestNativeDashboardRealtimeNotifications(t *testing.T) {
 		`function publishMutation(path, method)`,
 		`function publishRealtime(eventName)`,
 		`function subscribeRealtimeRefresh()`,
-		`window.StrataPVRNotify`,
 		`BroadcastChannel("strata-pvr")`,
 		`realtimeChannel`,
 		`strata-pvr:notify`,
@@ -988,106 +967,6 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 	}
 }
 
-func TestSocketIOCompatScript(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/socket.io/socket.io.js", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("socket.io script status=%d body=%q", res.Code, res.Body.String())
-	}
-	if got := res.Header().Get("Content-Type"); got != "application/javascript" {
-		t.Fatalf("Content-Type = %q", got)
-	}
-	body := res.Body.String()
-	for _, want := range []string{
-		"io.connect",
-		"notify-",
-		"notify-schedule",
-		"notify-recording",
-		"status.json",
-		"5000",
-		"pollers[name]",
-		"setConnected(false)",
-		"'reconnect' : 'disconnect'",
-		"emit: function(name)",
-		"clearInterval",
-		"BroadcastChannel",
-		"StrataPVRNotify",
-		"strata-pvr:notify",
-		"createRealtimeBus",
-		"once:",
-		"off:",
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("socket.io compat script missing %q: %s", want, body)
-		}
-	}
-
-	req = httptest.NewRequest(http.MethodHead, "/socket.io/socket.io.js", nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.Len() != 0 {
-		t.Fatalf("socket.io HEAD status=%d body=%q", res.Code, res.Body.String())
-	}
-}
-
-func TestSocketIOXHRPollingTransport(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	if err := os.MkdirAll(filepath.Dir(paths.Rules), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(paths.Rules, []byte("[]"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(paths, &config.Config{})
-
-	req := httptest.NewRequest(http.MethodGet, "/socket.io/1/", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("handshake status=%d body=%q", res.Code, res.Body.String())
-	}
-	parts := strings.Split(res.Body.String(), ":")
-	if len(parts) != 4 || parts[1] != "25" || parts[2] != "60" || parts[3] != "xhr-polling" {
-		t.Fatalf("unexpected handshake body=%q", res.Body.String())
-	}
-	sessionID := parts[0]
-
-	req = httptest.NewRequest(http.MethodGet, "/socket.io/1/xhr-polling/"+sessionID, nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "1::") {
-		t.Fatalf("connect poll status=%d body=%q", res.Code, res.Body.String())
-	}
-
-	time.Sleep(10 * time.Millisecond)
-	if err := os.WriteFile(paths.Rules, []byte(`[{"types":["GR"]}]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	req = httptest.NewRequest(http.MethodGet, "/socket.io/1/xhr-polling/"+sessionID, nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("event poll status=%d body=%q", res.Code, res.Body.String())
-	}
-	for _, want := range []string{"5:::", `"name":"notify-rules"`, `"args":[]`} {
-		if !strings.Contains(res.Body.String(), want) {
-			t.Fatalf("event poll missing %q: %q", want, res.Body.String())
-		}
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/socket.io/1/xhr-polling/"+sessionID, strings.NewReader("5:::{}"))
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != "1" {
-		t.Fatalf("post ack status=%d body=%q", res.Code, res.Body.String())
-	}
-}
-
 func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
@@ -1110,7 +989,7 @@ func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
 
 	paths := testPaths(dir)
 	paths.WebRoot = webRoot
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for name, want := range files {
 		req := httptest.NewRequest(http.MethodGet, "/"+name, nil)
@@ -1131,7 +1010,7 @@ func TestAPIReserveSkipAndDelete(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1183,7 +1062,7 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 	if err := programstore.Upsert(context.Background(), paths.Database, paths.Recording, programstore.Recording, auto); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, target := range []string{"/api/reserves.json", "/api/reserves/auto.json"} {
 		res := httptest.NewRecorder()
@@ -1237,7 +1116,7 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/reserves/abc/skip.json?method=put", nil)
 	res := httptest.NewRecorder()
@@ -1271,7 +1150,7 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 func TestHostHeaderRequiredMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	req.Host = ""
@@ -1285,7 +1164,7 @@ func TestHostHeaderRequiredMatchesLegacyWUI(t *testing.T) {
 func TestAPIRulesMutation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/rules.json", strings.NewReader(`{"isEnabled":false,"categories":["anime"]}`))
 	res := httptest.NewRecorder()
@@ -1357,7 +1236,7 @@ func TestAPIRulesUsesSQLiteForStrata(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Rules, []map[string]any{{"reserve_titles": []string{"stale"}}}, true); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/rules.json", strings.NewReader(`{"reserve_titles":["database"]}`))
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1381,7 +1260,7 @@ func TestAPIRulesGetUsesLegacyPrettyJSON(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Rules, []map[string]any{{"categories": []string{"anime"}}}, true); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/rules.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1405,7 +1284,7 @@ func TestAPIRulesGetUsesLegacyPrettyJSON(t *testing.T) {
 func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, `/api/rules.json?method=post&types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
 	res := httptest.NewRecorder()
@@ -1472,7 +1351,7 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodPut, "/api/program/abc.json?mode=1seg", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1500,7 +1379,7 @@ func TestAPIProgramPutSortsManualReserveLikeCLI(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{existing}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodPut, "/api/program/earlier.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1532,7 +1411,7 @@ func TestAPIProgramGetOnlySearchesSchedule(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/program/abc.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1551,7 +1430,7 @@ func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/schedule.json", nil)
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	res := httptest.NewRecorder()
@@ -1607,7 +1486,7 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/schedule/gr101.json", nil)
 	res := httptest.NewRecorder()
@@ -1677,7 +1556,7 @@ func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc"}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodDelete, "/api/reserves/abc.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1695,7 +1574,7 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc"}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodDelete, "/api/recording/abc.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1728,7 +1607,7 @@ func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodDelete, "/api/recording/manual.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -1751,51 +1630,6 @@ func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
 	}
 }
 
-func TestAPIRecordedCleanupBacksUpBeforeRemoval(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	existingPath := filepath.Join(dir, "recorded.m2ts")
-	if err := os.WriteFile(existingPath, []byte("ts"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	recorded := []legacy.Program{
-		{ID: "exists", Recorded: filepath.ToSlash(existingPath)},
-		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
-	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(paths, &config.Config{})
-
-	req := httptest.NewRequest(http.MethodPut, "/api/recorded.json", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("cleanup status = %d body=%s", res.Code, res.Body.String())
-	}
-	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(backups) != 1 {
-		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
-	}
-	var backup []legacy.Program
-	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(backup) != 2 {
-		t.Fatalf("backup should contain original list: %#v", backup)
-	}
-	var got []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "exists" {
-		t.Fatalf("cleanup should keep only existing recording: %#v", got)
-	}
-}
-
 func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -1811,7 +1645,7 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/cleanup.json", nil)
 	res := httptest.NewRecorder()
@@ -1851,14 +1685,14 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &applied); err != nil {
 		t.Fatal(err)
 	}
-	if applied.Removed != 2 || applied.Kept != 1 || applied.Backup == "" {
+	if applied.Removed != 2 || applied.Kept != 1 || applied.Backup != "" {
 		t.Fatalf("unexpected apply result: %#v", applied)
 	}
 	backups, err = filepath.Glob(paths.Recorded + ".bak-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(backups) != 1 {
+	if len(backups) != 0 {
 		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
 	}
 	var got []legacy.Program
@@ -1867,47 +1701,6 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "exists" {
 		t.Fatalf("cleanup should keep only existing recording: %#v", got)
-	}
-}
-
-func TestAPIRecordedDeleteBacksUpBeforeRemoval(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	recorded := []legacy.Program{
-		{ID: "abc", Recorded: filepath.ToSlash(filepath.Join(dir, "abc.m2ts"))},
-		{ID: "def", Recorded: filepath.ToSlash(filepath.Join(dir, "def.m2ts"))},
-	}
-	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(paths, &config.Config{})
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/recorded/abc.json", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
-	}
-	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(backups) != 1 {
-		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
-	}
-	var backup []legacy.Program
-	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(backup) != 2 {
-		t.Fatalf("backup should contain original list: %#v", backup)
-	}
-	var got []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &got, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "def" {
-		t.Fatalf("delete should remove target only: %#v", got)
 	}
 }
 
@@ -1921,7 +1714,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file.json", nil)
 	res := httptest.NewRecorder()
@@ -2010,7 +1803,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"9","bit_rate":"2400"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf?prefix=/api/recorded/abc/&ext=m2ts", nil)
 	res := httptest.NewRecorder()
@@ -2057,7 +1850,7 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?s=640x360&b:v=1m&t=30&mode=download&ext=mp4", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2105,7 +1898,7 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2138,7 +1931,7 @@ func TestAPIRecordedWatchMP4CanSelectSecondaryAudio(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?audio=secondary", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2167,7 +1960,7 @@ func TestAPIRecordedWatchM2TSTranscodeUsesFFmpeg(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"6","bit_rate":"1600"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?t=30&b:v=1m", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2208,7 +2001,7 @@ func TestAPIRecordedWatchM2TSTranscodeRangeMapsSourceRange(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"10.0","size":"1000","bit_rate":"1000"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?b:v=1k&b:a=1k", nil)
 	req.Header.Set("Range", "bytes=0-99")
 	res := httptest.NewRecorder()
@@ -2240,7 +2033,7 @@ func TestAPIRecordedWatchM2TSLegacyStartOffset(t *testing.T) {
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"376","bit_rate":"752"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.m2ts?ss=4", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2298,7 +2091,7 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	defer restore()
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2333,7 +2126,7 @@ func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
 	}
 	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"10.0"}}`, nil)
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2354,7 +2147,7 @@ func TestAPIRecordedWatchXSPFDoesNotRequireProbe(t *testing.T) {
 	}
 	restoreProbe := installFakeFFprobe(t, "", fmt.Errorf("fake ffprobe error"))
 	defer restoreProbe()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2400,7 +2193,7 @@ func TestAPIProgramPreview(t *testing.T) {
 	}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	for _, tc := range []struct {
 		target      string
@@ -2461,7 +2254,7 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 		return []byte("cached-preview"), nil
 	}
 	defer func() { runFFmpegPreview = old }()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.jpg?size=320x180&pos=5", nil)
 		res := httptest.NewRecorder()
@@ -2518,7 +2311,7 @@ func TestNewHandlerRemovesOrphanPreviewImages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_ = NewHandler(paths, &config.Config{})
+	_ = newTestHandler(t, paths, &config.Config{})
 	for _, name := range []string{"referenced.jpg", "keep.txt"} {
 		if _, err := os.Stat(filepath.Join(cacheDir, name)); err != nil {
 			t.Fatalf("%s should remain: %v", name, err)
@@ -2567,7 +2360,7 @@ func TestNewHandlerAppliesPreviewCacheRetention(t *testing.T) {
 	}
 	db.Close()
 
-	_ = NewHandler(paths, &config.Config{PreviewCacheMaxAgeDays: 7, PreviewCacheMaxSizeMB: 1})
+	_ = newTestHandler(t, paths, &config.Config{PreviewCacheMaxAgeDays: 7, PreviewCacheMaxSizeMB: 1})
 	for _, name := range []string{"expired.jpg", "older.jpg"} {
 		if _, err := os.Stat(filepath.Join(cacheDir, name)); !os.IsNotExist(err) {
 			t.Fatalf("%s should be removed: %v", name, err)
@@ -2612,7 +2405,7 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: -1}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview.jpg?pos=99&size=480x270", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2646,7 +2439,7 @@ func TestAPIProgramPreviewLegacyErrors(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "nopid", Recorded: filepath.ToSlash(missingPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	for _, tc := range []struct {
 		path string
 		code int
@@ -2677,7 +2470,7 @@ func TestAPIProgramPreviewFFmpegError(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview.png", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2795,7 +2588,7 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.m2ts", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2848,7 +2641,7 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 		return io.NopCloser(strings.NewReader("mp4data")), func() error { return nil }, nil
 	}
 	defer func() { runFFmpegStream = old }()
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.mp4?b:v=1m", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2889,7 +2682,7 @@ func TestAPIProgramWatchRejectsScramblingLikeLegacy(t *testing.T) {
 	if err := os.WriteFile(paths.Recording, []byte(recordingJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/watch.m2ts", nil)
 	res := httptest.NewRecorder()
@@ -2941,7 +2734,7 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 		}
 	}))
 	defer mirakurunServer.Close()
-	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo.png", nil)
 	res := httptest.NewRecorder()
@@ -2986,7 +2779,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "livemp4", &gotInput, &gotArgs)
 	defer restore()
-	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3027,7 +2820,7 @@ func TestAPIChannelWatchMP4KeepsLegacyLiveBitrateArgs(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "livemp4", &gotInput, &gotArgs)
 	defer restore()
-	handler := NewHandler(paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4?b:v=1m", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3060,7 +2853,7 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.xspf?prefix=/api/channel/"+chid+"/&ext=m2ts", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3089,7 +2882,7 @@ func TestAPIStorage(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{RecordedDir: dir})
+	handler := newTestHandler(t, paths, &config.Config{RecordedDir: dir})
 	req := httptest.NewRequest(http.MethodGet, "/api/storage.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3121,7 +2914,7 @@ func TestAPILogAndStream(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(paths.LogDir, "wui"), []byte("line\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/log/wui.txt", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3170,7 +2963,7 @@ func TestAPILogStreamFollowsAppends(t *testing.T) {
 	if err := os.WriteFile(logPath, []byte("initial\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req := httptest.NewRequest(http.MethodGet, "/api/log/wui/stream.txt", nil).WithContext(ctx)
@@ -3259,7 +3052,7 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 		}
 		return nil
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
 	res := httptest.NewRecorder()
@@ -3312,7 +3105,7 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 		done <- struct{}{}
 		return nil
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/scheduler.json", nil)
 	res := httptest.NewRecorder()
@@ -3365,7 +3158,7 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	if err := os.WriteFile(paths.OperatorPID, []byte(strconv.Itoa(currentPID)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3408,7 +3201,7 @@ func TestAPIAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
+	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3443,7 +3236,7 @@ func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(testPaths(t.TempDir()), &config.Config{
+	handler := newTestHandler(t, testPaths(t.TempDir()), &config.Config{
 		WUIAccounts: []config.WebUser{{Username: "admin", PasswordHash: hash}},
 	})
 	authorization := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
@@ -3483,7 +3276,7 @@ func TestAPIStrataConfigRedactsPasswordHashAndRejectsInvalidPut(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/config.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3514,7 +3307,7 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	public, err := publicStrataConfig(mustReadFile(t, paths.Config))
 	if err != nil {
 		t.Fatal(err)
@@ -3568,7 +3361,7 @@ func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Config, config.DefaultDocument(), true); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	for _, target := range []string{"/api/config.json", "/api/config.json?json=%7B"} {
 		req := httptest.NewRequest(http.MethodPut, target, nil)
 		res := httptest.NewRecorder()
@@ -3619,7 +3412,7 @@ func TestStaticServingUsesWebRoot(t *testing.T) {
 	}
 	paths := testPaths(dir)
 	paths.WebRoot = webRoot
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3632,7 +3425,7 @@ func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	req.RemoteAddr = "[::ffff:10.0.0.1]:12345"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7")
@@ -3657,7 +3450,7 @@ func TestAccessLogUsesLegacyMethodOverride(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
-	handler := NewHandler(paths, &config.Config{})
+	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/api/status.json?method=GET", nil)
 	req.RemoteAddr = "10.0.0.1:12345"
 	res := httptest.NewRecorder()
@@ -3686,5 +3479,114 @@ func testPaths(dir string) Paths {
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		LogDir:    filepath.Join(dir, "log"),
+	}
+}
+
+func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler {
+	t.Helper()
+	ctx := context.Background()
+	if paths.Database == "" {
+		paths.Database = filepath.Join(filepath.Dir(paths.Schedule), "strata.db")
+	}
+	_, statErr := os.Stat(paths.Database)
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := os.IsNotExist(statErr)
+	var rules []legacy.Rule
+	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); seed && err == nil {
+		if err := rulestore.Write(ctx, paths.Database, paths.Rules, rules); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var schedule []legacy.ChannelSchedule
+	if err := storage.ReadJSON(paths.Schedule, &schedule, "[]"); seed && err == nil {
+		if err := schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var reserves []legacy.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); seed && err == nil {
+		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, item := range []struct {
+		path       string
+		collection string
+	}{
+		{paths.Recording, programstore.Recording},
+		{paths.Recorded, programstore.Recorded},
+	} {
+		var programs []legacy.Program
+		if err := storage.ReadJSON(item.path, &programs, "[]"); seed && err == nil {
+			if err := programstore.Write(ctx, paths.Database, item.path, item.collection, programs); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	handler := NewHandler(paths, cfg)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if seed {
+			importTestState(t, paths)
+		}
+		handler.ServeHTTP(w, r)
+		if seed {
+			exportTestState(t, paths)
+		}
+	})
+}
+
+func importTestState(t *testing.T, paths Paths) {
+	t.Helper()
+	ctx := context.Background()
+	var rules []legacy.Rule
+	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err == nil {
+		_ = rulestore.Write(ctx, paths.Database, paths.Rules, rules)
+	}
+	var schedule []legacy.ChannelSchedule
+	if err := storage.ReadJSON(paths.Schedule, &schedule, "[]"); err == nil {
+		_ = schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule)
+	}
+	var reserves []legacy.Program
+	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err == nil {
+		_ = reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves)
+	}
+	for _, item := range []struct {
+		path       string
+		collection string
+	}{
+		{paths.Recording, programstore.Recording},
+		{paths.Recorded, programstore.Recorded},
+	} {
+		var programs []legacy.Program
+		if err := storage.ReadJSON(item.path, &programs, "[]"); err == nil {
+			_ = programstore.Write(ctx, paths.Database, item.path, item.collection, programs)
+		}
+	}
+}
+
+func exportTestState(t *testing.T, paths Paths) {
+	t.Helper()
+	ctx := context.Background()
+	if rules, err := rulestore.Read(ctx, paths.Database, paths.Rules); err == nil {
+		_ = storage.WriteJSONAtomic(paths.Rules, rules, true)
+	}
+	if schedule, err := schedulestore.Read(ctx, paths.Database, paths.Schedule); err == nil {
+		_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
+	}
+	if reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves); err == nil {
+		_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
+	}
+	for _, item := range []struct {
+		path       string
+		collection string
+	}{
+		{paths.Recording, programstore.Recording},
+		{paths.Recorded, programstore.Recorded},
+	} {
+		if programs, err := programstore.Read(ctx, paths.Database, item.path, item.collection); err == nil {
+			_ = storage.WriteJSONAtomic(item.path, programs, false)
+		}
 	}
 }

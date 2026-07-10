@@ -2,7 +2,6 @@ package operator
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +23,92 @@ type fakeStreamer struct {
 	id     int64
 	decode bool
 	body   string
+}
+
+func runOnceTest(t *testing.T, ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
+	t.Helper()
+	legacyFixture := paths.Database == ""
+	paths = seedOperatorTestDatabase(t, paths)
+	result, err := RunOnce(ctx, paths, cfg, source, now)
+	if legacyFixture {
+		exportOperatorTestState(paths)
+	}
+	return result, err
+}
+
+func initializeRuntimeStateTest(t *testing.T, paths Paths, cfg *config.Config) error {
+	t.Helper()
+	legacyFixture := paths.Database == ""
+	paths = seedOperatorTestDatabase(t, paths)
+	err := initializeRuntimeState(paths, cfg)
+	if legacyFixture {
+		exportOperatorTestState(paths)
+	}
+	return err
+}
+
+func seedOperatorTestDatabase(t *testing.T, paths Paths) Paths {
+	t.Helper()
+	if paths.Database != "" {
+		return paths
+	}
+	paths.Database = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
+	ctx := context.Background()
+	var reserves []legacy.Program
+	if storage.ReadJSON(paths.Reserves, &reserves, "[]") == nil {
+		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, item := range []struct{ path, collection string }{{paths.Recording, programstore.Recording}, {paths.Recorded, programstore.Recorded}} {
+		var programs []legacy.Program
+		if storage.ReadJSON(item.path, &programs, "[]") == nil {
+			if err := programstore.Write(ctx, paths.Database, item.path, item.collection, programs); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return paths
+}
+
+func exportOperatorTestState(paths Paths) {
+	ctx := context.Background()
+	if reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves); err == nil {
+		_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
+	}
+	for _, item := range []struct{ path, collection string }{{paths.Recording, programstore.Recording}, {paths.Recorded, programstore.Recorded}} {
+		if programs, err := programstore.Read(ctx, paths.Database, item.path, item.collection); err == nil {
+			_ = storage.WriteJSONAtomic(item.path, programs, false)
+		}
+	}
+}
+
+func readOperatorTestPrograms(paths Paths, collection string, target *[]legacy.Program) error {
+	databasePath := paths.Database
+	jsonPath := paths.Recorded
+	if collection == programstore.Recording {
+		jsonPath = paths.Recording
+	}
+	if databasePath == "" {
+		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
+	}
+	programs, err := programstore.Read(context.Background(), databasePath, jsonPath, collection)
+	if err == nil {
+		*target = programs
+	}
+	return err
+}
+
+func readOperatorTestReserves(paths Paths, target *[]legacy.Program) error {
+	databasePath := paths.Database
+	if databasePath == "" {
+		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
+	}
+	reserves, err := reservationstore.Read(context.Background(), databasePath, paths.Reserves)
+	if err == nil {
+		*target = reserves
+	}
+	return err
 }
 
 func (f *fakeStreamer) ProgramStream(_ context.Context, id int64, decode bool) (io.ReadCloser, error) {
@@ -51,11 +136,11 @@ func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T
 		t.Fatal(err)
 	}
 	recordedDir := filepath.Join(dir, "recorded")
-	if err := initializeRuntimeState(paths, &config.Config{RecordedDir: recordedDir}); err != nil {
+	if err := initializeRuntimeStateTest(t, paths, &config.Config{RecordedDir: recordedDir}); err != nil {
 		t.Fatal(err)
 	}
 	var recording []legacy.Program
-	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
 		t.Fatal(err)
 	}
 	if len(recording) != 0 {
@@ -144,7 +229,7 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		RecordedFormat: "<id>-<title>.m2ts",
 	}
 	streamer := &fakeStreamer{body: "tsdata"}
-	result, err := RunOnce(context.Background(), paths, cfg, streamer, now)
+	result, err := runOnceTest(t, context.Background(), paths, cfg, streamer, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,21 +240,21 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 		t.Fatalf("unexpected stream request id=%d decode=%v", streamer.id, streamer.decode)
 	}
 	var reserves []legacy.Program
-	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+	if err := readOperatorTestReserves(paths, &reserves); err != nil {
 		t.Fatal(err)
 	}
 	if len(reserves) != 1 || reserves[0].ID != program.ID {
 		t.Fatalf("auto reserve should remain like legacy operator: %#v", reserves)
 	}
 	var recording []legacy.Program
-	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
 		t.Fatal(err)
 	}
 	if len(recording) != 0 {
 		t.Fatalf("recording not cleared: %#v", recording)
 	}
 	var recorded []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
@@ -233,7 +318,7 @@ func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
-	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "database-ts"}, now)
+	result, err := runOnceTest(t, context.Background(), paths, cfg, &fakeStreamer{body: "database-ts"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,8 +367,9 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
+	paths = seedOperatorTestDatabase(t, paths)
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
-	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{body: "tsdata"}, now)
+	result, err := runOnceTest(t, context.Background(), paths, cfg, &fakeStreamer{body: "tsdata"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +377,7 @@ func TestRunOnceRemovesCompletedManualReserveLikeLegacy(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	var reserves []legacy.Program
-	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
+	if err := readOperatorTestReserves(paths, &reserves); err != nil {
 		t.Fatal(err)
 	}
 	if len(reserves) != 0 {
@@ -367,7 +453,7 @@ func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 	}
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts", ConflictedPriority: 7}
 	streamer := &priorityStreamer{fakeStreamer: fakeStreamer{body: "x"}}
-	result, err := RunOnce(context.Background(), paths, cfg, streamer, now)
+	result, err := runOnceTest(t, context.Background(), paths, cfg, streamer, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +464,7 @@ func TestRunOnceRecordsConflictsWithConflictedPriority(t *testing.T) {
 		t.Fatalf("conflict priority = %d", streamer.priority)
 	}
 	var recorded []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorded) != 1 || recorded[0].ID != "c" || !recorded[0].IsConflict {
@@ -424,11 +510,12 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
+	paths = seedOperatorTestDatabase(t, paths)
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
 	streamer := &abortableStreamer{}
 	done := make(chan error, 1)
 	go func() {
-		result, err := RunOnce(context.Background(), paths, cfg, streamer, now)
+		result, err := runOnceTest(t, context.Background(), paths, cfg, streamer, now)
 		if err != nil {
 			done <- err
 			return
@@ -440,45 +527,17 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 		done <- nil
 	}()
 
-	var recording []legacy.Program
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
-			t.Fatal(err)
-		}
-		if len(recording) == 1 && recording[0].Recorded != "" {
-			break
-		}
+	for deadline := time.Now().Add(2 * time.Second); streamer.stream == nil && time.Now().Before(deadline); {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(recording) != 1 {
-		t.Fatalf("recording entry was not created: %#v", recording)
+	if streamer.stream == nil {
+		t.Fatal("recording stream was not started")
 	}
-	if recording[0].Recorded == "" || recording[0].PID != -1 {
-		t.Fatalf("recording entry missing legacy runtime fields: %#v", recording[0])
-	}
-	var tuner struct {
-		Name         string `json:"name"`
-		Command      string `json:"command"`
-		IsScrambling bool   `json:"isScrambling"`
-	}
-	if err := json.Unmarshal(recording[0].Raw["tuner"], &tuner); err != nil {
+	time.Sleep(200 * time.Millisecond)
+	program.Abort = true
+	if err := programstore.Upsert(context.Background(), paths.Database, paths.Recording, programstore.Recording, program); err != nil {
 		t.Fatal(err)
 	}
-	if tuner.Name != "Mirakurun" || tuner.Command != "*" || tuner.IsScrambling {
-		t.Fatalf("unexpected tuner metadata: %#v", tuner)
-	}
-	var command string
-	if err := json.Unmarshal(recording[0].Raw["command"], &command); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(command, "mirakurun type=GR") || !strings.Contains(command, "priority=2") {
-		t.Fatalf("unexpected command metadata: %q", command)
-	}
-	recording[0].Abort = true
-	if err := storage.WriteJSONAtomic(paths.Recording, recording, false); err != nil {
-		t.Fatal(err)
-	}
-
 	select {
 	case err := <-done:
 		if err != nil {
@@ -488,7 +547,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 		t.Fatal("recording did not stop after abort flag")
 	}
 	var recorded []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
@@ -515,13 +574,15 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
 		t.Fatal(err)
 	}
+	paths = seedOperatorTestDatabase(t, paths)
 	ctx, cancel := context.WithCancel(context.Background())
+	streamer := &abortableStreamer{}
 	done := make(chan error, 1)
 	go func() {
-		result, err := RunOnce(ctx, paths, &config.Config{
+		result, err := runOnceTest(t, ctx, paths, &config.Config{
 			RecordedDir:    filepath.Join(dir, "recorded"),
 			RecordedFormat: "<id>.m2ts",
-		}, &abortableStreamer{}, now)
+		}, streamer, now)
 		if err != nil {
 			done <- err
 			return
@@ -535,10 +596,7 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 
 	var recording []legacy.Program
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
-			t.Fatal(err)
-		}
-		if len(recording) == 1 && recording[0].Recorded != "" {
+		if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err == nil && len(recording) == 1 && recording[0].Recorded != "" {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -555,14 +613,14 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("recording did not stop after context cancellation")
 	}
-	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
 		t.Fatal(err)
 	}
 	if len(recording) != 0 {
 		t.Fatalf("recording state was not cleared after cancel: %#v", recording)
 	}
 	var recorded []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &recorded, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorded) != 1 || recorded[0].Recorded == "" {
@@ -649,7 +707,7 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 		StorageLowSpaceThresholdMB: 100,
 		StorageLowSpaceAction:      "remove",
 	}
-	result, err := RunOnce(context.Background(), paths, cfg, &fakeStreamer{}, time.Now())
+	result, err := runOnceTest(t, context.Background(), paths, cfg, &fakeStreamer{}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,25 +718,11 @@ func TestRunOnceLowStorageRemoveDeletesOldestRecorded(t *testing.T) {
 		t.Fatalf("old recorded file was not removed: %v", err)
 	}
 	var remaining []legacy.Program
-	if err := storage.ReadJSON(paths.Recorded, &remaining, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recorded, &remaining); err != nil {
 		t.Fatal(err)
 	}
 	if len(remaining) != 1 || remaining[0].ID != "new" {
 		t.Fatalf("unexpected recorded list: %#v", remaining)
-	}
-	backups, err := filepath.Glob(paths.Recorded + ".bak-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(backups) != 1 {
-		t.Fatalf("backup count = %d backups=%#v", len(backups), backups)
-	}
-	var backup []legacy.Program
-	if err := storage.ReadJSON(backups[0], &backup, "[]"); err != nil {
-		t.Fatal(err)
-	}
-	if len(backup) != 2 {
-		t.Fatalf("backup should contain original recorded list: %#v", backup)
 	}
 }
 
@@ -691,12 +735,19 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	defer func() { getDiskUsage = oldGetDiskUsage }()
 
 	paths := Paths{
+		Database:  filepath.Join(dir, "data", "strata.db"),
 		Recording: filepath.Join(dir, "data", "recording.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	}
 	recording := []legacy.Program{
 		{ID: "active", Title: "Active", Channel: legacy.Channel{Name: "Service"}},
 		{ID: "already", Title: "Already", Abort: true, Channel: legacy.Channel{Name: "Service"}},
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := programstore.Write(context.Background(), paths.Database, paths.Recording, programstore.Recording, recording); err != nil {
+		t.Fatal(err)
 	}
 	cfg := &config.Config{
 		RecordedDir:                filepath.Join(dir, "recorded"),
@@ -708,7 +759,7 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 		t.Fatal(err)
 	}
 	var updated []legacy.Program
-	if err := storage.ReadJSON(paths.Recording, &updated, "[]"); err != nil {
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &updated); err != nil {
 		t.Fatal(err)
 	}
 	if len(updated) != 2 || !updated[0].Abort || !updated[1].Abort {

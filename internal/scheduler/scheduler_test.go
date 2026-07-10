@@ -17,6 +17,7 @@ import (
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/schedulestore"
+	"strata-pvr/internal/storage"
 )
 
 type fakeSource struct {
@@ -26,6 +27,39 @@ type fakeSource struct {
 	servicesErr error
 	programsErr error
 	tunersErr   error
+}
+
+func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
+	t.Helper()
+	legacyFixture := paths.Database == ""
+	if paths.Database == "" {
+		paths.Database = filepath.Join(filepath.Dir(paths.Schedule), "strata.db")
+		var rules []legacy.Rule
+		_ = storage.ReadJSON(paths.Rules, &rules, "[]")
+		if err := rulestore.Write(ctx, paths.Database, paths.Rules, rules); err != nil {
+			t.Fatal(err)
+		}
+		var schedule []legacy.ChannelSchedule
+		_ = storage.ReadJSON(paths.Schedule, &schedule, "[]")
+		if err := schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule); err != nil {
+			t.Fatal(err)
+		}
+		var reserves []legacy.Program
+		_ = storage.ReadJSON(paths.Reserves, &reserves, "[]")
+		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := RunWithSource(ctx, paths, cfg, source, simulation, now)
+	if legacyFixture {
+		if schedule, readErr := schedulestore.Read(ctx, paths.Database, paths.Schedule); readErr == nil {
+			_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
+		}
+		if reserves, readErr := reservationstore.Read(ctx, paths.Database, paths.Reserves); readErr == nil {
+			_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
+		}
+	}
+	return result, err
 }
 
 func (f fakeSource) Services(context.Context) ([]mirakurun.Service, error) {
@@ -133,7 +167,7 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 	}
 	src.services[0].Channel.Type = "GR"
 	src.services[0].Channel.Channel = "27"
-	_, err := RunWithSource(context.Background(), paths, &config.Config{}, src, false, time.Now())
+	_, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, false, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +223,7 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	}
 	src.services[0].Channel.Type = "GR"
 	src.services[0].Channel.Channel = "27"
-	if _, err := RunWithSource(context.Background(), paths, &config.Config{}, src, false, now); err != nil {
+	if _, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, false, now); err != nil {
 		t.Fatal(err)
 	}
 	schedule, err := schedulestore.Read(context.Background(), paths.Database, paths.Schedule)
@@ -237,7 +271,7 @@ func TestRunWithSourceUsesMirakurunFixtures(t *testing.T) {
 		tuners:   loadFixture[[]mirakurun.Tuner](t, filepath.Join("mirakurun", "tuners.json")),
 	}
 
-	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, false, now)
+	result, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, false, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +307,7 @@ func TestRunWithSourceLogsMirakurunErrorDetails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := RunWithSource(context.Background(), paths, &config.Config{}, fakeSource{programsErr: fmt.Errorf("program endpoint down")}, true, time.Now())
+	_, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, fakeSource{programsErr: fmt.Errorf("program endpoint down")}, true, time.Now())
 	if err == nil || !strings.Contains(err.Error(), "get Mirakurun programs") {
 		t.Fatalf("expected program fetch error, got %v", err)
 	}
@@ -321,7 +355,7 @@ func TestRunWithSourceLogsDuplicateProgramIDWarning(t *testing.T) {
 	src.services[1].Channel.Type = "GR"
 	src.services[1].Channel.Channel = "28"
 
-	_, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	_, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, true, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +405,7 @@ func TestRunWithSourceLogsLegacyDuplicateReservation(t *testing.T) {
 	src.services[1].Channel.Type = "GR"
 	src.services[1].Channel.Channel = "27"
 
-	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	result, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, true, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +450,7 @@ func TestRunWithSourceLogsManualReserveOverriddenByRule(t *testing.T) {
 	src.services[0].Channel.Type = "GR"
 	src.services[0].Channel.Channel = "27"
 
-	_, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	_, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, true, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +491,7 @@ func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
 	}
 	src.services[0].Channel.Type = "GR"
 	src.services[0].Channel.Channel = "27"
-	result, err := RunWithSource(context.Background(), paths, &config.Config{}, src, true, time.Now())
+	result, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, true, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

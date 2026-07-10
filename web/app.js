@@ -401,10 +401,6 @@
     if (!eventName) {
       return;
     }
-    if (typeof window.StrataPVRNotify === "function") {
-      window.StrataPVRNotify(eventName);
-      return;
-    }
     var message = { event: eventName, at: Date.now() };
     if (typeof window.BroadcastChannel === "function") {
       try {

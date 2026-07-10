@@ -3,21 +3,12 @@ package reservationstore
 import (
 	"context"
 	"encoding/json"
-	"sort"
 
 	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
-	"strata-pvr/internal/storage"
 )
 
 func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.Program, error) {
-	if databasePath == "" {
-		var reservations []legacy.Program
-		if err := storage.ReadJSON(jsonPath, &reservations, "[]"); err != nil {
-			return nil, err
-		}
-		return reservations, nil
-	}
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -39,9 +30,6 @@ func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.Program,
 }
 
 func Write(ctx context.Context, databasePath, jsonPath string, reservations []legacy.Program) error {
-	if databasePath == "" {
-		return storage.WriteJSONAtomic(jsonPath, reservations, false)
-	}
 	documents, err := Documents(reservations)
 	if err != nil {
 		return err
@@ -55,25 +43,6 @@ func Write(ctx context.Context, databasePath, jsonPath string, reservations []le
 }
 
 func Upsert(ctx context.Context, databasePath, jsonPath string, reservation legacy.Program) error {
-	if databasePath == "" {
-		reservations, err := Read(ctx, databasePath, jsonPath)
-		if err != nil {
-			return err
-		}
-		updated := false
-		for i := range reservations {
-			if reservations[i].ID == reservation.ID {
-				reservations[i] = reservation
-				updated = true
-				break
-			}
-		}
-		if !updated {
-			reservations = append(reservations, reservation)
-		}
-		sort.SliceStable(reservations, func(i, j int) bool { return reservations[i].Start < reservations[j].Start })
-		return Write(ctx, databasePath, jsonPath, reservations)
-	}
 	document, err := json.Marshal(reservation)
 	if err != nil {
 		return err
@@ -87,19 +56,6 @@ func Upsert(ctx context.Context, databasePath, jsonPath string, reservation lega
 }
 
 func Delete(ctx context.Context, databasePath, jsonPath, programID string) (bool, error) {
-	if databasePath == "" {
-		reservations, err := Read(ctx, databasePath, jsonPath)
-		if err != nil {
-			return false, err
-		}
-		for i := range reservations {
-			if reservations[i].ID == programID {
-				reservations = append(reservations[:i], reservations[i+1:]...)
-				return true, Write(ctx, databasePath, jsonPath, reservations)
-			}
-		}
-		return false, nil
-	}
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return false, err

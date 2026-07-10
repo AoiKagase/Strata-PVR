@@ -39,19 +39,3 @@ func TestSQLiteScheduleStoreIgnoresLegacyJSON(t *testing.T) {
 		t.Fatalf("schedule = %#v", got)
 	}
 }
-
-func TestJSONScheduleStoreRemainsCompatible(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "schedule.json")
-	want := []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: "legacy"}}}
-	if err := Write(ctx, "", path, want); err != nil {
-		t.Fatal(err)
-	}
-	got, err := Read(ctx, "", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "legacy" {
-		t.Fatalf("schedule = %#v", got)
-	}
-}

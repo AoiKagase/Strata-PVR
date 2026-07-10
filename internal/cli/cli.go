@@ -8,9 +8,7 @@ import (
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +18,6 @@ import (
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
-	"strata-pvr/internal/mirakurun"
 	"strata-pvr/internal/operator"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
@@ -28,7 +25,6 @@ import (
 	"strata-pvr/internal/scheduler"
 	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
-	"strata-pvr/internal/system"
 	"strata-pvr/internal/wui"
 )
 
@@ -49,10 +45,6 @@ var inspectArchivedMigrationFiles = inspectMigrationFiles
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	_ = ctx
-	args, err := normalizeModeArgs(args)
-	if err != nil {
-		return err
-	}
 	p := resolveRuntimePaths()
 	if len(args) > 0 && args[0] == "init" {
 		return initializeStrata(ctx, stdout)
@@ -84,8 +76,6 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "Strata PVR ircbot: the experimental Node-era IRC bot is not implemented in the Go runtime.")
 		fmt.Fprintln(stdout, "Use WUI/API or build an external bot against the Go API.")
 		return nil
-	case "compat":
-		return compat(ctx, args[1:], stdout)
 	case "service":
 		return service(ctx, p, args[1:], stdout)
 	case "reserve":
@@ -680,7 +670,7 @@ func writeProgramSearchTable(w io.Writer, programs []legacy.Program, opts search
 		}
 		rows = append(rows, row)
 	}
-	writeLegacyTable(w, headers, rows, opts.simple)
+	writeTable(w, headers, rows)
 }
 
 func writeProgramListTable(w io.Writer, programs []legacy.Program, opts searchOptions) {
@@ -719,76 +709,24 @@ func writeProgramListTable(w io.Writer, programs []legacy.Program, opts searchOp
 		}
 		rows = append(rows, row)
 	}
-	writeLegacyTable(w, headers, rows, opts.simple)
+	writeTable(w, headers, rows)
 }
 
-func writeLegacyTable(w io.Writer, headers []string, rows [][]string, simple bool) {
-	widths := legacyTableWidths(headers, rows)
-	writeLegacyTableRow(w, headers, widths)
-	if !simple {
-		separator := make([]string, len(headers))
-		for i, width := range widths {
-			separator[i] = strings.Repeat("-", width)
-		}
-		writeLegacyTableRow(w, separator, widths)
-	}
+func writeTable(w io.Writer, headers []string, rows [][]string) {
+	fmt.Fprintln(w, strings.Join(headers, "\t"))
 	for _, row := range rows {
-		writeLegacyTableRow(w, row, widths)
+		fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
 }
 
-func writeLegacyTransposedTable(w io.Writer, headers []string, row []string) {
-	rows := make([][]string, 0, len(headers))
+func writeTransposedTable(w io.Writer, headers []string, row []string) {
 	for i, header := range headers {
 		value := ""
 		if i < len(row) {
 			value = row[i]
 		}
-		rows = append(rows, []string{header, value})
+		fmt.Fprintf(w, "%s\t%s\n", header, value)
 	}
-	widths := legacyTableWidths([]string{"", ""}, rows)
-	for _, row := range rows {
-		writeLegacyTableRow(w, row, widths)
-	}
-}
-
-func legacyTableWidths(headers []string, rows [][]string) []int {
-	widths := make([]int, len(headers))
-	for i, header := range headers {
-		widths[i] = legacyCellWidth(header)
-	}
-	for _, row := range rows {
-		for i, cell := range row {
-			if i >= len(widths) {
-				continue
-			}
-			if width := legacyCellWidth(cell); width > widths[i] {
-				widths[i] = width
-			}
-		}
-	}
-	return widths
-}
-
-func writeLegacyTableRow(w io.Writer, row []string, widths []int) {
-	for i := range widths {
-		if i > 0 {
-			fmt.Fprint(w, "  ")
-		}
-		cell := ""
-		if i < len(row) {
-			cell = row[i]
-		}
-		fmt.Fprint(w, cell)
-		if i < len(widths)-1 {
-			fmt.Fprint(w, strings.Repeat(" ", widths[i]-legacyCellWidth(cell)))
-		}
-	}
-	fmt.Fprintln(w)
-}
-
-func legacyCellWidth(value string) int {
-	return len([]rune(value))
 }
 
 func reservationOwner(program legacy.Program) string {
@@ -907,10 +845,10 @@ func ruleList(p paths, args []string, stdout io.Writer) error {
 		return nil
 	}
 	if len(rows) == 1 {
-		writeLegacyTransposedTable(stdout, headers, rows[0])
+		writeTransposedTable(stdout, headers, rows[0])
 		return nil
 	}
-	writeLegacyTable(stdout, headers, rows, hasFlag(args, "-simple", "--simple"))
+	writeTable(stdout, headers, rows)
 	return nil
 }
 
@@ -1155,10 +1093,10 @@ func update(ctx context.Context, p paths, args []string, stdout io.Writer) error
 }
 
 func reserve(p paths, args []string, stdout io.Writer) error {
-	id, rest, err := programIDArg(args, "reserve")
-	if err != nil {
-		return err
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("Usage: reserve <pgid>")
 	}
+	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
 	oneSeg := hasFlag(rest, "--1seg", "-1seg")
 	schedule, err := schedulestore.Read(context.Background(), p.database, p.schedule)
@@ -1195,10 +1133,10 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 }
 
 func updateReserve(p paths, args []string, stdout io.Writer, mode string) error {
-	id, rest, err := programIDArg(args, mode)
-	if err != nil {
-		return err
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("Usage: %s <pgid>", mode)
 	}
+	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
 	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
 	if err != nil {
@@ -1271,10 +1209,10 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 }
 
 func stopRecording(p paths, args []string, stdout io.Writer) error {
-	id, rest, err := programIDArg(args, "stop")
-	if err != nil {
-		return err
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("Usage: stop <pgid>")
 	}
+	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
 	recording, err := programstore.Read(context.Background(), p.database, p.recording, programstore.Recording)
 	if err != nil {
@@ -1351,7 +1289,7 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 		}
 		rows = append(rows, []string{action, program.ID, program.Recorded})
 	}
-	writeLegacyTable(stdout, []string{"action", "Program ID", "Recorded"}, rows, false)
+	writeTable(stdout, []string{"action", "Program ID", "Recorded"}, rows)
 	if simulation {
 		return nil
 	}
@@ -1581,432 +1519,6 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
-func legacyWebRootCandidate() string {
-	legacyName := "China" + "chu"
-	return filepath.Join("..", legacyName, "web")
-}
-
-func legacyAssetName(ext string) string {
-	return "china" + "chu" + ext
-}
-
-func compat(ctx context.Context, args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
-	}
-	switch args[0] {
-	case "check", "doctor":
-		cfg, cfgErr := config.LoadLegacy("config.json")
-		recordedDirErr := cfgErr
-		if cfgErr == nil {
-			recordedDirErr = validateWritableDir(cfg.RecordedDir)
-		}
-		diskErr := cfgErr
-		if cfgErr == nil {
-			diskErr = validateDiskUsage(cfg.RecordedDir)
-		}
-		servicesErr, programsErr, tunersErr := validateMirakurun(ctx, cfg, cfgErr)
-		checks := []struct {
-			name string
-			err  error
-		}{
-			{"config.json", validateJSONObjectFile("config.json")},
-			{"rules.json", validateJSONArrayFile("rules.json")},
-			{"config.sample.json", validateJSONObjectFile("config.sample.json")},
-			{"rules.sample.json", validateJSONArrayFile("rules.sample.json")},
-			{"data directory", validateDir("data")},
-			{"log directory", validateWritableDir("log")},
-			{"recordedDir", recordedDirErr},
-			{"data/schedule.json", validateJSONArrayFile(filepath.Join("data", "schedule.json"))},
-			{"data/reserves.json", validateJSONArrayFile(filepath.Join("data", "reserves.json"))},
-			{"data/recording.json", validateJSONArrayFile(filepath.Join("data", "recording.json"))},
-			{"data/recorded.json", validateJSONArrayFile(filepath.Join("data", "recorded.json"))},
-			{"WUI static assets", validateWUIStaticAssets()},
-			{"available disk space", diskErr},
-			{"ffmpeg command", validateCommandAvailable("ffmpeg")},
-			{"ffprobe command", validateCommandAvailable("ffprobe")},
-			{"Mirakurun services", servicesErr},
-			{"Mirakurun programs", programsErr},
-			{"Mirakurun tuners", tunersErr},
-			{"Node.js runtime", nil},
-		}
-		failed := false
-		for _, check := range checks {
-			if check.err != nil {
-				failed = true
-				fmt.Fprintf(stdout, "NG %s: %v\n", check.name, check.err)
-			} else {
-				fmt.Fprintf(stdout, "OK %s\n", check.name)
-			}
-		}
-		if cfgErr == nil {
-			for _, warning := range compatWarnings(cfg) {
-				fmt.Fprintf(stdout, "WARN %s\n", warning)
-			}
-			if args[0] == "doctor" {
-				writeCompatConfigSummary(stdout, cfg)
-				writeCompatStateSummary(stdout)
-				writeCompatNextSteps(stdout)
-				for _, warning := range compatStateWarnings() {
-					fmt.Fprintf(stdout, "WARN %s\n", warning)
-				}
-				for _, warning := range compatDoctorWarnings() {
-					fmt.Fprintf(stdout, "WARN %s\n", warning)
-				}
-			}
-		}
-		if failed {
-			return fmt.Errorf("compat check failed")
-		}
-		return nil
-	case "diff":
-		return compatDiff(stdout)
-	case "backup":
-		return compatBackup(stdout)
-	case "wrapper":
-		fmt.Fprint(stdout, compatWrapperScript())
-		return nil
-	default:
-		return fmt.Errorf("Usage: strata-pvr compat <check|doctor|diff|backup|wrapper>")
-	}
-}
-
-func compatDoctorWarnings() []string {
-	candidates := []string{"strata-pvr"}
-	if runtime.GOOS == "windows" {
-		candidates = append([]string{"strata-pvr.exe"}, candidates...)
-	}
-	for _, candidate := range candidates {
-		info, err := os.Stat(candidate)
-		if err == nil {
-			if info.IsDir() {
-				return []string{candidate + ": wrapper target is a directory, not an executable file"}
-			}
-			if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
-				return []string{candidate + ": wrapper target exists but is not executable"}
-			}
-			return nil
-		}
-		if err != nil && !os.IsNotExist(err) {
-			return []string{candidate + ": cannot inspect wrapper target: " + err.Error()}
-		}
-	}
-	return []string{"strata-pvr binary not found in the current directory; generated wrappers and initscripts expect it there"}
-}
-
-func writeCompatConfigSummary(stdout io.Writer, cfg *config.LegacyConfig) {
-	wuiPort := "disabled"
-	if cfg.WUIPort != nil {
-		wuiPort = strconv.Itoa(*cfg.WUIPort)
-	}
-	openServer := "disabled"
-	if cfg.WUIOpenServer {
-		openServer = fmt.Sprintf("%s:%d", cfg.WUIOpenHost, cfg.WUIOpenPort)
-		if cfg.WUIOpenHost == "" {
-			openServer = fmt.Sprintf("auto:%d", cfg.WUIOpenPort)
-		}
-	}
-	fmt.Fprintf(stdout, "CONFIG mirakurunPath=%s\n", cfg.EffectiveMirakurunPath())
-	fmt.Fprintf(stdout, "CONFIG recordedDir=%s\n", cfg.RecordedDir)
-	if abs, err := filepath.Abs(cfg.RecordedDir); err == nil {
-		fmt.Fprintf(stdout, "CONFIG recordedDirResolved=%s\n", abs)
-	}
-	fmt.Fprintf(stdout, "CONFIG recordedFormat=%s\n", cfg.RecordedFormat)
-	fmt.Fprintf(stdout, "CONFIG wui=%s:%s open=%s\n", cfg.WUIHost, wuiPort, openServer)
-	fmt.Fprintf(stdout, "CONFIG storageLowSpace=%dMB action=%s\n", cfg.StorageLowSpaceThresholdMB, cfg.StorageLowSpaceAction)
-	if cfg.NormalizationForm != "" {
-		fmt.Fprintf(stdout, "CONFIG normalizationForm=%s\n", cfg.NormalizationForm)
-	}
-}
-
-func writeCompatStateSummary(stdout io.Writer) {
-	for _, item := range []struct {
-		label string
-		path  string
-	}{
-		{"scheduleChannels", filepath.Join("data", "schedule.json")},
-		{"reserves", filepath.Join("data", "reserves.json")},
-		{"recording", filepath.Join("data", "recording.json")},
-		{"recorded", filepath.Join("data", "recorded.json")},
-	} {
-		count, err := jsonArrayLength(item.path)
-		if err != nil {
-			continue
-		}
-		fmt.Fprintf(stdout, "STATE %s=%d\n", item.label, count)
-	}
-}
-
-func jsonArrayLength(path string) (int, error) {
-	var values []any
-	if err := storage.ReadJSON(path, &values, ""); err != nil {
-		return 0, err
-	}
-	return len(values), nil
-}
-
-func compatStateWarnings() []string {
-	recording, err := jsonArrayLength(filepath.Join("data", "recording.json"))
-	if err != nil || recording == 0 {
-		return nil
-	}
-	return []string{fmt.Sprintf("active recordings detected: %d; avoid migration, wrapper replacement, or service changes until recording finishes", recording)}
-}
-
-func writeCompatNextSteps(stdout io.Writer) {
-	for _, step := range []string{
-		"compat backup",
-		"update -s",
-		"reserves",
-		"service wui execute",
-		"service operator execute",
-	} {
-		fmt.Fprintf(stdout, "NEXT strata-pvr %s\n", step)
-	}
-}
-
-func compatWrapperScript() string {
-	root, err := os.Getwd()
-	if err != nil {
-		root = "."
-	}
-	root = filepath.ToSlash(root)
-	return fmt.Sprintf(`#!/bin/bash
-
-STRATA_PVR_DIR=%s
-DAEMON=${STRATA_PVR_DIR}/strata-pvr
-
-cd "$STRATA_PVR_DIR" || exit 1
-exec "$DAEMON" "$@"
-`, shellQuote(root))
-}
-
-func compatWarnings(cfg *config.LegacyConfig) []string {
-	warnings := []string{
-		"native settings editing: the Go dashboard is intentionally read-only; edit config.json directly or use the legacy-compatible /api/config.json PUT endpoint with care",
-	}
-	legacySampleUser := "china" + "chu:yoshikawa"
-	for _, user := range cfg.WUIUsers {
-		if user == "strata:yoshikawa" || user == legacySampleUser {
-			warnings = append(warnings, "wuiUsers: sample WUI credential is configured; change it before exposing the authenticated listener")
-			break
-		}
-	}
-	if cfg.WUIOpenServer {
-		warnings = append(warnings, "wuiOpenServer: unauthenticated WUI listener is enabled; bind it to a trusted network or disable it for authenticated-only access")
-	}
-	return warnings
-}
-
-func compatDiff(stdout io.Writer) error {
-	checks := []struct {
-		path   string
-		pretty bool
-		value  any
-	}{
-		{"rules.json", true, &[]legacy.Rule{}},
-		{filepath.Join("data", "schedule.json"), false, &[]legacy.ChannelSchedule{}},
-		{filepath.Join("data", "reserves.json"), false, &[]legacy.Program{}},
-		{filepath.Join("data", "recording.json"), false, &[]legacy.Program{}},
-		{filepath.Join("data", "recorded.json"), false, &[]legacy.Program{}},
-	}
-	for _, check := range checks {
-		raw, err := os.ReadFile(check.path)
-		if os.IsNotExist(err) {
-			fmt.Fprintf(stdout, "MISSING %s\n", check.path)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(raw, check.value); err != nil {
-			fmt.Fprintf(stdout, "INVALID %s: %v\n", check.path, err)
-			continue
-		}
-		rendered, err := marshalCompatDiffValue(check.value, check.pretty)
-		if err != nil {
-			return err
-		}
-		if string(raw) == string(rendered) {
-			fmt.Fprintf(stdout, "OK %s\n", check.path)
-		} else {
-			fmt.Fprintf(stdout, "DIFF %s original=%d go=%d\n", check.path, len(raw), len(rendered))
-		}
-	}
-	return nil
-}
-
-func marshalCompatDiffValue(value any, pretty bool) ([]byte, error) {
-	if pretty {
-		return json.MarshalIndent(value, "", "  ")
-	}
-	return json.Marshal(value)
-}
-
-func compatBackup(stdout io.Writer) error {
-	dir := filepath.Join("backup", "strata-pvr-"+time.Now().Format("20060102150405"))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	files := []string{
-		"config.json",
-		"rules.json",
-		filepath.Join("data", "schedule.json"),
-		filepath.Join("data", "reserves.json"),
-		filepath.Join("data", "recording.json"),
-		filepath.Join("data", "recorded.json"),
-	}
-	copied := 0
-	for _, src := range files {
-		dst := filepath.Join(dir, filepath.ToSlash(src))
-		if err := copyBackupFile(src, dst); err != nil {
-			if os.IsNotExist(err) {
-				fmt.Fprintf(stdout, "SKIP %s: not found\n", src)
-				continue
-			}
-			return err
-		}
-		copied++
-		fmt.Fprintf(stdout, "BACKUP %s -> %s\n", src, dst)
-	}
-	if copied == 0 {
-		return fmt.Errorf("compat backup failed: no files copied")
-	}
-	fmt.Fprintf(stdout, "OK backup: %s\n", dir)
-	return nil
-}
-
-func copyBackupFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o644)
-}
-
-func validateJSONObjectFile(path string) error {
-	var v map[string]any
-	return storage.ReadJSON(path, &v, "")
-}
-
-func validateJSONArrayFile(path string) error {
-	var v []any
-	return storage.ReadJSON(path, &v, "")
-}
-
-func validateDir(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("not a directory")
-	}
-	return nil
-}
-
-func validateWritableDir(path string) error {
-	if err := validateDir(path); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(path, ".strata-pvr-compat-*")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	if err := f.Close(); err != nil {
-		_ = os.Remove(name)
-		return err
-	}
-	return os.Remove(name)
-}
-
-func validateWUIStaticAssets() error {
-	candidates := []string{"web", legacyWebRootCandidate()}
-	requiredSets := []staticAssetSet{
-		{files: []string{"index.html", "app.js", "styles.css"}},
-		{
-			files: []string{"index.html", legacyAssetName(".js"), legacyAssetName(".css"), "init.js"},
-			dirs:  []string{"icons", "lib", "locales", "page"},
-		},
-	}
-	for _, candidate := range candidates {
-		info, err := os.Stat(candidate)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		var firstErr error
-		for _, set := range requiredSets {
-			if err := validateStaticAssetSet(candidate, set); err == nil {
-				return nil
-			} else if firstErr == nil {
-				firstErr = err
-			}
-		}
-		if firstErr != nil {
-			return firstErr
-		}
-	}
-	return fmt.Errorf("web directory not found")
-}
-
-type staticAssetSet struct {
-	files []string
-	dirs  []string
-}
-
-func validateStaticAssetSet(root string, set staticAssetSet) error {
-	for _, file := range set.files {
-		info, err := os.Stat(filepath.Join(root, file))
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return fmt.Errorf("%s is not a file", filepath.Join(root, file))
-		}
-	}
-	for _, dir := range set.dirs {
-		info, err := os.Stat(filepath.Join(root, dir))
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("%s is not a directory", filepath.Join(root, dir))
-		}
-	}
-	return nil
-}
-
-func validateDiskUsage(path string) error {
-	_, err := system.GetDiskUsage(path)
-	return err
-}
-
-func validateCommandAvailable(name string) error {
-	_, err := exec.LookPath(name)
-	return err
-}
-
-func validateMirakurun(ctx context.Context, cfg *config.LegacyConfig, cfgErr error) (servicesErr, programsErr, tunersErr error) {
-	if cfgErr != nil {
-		return cfgErr, cfgErr, cfgErr
-	}
-	client, err := mirakurun.New(cfg.EffectiveMirakurunPath())
-	if err != nil {
-		return err, err, err
-	}
-	client.UserAgent = mirakurun.StrataUserAgent("cli")
-	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	_, servicesErr = client.Services(checkCtx)
-	_, programsErr = client.Programs(checkCtx)
-	_, tunersErr = client.Tuners(checkCtx)
-	return servicesErr, programsErr, tunersErr
-}
-
 func hasFlag(args []string, names ...string) bool {
 	for _, arg := range args {
 		for _, name := range names {
@@ -2016,72 +1528,6 @@ func hasFlag(args []string, names ...string) bool {
 		}
 	}
 	return false
-}
-
-func normalizeModeArgs(args []string) ([]string, error) {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "--mode=") {
-			mode := strings.TrimPrefix(arg, "--mode=")
-			if mode == "" {
-				return nil, fmt.Errorf("missing value for %s", arg)
-			}
-			out := []string{mode}
-			out = append(out, args[:i]...)
-			out = append(out, args[i+1:]...)
-			return out, nil
-		}
-		if arg == "-mode" || arg == "--mode" {
-			if i+1 >= len(args) {
-				return nil, fmt.Errorf("missing value for %s", arg)
-			}
-			mode := args[i+1]
-			out := []string{mode}
-			out = append(out, args[:i]...)
-			out = append(out, args[i+2:]...)
-			return out, nil
-		}
-	}
-	return args, nil
-}
-
-func programIDArg(args []string, command string) (string, []string, error) {
-	if len(args) == 0 {
-		return "", nil, fmt.Errorf("Usage: %s <pgid>", command)
-	}
-	if !strings.HasPrefix(args[0], "-") {
-		return args[0], args[1:], nil
-	}
-	rest := make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "--id=") {
-			id := strings.TrimPrefix(arg, "--id=")
-			if id == "" {
-				return "", nil, fmt.Errorf("missing value for %s", arg)
-			}
-			rest = append(rest, args[i+1:]...)
-			return id, rest, nil
-		}
-		if arg == "-id" || arg == "--id" {
-			if i+1 >= len(args) {
-				return "", nil, fmt.Errorf("missing value for %s", arg)
-			}
-			id := args[i+1]
-			rest = append(rest, args[:i]...)
-			rest = append(rest, args[i+2:]...)
-			return id, rest, nil
-		}
-	}
-	for i, arg := range args {
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		rest = append(rest, args[:i]...)
-		rest = append(rest, args[i+1:]...)
-		return arg, rest, nil
-	}
-	return "", nil, fmt.Errorf("Usage: %s <pgid>", command)
 }
 
 func firstArg(args []string) string {
@@ -2267,9 +1713,6 @@ recording               Show a list of recording programs.
 recorded                Show a list of recorded programs.
 
 cleanup                 Clean-up the recorded list.
-
-compat <check|doctor|diff|backup|wrapper>
-                        Check or back up Strata PVR compatibility state.
 
 ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)
 

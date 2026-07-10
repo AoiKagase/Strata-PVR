@@ -7,17 +7,9 @@ import (
 
 	"strata-pvr/internal/database"
 	"strata-pvr/internal/legacy"
-	"strata-pvr/internal/storage"
 )
 
 func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.ChannelSchedule, error) {
-	if databasePath == "" {
-		var schedule []legacy.ChannelSchedule
-		if err := storage.ReadJSON(jsonPath, &schedule, "[]"); err != nil {
-			return nil, err
-		}
-		return schedule, nil
-	}
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -47,9 +39,6 @@ func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.ChannelS
 }
 
 func Write(ctx context.Context, databasePath, jsonPath string, schedule []legacy.ChannelSchedule) error {
-	if databasePath == "" {
-		return storage.WriteJSONAtomic(jsonPath, schedule, false)
-	}
 	documents, err := Documents(schedule)
 	if err != nil {
 		return err
