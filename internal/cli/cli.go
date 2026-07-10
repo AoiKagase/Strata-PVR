@@ -49,7 +49,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "init" {
 		return initializeStrata(ctx, stdout)
 	}
-	if len(args) > 0 && (args[0] == "migrate" || args[0] == "migration") {
+	if len(args) > 0 && args[0] == "migrate" {
 		return migrateChinachu(ctx, args[1:], stdout)
 	}
 	if len(args) == 0 || args[0] == "help" {
@@ -1665,7 +1665,6 @@ Commands:
 
 init                    Initialize a new Strata installation in data/.
 migrate                 Convert migrate/ Chinachu files into a Strata installation.
-migration               Alias of migrate.
 service <name> <action> Service-utility.
 
 update                  Run a Scheduler.

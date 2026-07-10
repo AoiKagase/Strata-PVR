@@ -242,7 +242,7 @@ func TestMigrateChinachuValidationFailureLeavesInputUntouched(t *testing.T) {
 	if err := os.WriteFile(filepath.Join("migrate", "config.json"), []byte(`{`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), []string{"migration"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+	if err := Run(context.Background(), []string{"migrate"}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 		t.Fatal("migration accepted invalid config")
 	}
 	if _, err := os.Stat(filepath.Join("migrate", "config.json")); err != nil {
