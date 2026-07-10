@@ -745,6 +745,24 @@ func TestNativeDashboardScheduleDayWindowStartsAtSelectedDay(t *testing.T) {
 	}
 }
 
+func TestRecordedPlaybackUsesHLSOnlyForAppleNativeBrowsers(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`recordedNativeHLSSupported(video, window.navigator && window.navigator.userAgent)`,
+		`/iPhone|iPad|iPod/i.test(userAgent)`,
+		`/Macintosh/i.test(userAgent) && /Safari/i.test(userAgent) && !/Chrome|Chromium|Edg/i.test(userAgent)`,
+		`return recordedWatchURL(program, "mp4", query);`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardScheduleDefaultsToDayRangeWithFullRangeOption(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {
@@ -1832,7 +1850,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/recorded/abc/") {
+	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts?prefix=/api/recorded/abc/") {
 		t.Fatalf("unexpected xspf: %q", res.Body.String())
 	}
 
@@ -2183,7 +2201,7 @@ func TestAPIRecordedWatchXSPFDoesNotRequireProbe(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "watch.m2ts") {
+	if !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts") {
 		t.Fatalf("xspf target missing: %q", res.Body.String())
 	}
 }
@@ -2882,7 +2900,7 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	if !strings.Contains(res.Body.String(), "Service & One") {
 		t.Fatalf("xspf channel title should match legacy unescaped output: %q", res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "watch.m2ts?prefix=/api/channel/") {
+	if !strings.Contains(res.Body.String(), "http://example.com/api/channel/"+chid+"/watch.m2ts?prefix=/api/channel/") {
 		t.Fatalf("xspf target missing: %q", res.Body.String())
 	}
 }

@@ -29,6 +29,7 @@
   var playerTimelineDuration = 0;
   var playerFallbackDuration = 0;
   var playerKnownDuration = 0;
+  var playerCurrentURL = "";
   var pendingConfirmResolve = null;
   var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
@@ -1410,6 +1411,11 @@
     return url + "?" + new URLSearchParams(query).toString();
   }
 
+  function recordedXSPFURL(program) {
+    var prefix = window.location.origin + "/api/recorded/" + encodeURIComponent(program.id) + "/";
+    return recordedWatchURL(program, "xspf", { prefix: prefix, ext: "m2ts" });
+  }
+
   function recordedHLSURL(program, query) {
     query = cloneQuery(query || {});
     var quality = qualityFromQuery(query) || "540p";
@@ -1428,10 +1434,21 @@
 
   function recordedPlaybackURL(program, query) {
     var video = document.createElement("video");
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    if (recordedNativeHLSSupported(video, window.navigator && window.navigator.userAgent)) {
       return recordedHLSURL(program, query);
     }
     return recordedWatchURL(program, "mp4", query);
+  }
+
+  function recordedNativeHLSSupported(video, userAgent) {
+    if (!video || !video.canPlayType("application/vnd.apple.mpegurl")) {
+      return false;
+    }
+    userAgent = userAgent || "";
+    if (/iPhone|iPad|iPod/i.test(userAgent)) {
+      return true;
+    }
+    return /Macintosh/i.test(userAgent) && /Safari/i.test(userAgent) && !/Chrome|Chromium|Edg/i.test(userAgent);
   }
 
   function recordingWatchURL(program, ext, query) {
@@ -1660,10 +1677,12 @@
     if (!video) {
       return;
     }
+    stopHLSPlayback(playerCurrentURL);
     video.pause();
     video.removeAttribute("src");
     video.load();
     video.src = url;
+    playerCurrentURL = url;
     playerBaseQuery = cloneQuery(query || {});
     playerKnownDuration = playerConfiguredDuration();
     updatePlayerControls();
@@ -1879,6 +1898,8 @@
     if (!video) {
       return;
     }
+    stopHLSPlayback(playerCurrentURL);
+    playerCurrentURL = "";
     video.pause();
     video.removeAttribute("src");
     video.load();
@@ -1893,6 +1914,13 @@
     updatePlayerQualityControl(null, false);
     updatePlayerAudioControl(null, false);
     updatePlayerControls();
+  }
+
+  function stopHLSPlayback(url) {
+    if (!url || !/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url)) {
+      return;
+    }
+    fetch(url, { method: "DELETE", keepalive: true }).catch(function () {});
   }
 
   var mp4Presets = {
@@ -2004,7 +2032,7 @@
         }));
       } else if (name === "xspf") {
         row.appendChild(actionButton("XSPF", "録画済み番組のプレイリストを開く", function () {
-          openURL(recordedWatchURL(program, "xspf"));
+          openURL(recordedXSPFURL(program));
         }));
       } else if (name === "delete-recorded") {
         row.appendChild(actionButton("削除", "録画済み項目とファイルを削除", function () {
@@ -2047,7 +2075,7 @@
     }
     if (name === "xspf") {
       return actionButton("XSPF", "録画済み番組のプレイリストを開く", function () {
-        openURL(recordedWatchURL(program, "xspf"));
+        openURL(recordedXSPFURL(program));
       }, className);
     }
     if (name === "delete-recorded") {

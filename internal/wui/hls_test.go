@@ -1,6 +1,8 @@
 package wui
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,13 +13,35 @@ func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
 	args := hlsFFmpegArgs("recording.m2ts", dir, hlsPresets["540p"], 12, 30, "secondary", "libopenh264")
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
-		"-ss 12", "-t 30", "-map 0:a:1?", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p",
-		"-c:a aac", "-ac 2", "-ar 48000", "-hls_time 4", "-hls_playlist_type vod",
+		"-re", "-ss 12", "-t 30", "-map 0:a:1?", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p",
+		"-c:a aac", "-ac 2", "-ar 48000", "-hls_time 4", "-hls_playlist_type event",
 		filepath.Join(dir, "segment%05d.ts"),
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("args do not contain %q: %s", want, joined)
 		}
+	}
+}
+
+func TestHLSSessionStopCancelsAndRemovesSession(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	m := newHLSSessionManager(Paths{})
+	id := hlsSessionID("recording.m2ts", "540p", 12, 30, "")
+	m.sessions[id] = &hlsSession{id: id, dir: dir, cancel: cancel, done: make(chan struct{})}
+
+	m.stop("recording.m2ts", "540p", 12, 30, "")
+
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("session context was not cancelled")
+	}
+	if m.sessions[id] != nil {
+		t.Fatal("session was not removed")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("session directory still exists: %v", err)
 	}
 }
 

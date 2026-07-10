@@ -46,6 +46,8 @@ type hlsSessionManager struct {
 	sessions map[string]*hlsSession
 }
 
+const hlsSessionIdleTimeout = 15 * time.Second
+
 func newHLSSessionManager(paths Paths) *hlsSessionManager {
 	return &hlsSessionManager{paths: paths, sessions: make(map[string]*hlsSession)}
 }
@@ -66,6 +68,16 @@ func (s *server) handleRecordedHLS(w http.ResponseWriter, r *http.Request, id, r
 		return
 	}
 	filePath := filepath.FromSlash(programs[index].Recorded)
+	if apiType == "m3u8" && resource == "index" && r.Method == http.MethodDelete {
+		quality, _, start, duration, audio, ok := hlsRequestOptions(r)
+		if !ok {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		s.hls.stop(filePath, quality, start, duration, audio)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
@@ -86,19 +98,8 @@ func (s *server) handleRecordedHLS(w http.ResponseWriter, r *http.Request, id, r
 }
 
 func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePath string) {
-	quality := r.URL.Query().Get("quality")
-	if quality == "" {
-		quality = "540p"
-	}
-	preset, ok := hlsPresets[quality]
+	quality, preset, start, duration, audio, ok := hlsRequestOptions(r)
 	if !ok {
-		legacyHTTPError(w, r, http.StatusBadRequest)
-		return
-	}
-	start := nonNegativeInt(r.URL.Query().Get("ss"))
-	duration := nonNegativeInt(r.URL.Query().Get("t"))
-	audio := r.URL.Query().Get("audio")
-	if audio != "" && audio != "secondary" {
 		legacyHTTPError(w, r, http.StatusBadRequest)
 		return
 	}
@@ -170,14 +171,12 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 	if err != nil {
 		return nil, err
 	}
-	key := fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%s", filePath, quality, start, duration, audio)
-	sum := sha256.Sum256([]byte(key))
-	id := hex.EncodeToString(sum[:12])
+	id := hlsSessionID(filePath, quality, start, duration, audio)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing := m.sessions[id]; existing != nil {
 		existing.lastAccess = time.Now()
-		existing.timer.Reset(2 * time.Minute)
+		existing.timer.Reset(hlsSessionIdleTimeout)
 		return existing, nil
 	}
 	if m.root == "" {
@@ -207,7 +206,7 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 		return nil, err
 	}
 	m.sessions[id] = session
-	session.timer = time.AfterFunc(2*time.Minute, func() { m.expire(id) })
+	session.timer = time.AfterFunc(hlsSessionIdleTimeout, func() { m.expire(id) })
 	_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "SPAWN HLS: ffmpeg %s", strings.Join(args, " "))
 	go func() {
 		err := cmd.Wait()
@@ -229,7 +228,7 @@ func (m *hlsSessionManager) lookup(id string) *hlsSession {
 	s := m.sessions[id]
 	if s != nil {
 		s.lastAccess = time.Now()
-		s.timer.Reset(2 * time.Minute)
+		s.timer.Reset(hlsSessionIdleTimeout)
 	}
 	return s
 }
@@ -241,8 +240,8 @@ func (m *hlsSessionManager) expire(id string) {
 		m.mu.Unlock()
 		return
 	}
-	if idle := time.Since(session.lastAccess); idle < 2*time.Minute {
-		session.timer.Reset(2*time.Minute - idle)
+	if idle := time.Since(session.lastAccess); idle < hlsSessionIdleTimeout {
+		session.timer.Reset(hlsSessionIdleTimeout - idle)
 		m.mu.Unlock()
 		return
 	}
@@ -252,8 +251,48 @@ func (m *hlsSessionManager) expire(id string) {
 	_ = os.RemoveAll(session.dir)
 }
 
+func (m *hlsSessionManager) stop(filePath, quality string, start, duration int, audio string) {
+	m.expireNow(hlsSessionID(filePath, quality, start, duration, audio))
+}
+
+func (m *hlsSessionManager) expireNow(id string) {
+	m.mu.Lock()
+	session := m.sessions[id]
+	if session != nil {
+		delete(m.sessions, id)
+		if session.timer != nil {
+			session.timer.Stop()
+		}
+	}
+	m.mu.Unlock()
+	if session == nil {
+		return
+	}
+	session.cancel()
+	_ = os.RemoveAll(session.dir)
+}
+
+func hlsSessionID(filePath, quality string, start, duration int, audio string) string {
+	key := fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%s", filePath, quality, start, duration, audio)
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:12])
+}
+
+func hlsRequestOptions(r *http.Request) (string, hlsPreset, int, int, string, bool) {
+	quality := r.URL.Query().Get("quality")
+	if quality == "" {
+		quality = "540p"
+	}
+	preset, ok := hlsPresets[quality]
+	audio := r.URL.Query().Get("audio")
+	if !ok || (audio != "" && audio != "secondary") {
+		return "", hlsPreset{}, 0, 0, "", false
+	}
+	return quality, preset, nonNegativeInt(r.URL.Query().Get("ss")), nonNegativeInt(r.URL.Query().Get("t")), audio, true
+}
+
 func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio, encoder string) []string {
-	args := []string{"-v", "error", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err"}
+	args := []string{"-v", "error", "-re", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err"}
 	if start > 0 {
 		args = append(args, "-ss", strconv.Itoa(start))
 	}
@@ -271,7 +310,7 @@ func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio, e
 	args = append(args, "-r", "24", "-g", "48", "-keyint_min", "48",
 		"-b:v", p.video, "-maxrate:v", p.video, "-bufsize:v", bitrateTimes(p.video, 2),
 		"-c:a", "aac", "-ac", "2", "-ar", "48000", "-b:a", p.audio,
-		"-hls_time", "4", "-hls_playlist_type", "vod", "-hls_flags", "independent_segments+temp_file",
+		"-hls_time", "4", "-hls_playlist_type", "event", "-hls_flags", "independent_segments+temp_file",
 		"-hls_segment_filename", filepath.Join(dir, "segment%05d.ts"), "-y", "-f", "hls", filepath.Join(dir, "index.m3u8"))
 	return args
 }

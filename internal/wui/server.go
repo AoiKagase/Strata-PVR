@@ -1809,11 +1809,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		if ext == "" {
 			ext = "m2ts"
 		}
-		prefix := r.URL.Query().Get("prefix")
-		target := prefix + "watch." + ext
-		if r.URL.RawQuery != "" {
-			target += "?" + r.URL.RawQuery
-		}
+		target := xspfTarget(r, ext)
 		w.Header().Set("Content-Type", "application/xspf+xml")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, id))
 		w.WriteHeader(http.StatusOK)
@@ -2719,11 +2715,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		if ext == "" {
 			ext = "m2ts"
 		}
-		prefix := r.URL.Query().Get("prefix")
-		target := prefix + "watch." + ext
-		if r.URL.RawQuery != "" {
-			target += "?" + r.URL.RawQuery
-		}
+		target := xspfTarget(r, ext)
 		w.Header().Set("Content-Type", "application/xspf+xml")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, channel.ID))
 		w.WriteHeader(http.StatusOK)
@@ -3273,6 +3265,38 @@ func writeXSPF(w io.Writer, target, title string) {
 	fmt.Fprintf(w, "</playlist>\n")
 }
 
+func xspfTarget(r *http.Request, ext string) string {
+	prefix := r.URL.Query().Get("prefix")
+	path := ""
+	if prefix != "" {
+		path = prefix + "watch." + ext
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			return path
+		}
+	} else {
+		path = strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
+	}
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme != "http" && scheme != "https" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	return scheme + "://" + host + path
+}
+
 func legacyXSPFLocation(value string) string {
 	return strings.ReplaceAll(value, "&", "&amp;")
 }
@@ -3373,7 +3397,7 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 	case len(parts) == 3 && parts[0] == "recorded" && (parts[2] == "preview" || parts[2] == "watch"):
 		return []string{"GET"}, true
 	case len(parts) == 4 && parts[0] == "recorded" && parts[2] == "hls":
-		return []string{"GET", "HEAD"}, true
+		return []string{"GET", "HEAD", "DELETE"}, true
 	case len(parts) == 2 && parts[0] == "program":
 		return []string{"GET", "PUT"}, true
 	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "watch"):
