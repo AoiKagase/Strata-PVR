@@ -158,6 +158,7 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory(),
 		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
+		hls: newHLSSessionManager(paths),
 	}
 	server.cleanupPreviewCache(context.Background())
 	mux.HandleFunc("/api/", server.handleAPI)
@@ -187,6 +188,7 @@ type server struct {
 	authMu      sync.Mutex
 	authCache   map[[sha256.Size]byte]time.Time
 	authWorkers chan struct{}
+	hls         *hlsSessionManager
 }
 
 type metricHistory struct {
@@ -709,6 +711,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleProgramWatch(w, r, programstore.Recorded, parts[1], apiType, false)
+	case len(parts) == 4 && parts[0] == "recorded" && parts[2] == "hls":
+		if !requireAPIType(w, r, apiType, "m3u8", "ts") {
+			return
+		}
+		s.handleRecordedHLS(w, r, parts[1], parts[3], apiType)
 	case len(parts) >= 2 && parts[0] == "recorded":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -2830,7 +2837,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if format == "mp4" {
 		container = "mp4"
 		if videoCodec == "" {
-			videoCodec = "h264"
+			videoCodec = "libopenh264"
 		}
 		if audioCodec == "" {
 			audioCodec = "aac"
@@ -2903,6 +2910,8 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	}
 	if videoCodec == "libx264" {
 		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
+	} else if videoCodec == "libopenh264" {
+		args = append(args, "-profile:v", "constrained_baseline", "-pix_fmt", "yuv420p")
 	}
 	if container == "mp4" {
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
@@ -3349,6 +3358,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"GET", "DELETE"}, true
 	case len(parts) == 3 && parts[0] == "recorded" && (parts[2] == "preview" || parts[2] == "watch"):
 		return []string{"GET"}, true
+	case len(parts) == 4 && parts[0] == "recorded" && parts[2] == "hls":
+		return []string{"GET", "HEAD"}, true
 	case len(parts) == 2 && parts[0] == "program":
 		return []string{"GET", "PUT"}, true
 	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "watch"):
@@ -3411,7 +3422,7 @@ func trimStreamExtension(path string) string {
 }
 
 func isStreamExtension(ext string) bool {
-	return ext == "xspf" || ext == "m2ts" || ext == "mp4"
+	return ext == "xspf" || ext == "m2ts" || ext == "mp4" || ext == "m3u8" || ext == "ts"
 }
 
 func hasUnsupportedAPIExtension(path string) bool {

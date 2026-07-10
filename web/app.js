@@ -1410,6 +1410,30 @@
     return url + "?" + new URLSearchParams(query).toString();
   }
 
+  function recordedHLSURL(program, query) {
+    query = cloneQuery(query || {});
+    var quality = qualityFromQuery(query) || "540p";
+    if (quality === "custom") {
+      quality = "540p";
+    }
+    var params = new URLSearchParams();
+    params.set("quality", quality);
+    ["ss", "t", "audio"].forEach(function (key) {
+      if (query[key]) {
+        params.set(key, query[key]);
+      }
+    });
+    return "/api/recorded/" + encodeURIComponent(program.id) + "/hls/index.m3u8?" + params.toString();
+  }
+
+  function recordedPlaybackURL(program, query) {
+    var video = document.createElement("video");
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      return recordedHLSURL(program, query);
+    }
+    return recordedWatchURL(program, "mp4", query);
+  }
+
   function recordingWatchURL(program, ext, query) {
     var url = "/api/recording/" + encodeURIComponent(program.id) + "/watch." + ext;
     if (!query) {
@@ -1872,10 +1896,10 @@
   }
 
   var mp4Presets = {
-    "1080p": { s: "1920x1080", video: "4000k", audio: "192k" },
-    "720p": { s: "1280x720", video: "1800k", audio: "128k" },
-    "540p": { s: "960x540", video: "1200k", audio: "128k" },
-    "360p": { s: "640x360", video: "800k", audio: "96k" }
+    "1080p": { s: "1920x1080", video: "2600k", audio: "96k" },
+    "720p": { s: "1280x720", video: "1400k", audio: "96k" },
+    "540p": { s: "960x540", video: "900k", audio: "64k" },
+    "360p": { s: "640x360", video: "550k", audio: "64k" }
   };
 
   function formatBytes(value) {
@@ -1969,9 +1993,10 @@
         }));
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("視聴", "録画済み番組を視聴", function () {
+          var initialQuery = presetQuery("540p");
           openAdjustablePlayer(program.title || program.id || "録画済み", function (query) {
-            return recordedWatchURL(program, "mp4", query);
-          }, null, true, programDurationSeconds(program));
+            return recordedPlaybackURL(program, query);
+          }, initialQuery, true, programDurationSeconds(program));
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("ダウンロード", "録画ファイルを実体ファイル名で保存", function () {
@@ -2009,9 +2034,10 @@
   function recordedActionButton(name, program, className) {
     if (name === "watch-mp4") {
       return actionButton("視聴", "録画済み番組を視聴", function () {
+        var initialQuery = presetQuery("540p");
         openAdjustablePlayer(program.title || program.id || "録画済み", function (query) {
-          return recordedWatchURL(program, "mp4", query);
-        }, null, true, programDurationSeconds(program));
+          return recordedPlaybackURL(program, query);
+        }, initialQuery, true, programDurationSeconds(program));
       }, className);
     }
     if (name === "download") {
