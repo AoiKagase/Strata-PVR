@@ -3136,19 +3136,13 @@ func writeCompactJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func legacyHTTPError(w http.ResponseWriter, r *http.Request, status int) {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(status)
 		return
 	}
-	_, _ = fmt.Fprintf(w, "%d %s\n", status, legacyStatusText(status))
-}
-
-func legacyStatusText(status int) string {
-	if status == http.StatusRequestURITooLong {
-		return "Request-URI Too Long"
-	}
-	return http.StatusText(status)
+	http.Error(w, http.StatusText(status), status)
 }
 
 func requireAPIType(w http.ResponseWriter, r *http.Request, apiType string, allowed ...string) bool {

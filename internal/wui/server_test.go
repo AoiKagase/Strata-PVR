@@ -164,7 +164,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	if res.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status.txt status = %d body=%s", res.Code, res.Body.String())
 	}
-	if res.Body.String() != "415 Unsupported Media Type\n" {
+	if res.Body.String() != "Unsupported Media Type\n" {
 		t.Fatalf("status.txt body=%q", res.Body.String())
 	}
 
@@ -174,7 +174,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	if res.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status without extension status = %d body=%s", res.Code, res.Body.String())
 	}
-	if res.Body.String() != "415 Unsupported Media Type\n" {
+	if res.Body.String() != "Unsupported Media Type\n" {
 		t.Fatalf("status without extension body=%q", res.Body.String())
 	}
 
@@ -188,7 +188,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/status.JSON", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusNotFound || res.Body.String() != "404 Not Found\n" {
+	if res.Code != http.StatusNotFound || res.Body.String() != "Not Found\n" {
 		t.Fatalf("uppercase extension status=%d body=%q", res.Code, res.Body.String())
 	}
 
@@ -211,7 +211,7 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		req = httptest.NewRequest(http.MethodGet, target, nil)
 		res = httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
-		if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "415 Unsupported Media Type\n" {
+		if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
 			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
 		}
 	}
@@ -273,14 +273,14 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("known resource bad path status=%d body=%q", res.Code, res.Body.String())
 	}
-	if res.Body.String() != "400 Bad Request\n" {
+	if res.Body.String() != "Bad Request\n" {
 		t.Fatalf("known resource bad path body=%q", res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/index.html", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusBadRequest || res.Body.String() != "400 Bad Request\n" {
+	if res.Code != http.StatusBadRequest || res.Body.String() != "Bad Request\n" {
 		t.Fatalf("api index status=%d body=%q", res.Code, res.Body.String())
 	}
 
@@ -290,7 +290,7 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method not allowed status=%d body=%q", res.Code, res.Body.String())
 	}
-	if res.Body.String() != "405 Method Not Allowed\n" {
+	if res.Body.String() != "Method Not Allowed\n" {
 		t.Fatalf("method not allowed body=%q", res.Body.String())
 	}
 
@@ -300,7 +300,7 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("unknown resource status=%d body=%q", res.Code, res.Body.String())
 	}
-	if res.Body.String() != "404 Not Found\n" {
+	if res.Body.String() != "Not Found\n" {
 		t.Fatalf("unknown resource body=%q", res.Body.String())
 	}
 
@@ -391,7 +391,7 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/missing.html", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusNotFound || res.Body.String() != "404 Not Found\n" {
+	if res.Code != http.StatusNotFound || res.Body.String() != "Not Found\n" {
 		t.Fatalf("missing static status=%d body=%q", res.Code, res.Body.String())
 	}
 
@@ -399,7 +399,7 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	req.Header.Set("Range", "bytes=16-20")
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "Requested Range Not Satisfiable\n" {
 		t.Fatalf("invalid range status=%d body=%q", res.Code, res.Body.String())
 	}
 }
@@ -1755,7 +1755,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "415 Unsupported Media Type\n" {
+	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
 		t.Fatalf("file without extension status=%d body=%q", res.Code, res.Body.String())
 	}
 
@@ -1826,7 +1826,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	req.Header.Set("Range", "bytes=10-20")
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "Requested Range Not Satisfiable\n" {
 		t.Fatalf("watch invalid range status=%d body=%q", res.Code, res.Body.String())
 	}
 }
@@ -2068,7 +2068,7 @@ func TestAPIRecordedWatchM2TSLegacyStartOffset(t *testing.T) {
 	req.Header.Set("Range", "bytes=377-400")
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "Requested Range Not Satisfiable\n" {
 		t.Fatalf("m2ts invalid legacy range status=%d body=%q", res.Code, res.Body.String())
 	}
 }
@@ -2127,7 +2127,7 @@ func TestAPIRecordedWatchRejectsStartBeyondDuration(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.mp4?ss=15", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "416 Requested Range Not Satisfiable\n" {
+	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "Requested Range Not Satisfiable\n" {
 		t.Fatalf("out-of-range ss status=%d body=%q", res.Code, res.Body.String())
 	}
 }
@@ -3208,7 +3208,7 @@ func TestAPIAuth(t *testing.T) {
 	if got := res.Header().Get("WWW-Authenticate"); got != `Basic realm="Authentication."` {
 		t.Fatalf("WWW-Authenticate = %q", got)
 	}
-	if res.Body.String() != "401 Unauthorized\n" {
+	if res.Body.String() != "Unauthorized\n" {
 		t.Fatalf("unauthorized body = %q", res.Body.String())
 	}
 
