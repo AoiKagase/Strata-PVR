@@ -33,6 +33,7 @@
   var pendingConfirmResolve = null;
   var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
+  var strataConfigFormDirty = false;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
   var state = {
     status: null,
@@ -3303,6 +3304,9 @@
     if (strataPanel) {
       strataPanel.hidden = cfg.schema !== "strata/config";
     }
+    if (strataConfigFormDirty) {
+      return;
+    }
     if (cfg.schema === "strata/config") {
       renderStrataConfigForm(cfg);
     }
@@ -3356,6 +3360,7 @@
       row.dataset.passwordConfigured = "true";
     }
     row.querySelector(".strata-user-remove").addEventListener("click", function () {
+      strataConfigFormDirty = true;
       row.remove();
     });
     root.appendChild(row);
@@ -3454,6 +3459,7 @@
       setBusy("設定保存中");
       sendConfigJSON(JSON.stringify(config)).then(function (savedConfig) {
         state.config = savedConfig || {};
+        strataConfigFormDirty = false;
         render();
         setBusy("設定を保存しました");
       }).catch(showError);
@@ -4604,6 +4610,12 @@
       strataConfigForm.addEventListener("submit", function (event) {
         event.preventDefault();
       });
+      strataConfigForm.addEventListener("input", function () {
+        strataConfigFormDirty = true;
+      });
+      strataConfigForm.addEventListener("change", function () {
+        strataConfigFormDirty = true;
+      });
     }
     var saveStrataConfigButton = byId("saveStrataConfigButton");
     if (saveStrataConfigButton) {
@@ -4616,6 +4628,7 @@
     var addStrataUserButton = byId("addStrataUserButton");
     if (addStrataUserButton) {
       addStrataUserButton.addEventListener("click", function () {
+        strataConfigFormDirty = true;
         appendStrataUser({});
         var names = byId("strataAuthUsers").querySelectorAll(".strata-user-name");
         names[names.length - 1].focus();
