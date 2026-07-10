@@ -1988,7 +1988,7 @@
             setBusy("Working");
             request("program/" + encodeURIComponent(program.id), "PUT").then(refresh).then(function () {
               if (onAir && !operatorAlive()) {
-                showError(new Error("オペレータが停止中です。録画を開始するには service operator execute を起動してください"));
+                showError(new Error("オペレータが停止中です。録画を開始するには strata-pvr run operator を起動してください"));
               }
             }).catch(showError);
           }));

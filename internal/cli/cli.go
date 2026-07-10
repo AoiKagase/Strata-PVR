@@ -58,6 +58,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	switch args[0] {
+	case "run":
+		return runComponent(ctx, p, args[1:])
 	case "service":
 		return service(ctx, p, args[1:], stdout)
 	case "reserve":
@@ -113,7 +115,7 @@ func isRuntimeCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "service", "reserve", "unreserve", "skip", "unskip", "stop", "rules", "reserves", "recording", "recorded", "cleanup", "update", "search", "rule", "enrule", "disrule", "rmrule":
+	case "run", "service", "reserve", "unreserve", "skip", "unskip", "stop", "rules", "reserves", "recording", "recorded", "cleanup", "update", "search", "rule", "enrule", "disrule", "rmrule":
 		return true
 	default:
 		return false
@@ -1322,39 +1324,53 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 		fmt.Fprint(stdout, serviceInitScript(name))
 		return nil
 	case "execute":
-		if err := prepareServiceRuntimeFor(p); err != nil {
-			return err
-		}
-		switch name {
-		case "operator":
-			return operator.Run(ctx, operator.Paths{
-				Config:   p.config,
-				Database: p.database,
-				PID:      filepath.Join("data", "operator.pid"),
-				Log:      filepath.Join("log", "operator"),
-			}, 0)
-		case "scheduler":
-			_, err := scheduler.Run(ctx, scheduler.Paths{
-				Config:   p.config,
-				Database: p.database,
-				PID:      filepath.Join("data", "scheduler.pid"),
-				Log:      filepath.Join("log", "scheduler"),
-			}, false)
-			return err
-		case "wui":
-			return wui.Run(ctx, wui.Paths{
-				Config:       p.config,
-				Database:     p.database,
-				WebRoot:      "web",
-				LogDir:       "log",
-				SchedulerPID: filepath.Join("data", "scheduler.pid"),
-				OperatorPID:  filepath.Join("data", "operator.pid"),
-			})
-		default:
-			return fmt.Errorf("Usage: strata-pvr service <name> <action>")
-		}
+		return runNamedComponent(ctx, p, name)
 	default:
 		return fmt.Errorf("Usage: strata-pvr service <name> <action>")
+	}
+}
+
+func runComponent(ctx context.Context, p paths, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
+	}
+	return runNamedComponent(ctx, p, args[0])
+}
+
+func runNamedComponent(ctx context.Context, p paths, name string) error {
+	if name != "operator" && name != "scheduler" && name != "wui" {
+		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
+	}
+	if err := prepareServiceRuntimeFor(p); err != nil {
+		return err
+	}
+	switch name {
+	case "operator":
+		return operator.Run(ctx, operator.Paths{
+			Config:   p.config,
+			Database: p.database,
+			PID:      filepath.Join("data", "operator.pid"),
+			Log:      filepath.Join("log", "operator"),
+		}, 0)
+	case "scheduler":
+		_, err := scheduler.Run(ctx, scheduler.Paths{
+			Config:   p.config,
+			Database: p.database,
+			PID:      filepath.Join("data", "scheduler.pid"),
+			Log:      filepath.Join("log", "scheduler"),
+		}, false)
+		return err
+	case "wui":
+		return wui.Run(ctx, wui.Paths{
+			Config:       p.config,
+			Database:     p.database,
+			WebRoot:      "web",
+			LogDir:       "log",
+			SchedulerPID: filepath.Join("data", "scheduler.pid"),
+			OperatorPID:  filepath.Join("data", "operator.pid"),
+		})
+	default:
+		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
 	}
 }
 
@@ -1390,7 +1406,7 @@ func serviceInitScript(name string) string {
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 STRATA_PVR_DIR=%[2]s
 DAEMON=${STRATA_PVR_DIR}/strata-pvr
-DAEMON_OPTS="service %[1]s execute"
+DAEMON_OPTS="run %[1]s"
 NAME=strata-pvr-%[1]s
 USER=$USER
 PIDFILE=/var/run/strata-pvr-%[1]s.pid
@@ -1645,7 +1661,8 @@ Commands:
 
 init                    Initialize a new Strata installation in data/.
 migrate                 Convert migrate/ Chinachu files into a Strata installation.
-service <name> <action> Service-utility.
+run <component>         Run wui, operator, or scheduler.
+service <name> <action> Legacy service utility (compatibility alias).
 
 update                  Run a Scheduler.
 search [options]        Search for programs.

@@ -546,7 +546,7 @@ func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T
 		`function operatorAlive()`,
 		`function programOnAir(program)`,
 		`var label = onAir ? "録画開始" : "予約";`,
-		`オペレータが停止中です。録画を開始するには service operator execute を起動してください`,
+		`オペレータが停止中です。録画を開始するには strata-pvr run operator を起動してください`,
 		`function updateOperationalStatus()`,
 		`var statusText = state.lastError ? state.lastError.message : (alive ? "オペレータ稼働中" : "オペレータ停止中");`,
 		`scheduleOperator.textContent = statusText;`,

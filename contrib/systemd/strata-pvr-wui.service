@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/strata-pvr
-ExecStart=/opt/strata-pvr/strata-pvr service wui execute
+ExecStart=/opt/strata-pvr/strata-pvr run wui
 Restart=on-failure
 RestartSec=5s
 KillSignal=SIGINT

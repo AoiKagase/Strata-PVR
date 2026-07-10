@@ -86,7 +86,7 @@ func TestRuntimePathsUseOnlyNativeData(t *testing.T) {
 	if p.config != filepath.Join("data", "config.json") || p.database != filepath.Join("data", "strata.db") {
 		t.Fatalf("unexpected runtime paths: %#v", p)
 	}
-	if !isRuntimeCommand([]string{"reserves"}) || !isRuntimeCommand([]string{"service", "wui", "execute"}) {
+	if !isRuntimeCommand([]string{"reserves"}) || !isRuntimeCommand([]string{"service", "wui", "execute"}) || !isRuntimeCommand([]string{"run", "wui"}) {
 		t.Fatal("operational commands were not classified as runtime commands")
 	}
 	if isRuntimeCommand([]string{"service", "wui", "initscript"}) {
@@ -494,7 +494,7 @@ func TestServiceInitscriptIncludesRestart(t *testing.T) {
 		"# Short-Description: starts the Strata PVR operator",
 		"STRATA_PVR_DIR=" + shellQuote(filepath.ToSlash(cwd)),
 		"DAEMON=${STRATA_PVR_DIR}/strata-pvr",
-		`DAEMON_OPTS="service operator execute"`,
+		`DAEMON_OPTS="run operator"`,
 		"NAME=strata-pvr-operator",
 		"USER=$USER",
 		"PIDFILE=/var/run/strata-pvr-operator.pid",
@@ -523,7 +523,7 @@ func TestServiceSchedulerInitscript(t *testing.T) {
 	for _, want := range []string{
 		"# Provides:          strata-pvr-scheduler",
 		"# Short-Description: starts the Strata PVR scheduler",
-		`DAEMON_OPTS="service scheduler execute"`,
+		`DAEMON_OPTS="run scheduler"`,
 		"NAME=strata-pvr-scheduler",
 		"PIDFILE=/var/run/strata-pvr-scheduler.pid",
 	} {

@@ -3,7 +3,7 @@
 These units assume Strata PVR is installed in `/opt/strata-pvr` and the binary
 is `/opt/strata-pvr/strata-pvr`.
 
-`strata-pvr service ... execute` uses the current working directory for
+`strata-pvr run <component>` uses the current working directory for
 `config.json`, `rules.json`, `data/`, `log/`, and `web/`, so keep
 `WorkingDirectory` pointed at the directory that contains those files.
 
@@ -71,7 +71,7 @@ Strata PVR also writes legacy-compatible logs under `/opt/strata-pvr/log/`.
 - ログファイル: `/opt/strata-pvr/log/`
 - Web UI 静的ファイル: `/opt/strata-pvr/web/`
 
-`strata-pvr service ... execute` はカレントディレクトリを基準に
+`strata-pvr run <component>` はカレントディレクトリを基準に
 `config.json`、`rules.json`、`data/`、`log/`、`web/` を扱います。そのため
 各 unit の `WorkingDirectory` は、これらのファイルを置くディレクトリに
 合わせてください。
@@ -111,7 +111,7 @@ sudo cp config.json rules.json /opt/strata-pvr/
 ```
 
 初回起動時に `config.json` または `rules.json` が存在しない場合は、
-`service ... execute` が `config.sample.json` と `rules.sample.json` から
+`run <component>` が `config.sample.json` と `rules.sample.json` から
 自動作成します。
 
 ## 3. systemd unit をインストールする

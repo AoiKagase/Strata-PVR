@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/strata-pvr
-ExecStart=/opt/strata-pvr/strata-pvr service scheduler execute
+ExecStart=/opt/strata-pvr/strata-pvr run scheduler
 TimeoutStartSec=30min
 
 # The scheduler is a short-lived job. Add User=/Group= here only if the working
