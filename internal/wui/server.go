@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -484,7 +485,7 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	case ".ico", ".png":
 		w.Header().Set("Cache-Control", "private, max-age=86400")
 	}
-	if contentType := legacyStaticContentType(filePath); contentType != "" {
+	if contentType := staticContentType(filePath); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
 	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
@@ -532,38 +533,15 @@ func staticRangeExceedsSize(header string, size int64) bool {
 	return start > size || end > size
 }
 
-func legacyStaticContentType(path string) string {
-	switch strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".") {
-	case "html":
-		return "text/html"
-	case "js":
-		return "text/javascript"
-	case "css":
-		return "text/css"
-	case "ico", "cur":
-		return "image/vnd.microsoft.icon"
-	case "png":
-		return "image/png"
-	case "gif":
-		return "image/gif"
-	case "jpg":
-		return "image/jpeg"
-	case "f4v", "m4v", "mp4":
-		return "video/mp4"
-	case "flv":
-		return "video/x-flv"
-	case "webm":
-		return "video/webm"
-	case "m2ts":
+func staticContentType(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".m2ts":
 		return "video/MP2T"
-	case "asf":
-		return "video/x-ms-asf"
-	case "json":
-		return "application/json; charset=utf-8"
-	case "xspf":
+	case ".xspf":
 		return "application/xspf+xml"
 	default:
-		return ""
+		return mime.TypeByExtension(ext)
 	}
 }
 

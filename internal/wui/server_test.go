@@ -421,9 +421,9 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", "text/html", "playerSettings"},
-		{"/app.js", "text/javascript", "changePlayerAudio"},
-		{"/styles.css", "text/css", ".management-menu"},
+		{"/", "text/html; charset=utf-8", "playerSettings"},
+		{"/app.js", "application/javascript", "changePlayerAudio"},
+		{"/styles.css", "text/css; charset=utf-8", ".management-menu"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		res := httptest.NewRecorder()
@@ -968,19 +968,19 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 	}
 }
 
-func TestStaticContentTypesMatchLegacyWUI(t *testing.T) {
+func TestStaticContentTypesUseStandardTypesAndPreserveStreams(t *testing.T) {
 	dir := t.TempDir()
 	webRoot := filepath.Join(dir, "web")
 	if err := os.MkdirAll(webRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"app.js":        "text/javascript",
-		"style.css":     "text/css",
-		"cursor.cur":    "image/vnd.microsoft.icon",
+		"app.js":        "application/javascript",
+		"style.css":     "text/css; charset=utf-8",
+		"cursor.cur":    "text/plain; charset=utf-8",
 		"stream.m2ts":   "video/MP2T",
 		"playlist.xspf": "application/xspf+xml",
-		"data.json":     "application/json; charset=utf-8",
+		"data.json":     "application/json",
 	}
 	for name := range files {
 		if err := os.WriteFile(filepath.Join(webRoot, name), []byte("body"), 0o644); err != nil {
