@@ -138,9 +138,8 @@ func runtimePaths() paths {
 
 func initializeStrata(ctx context.Context, stdout io.Writer) error {
 	configPath := filepath.Join("data", "config.json")
-	rulesPath := filepath.Join("data", "rules.json")
 	databasePath := filepath.Join("data", "strata.db")
-	for _, path := range []string{configPath, rulesPath, databasePath} {
+	for _, path := range []string{configPath, databasePath} {
 		if _, err := os.Stat(path); err == nil {
 			return fmt.Errorf("Strata data already exists: %s", path)
 		} else if !os.IsNotExist(err) {
@@ -160,14 +159,11 @@ func initializeStrata(ctx context.Context, stdout io.Writer) error {
 		if complete {
 			return
 		}
-		for _, path := range []string{configPath, rulesPath, databasePath, databasePath + "-wal", databasePath + "-shm"} {
+		for _, path := range []string{configPath, databasePath, databasePath + "-wal", databasePath + "-shm"} {
 			_ = os.Remove(path)
 		}
 	}()
 	if err := storage.WriteJSONAtomic(configPath, config.DefaultDocument(), true); err != nil {
-		return err
-	}
-	if err := storage.WriteJSONAtomic(rulesPath, []any{}, true); err != nil {
 		return err
 	}
 	db, err := database.Open(ctx, databasePath)
@@ -275,6 +271,11 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 			return err
 		}
 		counts[collection.name] = len(programs)
+	}
+	for _, name := range []string{"rules.json", "reserves.json", "recording.json", "recorded.json", "schedule.json"} {
+		if err := os.Remove(filepath.Join(tempDir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 	sourceHashes, sourceSizes, err := inspectMigrationFiles("migrate")
 	if err != nil {

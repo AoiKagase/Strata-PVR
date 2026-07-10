@@ -454,7 +454,6 @@ func TestInitializeStrataCreatesConfigAndDatabase(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join("data", "config.json"),
-		filepath.Join("data", "rules.json"),
 		filepath.Join("data", "strata.db"),
 	} {
 		if _, err := os.Stat(path); err != nil {
