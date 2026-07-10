@@ -23,10 +23,10 @@ func TestSQLiteProgramStoreIgnoresLegacyJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	db.Close()
-	if err := Write(ctx, databasePath, jsonPath, Recorded, []legacy.Program{{ID: "database", Recorded: "video.m2ts"}}); err != nil {
+	if err := Write(ctx, databasePath, Recorded, []legacy.Program{{ID: "database", Recorded: "video.m2ts"}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Read(ctx, databasePath, jsonPath, Recorded)
+	got, err := Read(ctx, databasePath, Recorded)
 	if err != nil {
 		t.Fatal(err)
 	}

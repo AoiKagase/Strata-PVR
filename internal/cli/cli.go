@@ -267,7 +267,7 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 		if err := storage.ReadJSON(collection.path, &programs, "[]"); err != nil {
 			return err
 		}
-		if err := programstore.Write(ctx, filepath.Join(tempDir, "strata.db"), collection.path, collection.name, programs); err != nil {
+		if err := programstore.Write(ctx, filepath.Join(tempDir, "strata.db"), collection.name, programs); err != nil {
 			return err
 		}
 		counts[collection.name] = len(programs)
@@ -507,9 +507,9 @@ func programList(path, databasePath, collection string, args []string, stdout io
 	opts.normalizationForm = loadNormalizationForm("config.json")
 	var programs []legacy.Program
 	if databasePath != "" && collection == "reservations" {
-		programs, err = reservationstore.Read(context.Background(), databasePath, path)
+		programs, err = reservationstore.Read(context.Background(), databasePath)
 	} else if databasePath != "" {
-		programs, err = programstore.Read(context.Background(), databasePath, path, collection)
+		programs, err = programstore.Read(context.Background(), databasePath, collection)
 	} else {
 		err = storage.ReadJSON(path, &programs, "[]")
 	}
@@ -738,7 +738,7 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	rules, err := rulestore.Read(context.Background(), p.database, p.rules)
+	rules, err := rulestore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -781,13 +781,13 @@ func ruleCommand(p paths, args []string, stdout io.Writer) error {
 		return nil
 	}
 	if !opts.hasNum {
-		return rulestore.Append(context.Background(), p.database, p.rules, target)
+		return rulestore.Append(context.Background(), p.database, target)
 	}
 	if opts.remove {
-		_, err := rulestore.Delete(context.Background(), p.database, p.rules, opts.num)
+		_, err := rulestore.Delete(context.Background(), p.database, opts.num)
 		return err
 	}
-	_, err = rulestore.Update(context.Background(), p.database, p.rules, opts.num, target)
+	_, err = rulestore.Update(context.Background(), p.database, opts.num, target)
 	return err
 }
 
@@ -797,7 +797,7 @@ func ruleList(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	detail := hasFlag(args, "-detail", "--detail")
-	rules, err := rulestore.Read(context.Background(), p.database, p.rules)
+	rules, err := rulestore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -1081,7 +1081,7 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	reserves, err := reservationstore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -1101,7 +1101,7 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 		writePretty(stdout, target)
 		return nil
 	}
-	if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, *target); err != nil {
+	if err := reservationstore.Upsert(context.Background(), p.database, *target); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "reserve:")
@@ -1116,7 +1116,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 	}
 	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
-	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	reserves, err := reservationstore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -1135,7 +1135,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				writePretty(stdout, target)
 				return nil
 			}
-			if _, err := reservationstore.Delete(context.Background(), p.database, p.reserves, id); err != nil {
+			if _, err := reservationstore.Delete(context.Background(), p.database, id); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "unreserve:")
@@ -1156,7 +1156,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, reserves[i]); err != nil {
+			if err := reservationstore.Upsert(context.Background(), p.database, reserves[i]); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "skip:")
@@ -1174,7 +1174,7 @@ func updateReserve(p paths, args []string, stdout io.Writer, mode string) error 
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := reservationstore.Upsert(context.Background(), p.database, p.reserves, reserves[i]); err != nil {
+			if err := reservationstore.Upsert(context.Background(), p.database, reserves[i]); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "skip:")
@@ -1192,7 +1192,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	}
 	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
-	recording, err := programstore.Read(context.Background(), p.database, p.recording, programstore.Recording)
+	recording, err := programstore.Read(context.Background(), p.database, programstore.Recording)
 	if err != nil {
 		return err
 	}
@@ -1210,7 +1210,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 					return err
 				}
 			}
-			if err := programstore.Upsert(context.Background(), p.database, p.recording, programstore.Recording, target); err != nil {
+			if err := programstore.Upsert(context.Background(), p.database, programstore.Recording, target); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "stop:")
@@ -1223,7 +1223,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 }
 
 func markReserveSkip(p paths, id string) error {
-	reserves, err := reservationstore.Read(context.Background(), p.database, p.reserves)
+	reserves, err := reservationstore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -1238,12 +1238,12 @@ func markReserveSkip(p paths, id string) error {
 	if target == nil {
 		return nil
 	}
-	return reservationstore.Upsert(context.Background(), p.database, p.reserves, *target)
+	return reservationstore.Upsert(context.Background(), p.database, *target)
 }
 
 func cleanup(p paths, args []string, stdout io.Writer) error {
 	simulation := hasFlag(args, "-s", "--simulation")
-	recorded, err := programstore.Read(context.Background(), p.database, p.recorded, programstore.Recorded)
+	recorded, err := programstore.Read(context.Background(), p.database, programstore.Recorded)
 	if err != nil {
 		return err
 	}
@@ -1276,10 +1276,10 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 			if _, err := storage.BackupFile(p.recorded); err != nil {
 				return err
 			}
-			return programstore.Write(context.Background(), "", p.recorded, programstore.Recorded, kept)
+			return programstore.Write(context.Background(), "", programstore.Recorded, kept)
 		}
 		for _, id := range removed {
-			if err := programstore.Remove(context.Background(), p.database, p.recorded, programstore.Recorded, id); err != nil {
+			if err := programstore.Remove(context.Background(), p.database, programstore.Recorded, id); err != nil {
 				return err
 			}
 			removePreviewCache(context.Background(), p.database, id)

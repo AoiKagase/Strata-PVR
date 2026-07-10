@@ -13,7 +13,7 @@ const (
 	Recorded  = "recorded"
 )
 
-func Read(ctx context.Context, databasePath, jsonPath, collection string) ([]legacy.Program, error) {
+func Read(ctx context.Context, databasePath, collection string) ([]legacy.Program, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -34,7 +34,7 @@ func Read(ctx context.Context, databasePath, jsonPath, collection string) ([]leg
 	return programs, nil
 }
 
-func Write(ctx context.Context, databasePath, jsonPath, collection string, programs []legacy.Program) error {
+func Write(ctx context.Context, databasePath, collection string, programs []legacy.Program) error {
 	documents := make([]database.ProgramDocument, 0, len(programs))
 	for _, program := range programs {
 		document, err := json.Marshal(program)
@@ -51,7 +51,7 @@ func Write(ctx context.Context, databasePath, jsonPath, collection string, progr
 	return database.ReplaceProgramCollection(ctx, db, collection, documents)
 }
 
-func Upsert(ctx context.Context, databasePath, jsonPath, collection string, program legacy.Program) error {
+func Upsert(ctx context.Context, databasePath, collection string, program legacy.Program) error {
 	document, err := encodeProgram(program)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func Upsert(ctx context.Context, databasePath, jsonPath, collection string, prog
 	return database.UpsertProgram(ctx, db, collection, document)
 }
 
-func Remove(ctx context.Context, databasePath, jsonPath, collection, programID string) error {
+func Remove(ctx context.Context, databasePath, collection, programID string) error {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return err

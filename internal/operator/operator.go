@@ -92,7 +92,7 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
-	if err := programstore.Write(context.Background(), paths.Database, paths.Recording, programstore.Recording, []legacy.Program{}); err != nil {
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, []legacy.Program{}); err != nil {
 		return err
 	}
 	recordedDir := cfg.RecordedDir
@@ -127,15 +127,15 @@ func removePIDFile(path string) {
 }
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
-	reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves)
+	reserves, err := reservationstore.Read(ctx, paths.Database)
 	if err != nil {
 		return Result{}, err
 	}
-	recording, err := programstore.Read(ctx, paths.Database, paths.Recording, programstore.Recording)
+	recording, err := programstore.Read(ctx, paths.Database, programstore.Recording)
 	if err != nil {
 		return Result{}, err
 	}
-	recorded, err := programstore.Read(ctx, paths.Database, paths.Recorded, programstore.Recorded)
+	recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
 	if err != nil {
 		return Result{}, err
 	}
@@ -153,7 +153,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 			return result, err
 		}
 		recording = append(recording, reserve)
-		if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, reserve); err != nil {
+		if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, reserve); err != nil {
 			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recording); err != nil {
@@ -167,7 +167,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		completed, err := recordProgramWithLog(ctx, paths.Database, paths.Recording, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
 		if err != nil {
-			if writeErr := programstore.Remove(ctx, paths.Database, paths.Recording, programstore.Recording, reserve.ID); writeErr != nil {
+			if writeErr := programstore.Remove(ctx, paths.Database, programstore.Recording, reserve.ID); writeErr != nil {
 				err = errors.Join(err, writeErr)
 			}
 			result.Failed++
@@ -186,7 +186,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		}
 		if completed.IsManualReserved {
 			reserves = removeProgram(reserves, reserve.ID)
-			if _, err := reservationstore.Delete(ctx, paths.Database, paths.Reserves, reserve.ID); err != nil {
+			if _, err := reservationstore.Delete(ctx, paths.Database, reserve.ID); err != nil {
 				return result, err
 			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Reserves); err != nil {
@@ -313,7 +313,7 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 }
 
 func updateRecordingProgram(ctx context.Context, databasePath, recordingPath string, program legacy.Program) error {
-	recording, err := programstore.Read(ctx, databasePath, recordingPath, programstore.Recording)
+	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func updateRecordingProgram(ctx context.Context, databasePath, recordingPath str
 	if !changed {
 		return nil
 	}
-	return programstore.Upsert(ctx, databasePath, recordingPath, programstore.Recording, program)
+	return programstore.Upsert(ctx, databasePath, programstore.Recording, program)
 }
 
 func setProgramRawJSON(program *legacy.Program, key string, value any) {
@@ -378,7 +378,7 @@ func watchAbortFlag(ctx context.Context, databasePath, recordingPath, programID 
 			case <-done:
 				return
 			case <-ticker.C:
-				recording, err := programstore.Read(ctx, databasePath, recordingPath, programstore.Recording)
+				recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
 				if err != nil {
 					continue
 				}
@@ -421,7 +421,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if !recording[i].Abort {
 				recording[i].Abort = true
 				changed = true
-				if err := programstore.Upsert(ctx, paths.Database, paths.Recording, programstore.Recording, recording[i]); err != nil {
+				if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, recording[i]); err != nil {
 					return recorded, err
 				}
 			}
@@ -440,7 +440,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 					return recorded, err
 				}
 			}
-			if err := programstore.Remove(ctx, paths.Database, paths.Recorded, programstore.Recorded, removed.ID); err != nil {
+			if err := programstore.Remove(ctx, paths.Database, programstore.Recorded, removed.ID); err != nil {
 				return recorded, err
 			}
 			if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Recorded); err != nil {

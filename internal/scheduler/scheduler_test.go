@@ -36,7 +36,7 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 		paths.Database = filepath.Join(filepath.Dir(paths.Schedule), "strata.db")
 		var rules []legacy.Rule
 		_ = storage.ReadJSON(paths.Rules, &rules, "[]")
-		if err := rulestore.Write(ctx, paths.Database, paths.Rules, rules); err != nil {
+		if err := rulestore.Write(ctx, paths.Database, rules); err != nil {
 			t.Fatal(err)
 		}
 		var schedule []legacy.ChannelSchedule
@@ -46,7 +46,7 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 		}
 		var reserves []legacy.Program
 		_ = storage.ReadJSON(paths.Reserves, &reserves, "[]")
-		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+		if err := reservationstore.Write(ctx, paths.Database, reserves); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -55,7 +55,7 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 		if schedule, readErr := schedulestore.Read(ctx, paths.Database); readErr == nil {
 			_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
 		}
-		if reserves, readErr := reservationstore.Read(ctx, paths.Database, paths.Reserves); readErr == nil {
+		if reserves, readErr := reservationstore.Read(ctx, paths.Database); readErr == nil {
 			_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
 		}
 	}
@@ -213,7 +213,7 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := rulestore.Write(context.Background(), paths.Database, paths.Rules, []legacy.Rule{{ReserveTitles: []string{"Database Title"}}}); err != nil {
+	if err := rulestore.Write(context.Background(), paths.Database, []legacy.Rule{{ReserveTitles: []string{"Database Title"}}}); err != nil {
 		t.Fatal(err)
 	}
 	src := fakeSource{
@@ -233,7 +233,7 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	if len(schedule) != 1 || len(schedule[0].Programs) != 1 || schedule[0].Programs[0].Title != "Database Title" {
 		t.Fatalf("SQLite schedule = %#v", schedule)
 	}
-	reserves, err := reservationstore.Read(context.Background(), paths.Database, paths.Reserves)
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -136,11 +136,11 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 
-	rules, err := rulestore.Read(ctx, paths.Database, paths.Rules)
+	rules, err := rulestore.Read(ctx, paths.Database)
 	if err != nil {
 		return Result{}, err
 	}
-	oldReserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves)
+	oldReserves, err := reservationstore.Read(ctx, paths.Database)
 	if err != nil {
 		return Result{}, err
 	}

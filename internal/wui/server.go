@@ -778,7 +778,7 @@ func (s *server) handleReservations(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	reservations, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	reservations, err := reservationstore.Read(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -805,7 +805,7 @@ func (s *server) readPrograms(ctx context.Context, path string) ([]legacy.Progra
 	if path == s.paths.Recording {
 		collection = programstore.Recording
 	}
-	return programstore.Read(ctx, s.paths.Database, path, collection)
+	return programstore.Read(ctx, s.paths.Database, collection)
 }
 
 func (s *server) writePrograms(ctx context.Context, path string, programs []legacy.Program) error {
@@ -813,7 +813,7 @@ func (s *server) writePrograms(ctx context.Context, path string, programs []lega
 	if path == s.paths.Recording {
 		collection = programstore.Recording
 	}
-	return programstore.Write(ctx, s.paths.Database, path, collection, programs)
+	return programstore.Write(ctx, s.paths.Database, collection, programs)
 }
 
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
@@ -1438,7 +1438,7 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 }
 
 func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1453,7 +1453,7 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		normalizeRuleEnabled(rule)
-		if err := rulestore.Append(r.Context(), s.paths.Database, s.paths.Rules, rule); err != nil {
+		if err := rulestore.Append(r.Context(), s.paths.Database, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1470,7 +1470,7 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1489,13 +1489,13 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 			return
 		}
 		normalizeRuleEnabled(rule)
-		if _, err := rulestore.Update(r.Context(), s.paths.Database, s.paths.Rules, index, rule); err != nil {
+		if _, err := rulestore.Update(r.Context(), s.paths.Database, index, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
 		writeCompactJSON(w, http.StatusOK, rule)
 	case http.MethodDelete:
-		if _, err := rulestore.Delete(r.Context(), s.paths.Database, s.paths.Rules, index); err != nil {
+		if _, err := rulestore.Delete(r.Context(), s.paths.Database, index); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1517,7 +1517,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database, s.paths.Rules)
+	rules, err := rulestore.ReadRaw(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1535,7 +1535,7 @@ func (s *server) handleRuleAction(w http.ResponseWriter, r *http.Request, num, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	if _, err := rulestore.Update(r.Context(), s.paths.Database, s.paths.Rules, index, rules[index]); err != nil {
+	if _, err := rulestore.Update(r.Context(), s.paths.Database, index, rules[index]); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -1644,7 +1644,7 @@ func (s *server) runRecordedCleanup(recorded []legacy.Program, apply bool) (reco
 			}
 		} else {
 			for _, id := range result.removedIDs {
-				if err := programstore.Remove(context.Background(), s.paths.Database, s.paths.Recorded, programstore.Recorded, id); err != nil {
+				if err := programstore.Remove(context.Background(), s.paths.Database, programstore.Recorded, id); err != nil {
 					return result, err
 				}
 				s.removeProgramPreviewCache(context.Background(), id)
@@ -1660,7 +1660,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 	if len(parts) > 1 {
 		action = parts[1]
 	}
-	reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	reserves, err := reservationstore.Read(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1678,7 +1678,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			legacyHTTPError(w, r, http.StatusConflict)
 			return
 		}
-		if _, err := reservationstore.Delete(r.Context(), s.paths.Database, s.paths.Reserves, id); err != nil {
+		if _, err := reservationstore.Delete(r.Context(), s.paths.Database, id); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1692,7 +1692,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 			legacyHTTPError(w, r, http.StatusNotFound)
 			return
 		}
-		if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, reserves[index]); err != nil {
+		if err := reservationstore.Upsert(r.Context(), s.paths.Database, reserves[index]); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1720,21 +1720,21 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 		writePrettyJSON(w, http.StatusOK, recording[index])
 	case http.MethodDelete:
 		if !recording[index].IsManualReserved {
-			reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+			reserves, err := reservationstore.Read(r.Context(), s.paths.Database)
 			if err != nil {
 				legacyHTTPError(w, r, http.StatusInternalServerError)
 				return
 			}
 			if reserveIndex := findProgram(reserves, id); reserveIndex != -1 {
 				reserves[reserveIndex].IsSkip = true
-				if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, reserves[reserveIndex]); err != nil {
+				if err := reservationstore.Upsert(r.Context(), s.paths.Database, reserves[reserveIndex]); err != nil {
 					legacyHTTPError(w, r, http.StatusInternalServerError)
 					return
 				}
 			}
 		}
 		recording[index].Abort = true
-		if err := programstore.Upsert(r.Context(), s.paths.Database, s.paths.Recording, programstore.Recording, recording[index]); err != nil {
+		if err := programstore.Upsert(r.Context(), s.paths.Database, programstore.Recording, recording[index]); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -1770,7 +1770,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 				return
 			}
 		}
-		if err := programstore.Remove(r.Context(), s.paths.Database, s.paths.Recorded, programstore.Recorded, id); err != nil {
+		if err := programstore.Remove(r.Context(), s.paths.Database, programstore.Recorded, id); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -2723,7 +2723,7 @@ func (s *server) handleProgram(w http.ResponseWriter, r *http.Request, id string
 }
 
 func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program legacy.Program) {
-	reserves, err := reservationstore.Read(r.Context(), s.paths.Database, s.paths.Reserves)
+	reserves, err := reservationstore.Read(r.Context(), s.paths.Database)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2734,7 +2734,7 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	}
 	program.IsManualReserved = true
 	program.OneSeg = r.URL.Query().Get("mode") == "1seg"
-	if err := reservationstore.Upsert(r.Context(), s.paths.Database, s.paths.Reserves, program); err != nil {
+	if err := reservationstore.Upsert(r.Context(), s.paths.Database, program); err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}

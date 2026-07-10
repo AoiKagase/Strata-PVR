@@ -1055,11 +1055,11 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 	auto := legacy.Program{ID: "auto", Title: "Automatic"}
 	manual := legacy.Program{ID: "manual", Title: "Manual", IsManualReserved: true}
 	for _, program := range []legacy.Program{auto, manual} {
-		if err := reservationstore.Upsert(context.Background(), paths.Database, paths.Reserves, program); err != nil {
+		if err := reservationstore.Upsert(context.Background(), paths.Database, program); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := programstore.Upsert(context.Background(), paths.Database, paths.Recording, programstore.Recording, auto); err != nil {
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, auto); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
@@ -1089,11 +1089,11 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 		t.Fatalf("manual delete status=%d body=%s", res.Code, res.Body.String())
 	}
 
-	reserves, err := reservationstore.Read(context.Background(), paths.Database, paths.Reserves)
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recording, err := programstore.Read(context.Background(), paths.Database, paths.Recording, programstore.Recording)
+	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2240,7 +2240,7 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	programs := []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}
-	if err := programstore.Write(context.Background(), paths.Database, paths.Recorded, programstore.Recorded, programs); err != nil {
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recorded, programs); err != nil {
 		t.Fatal(err)
 	}
 	old := runFFmpegPreview
@@ -3491,7 +3491,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 	seed := os.IsNotExist(statErr)
 	var rules []legacy.Rule
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); seed && err == nil {
-		if err := rulestore.Write(ctx, paths.Database, paths.Rules, rules); err != nil {
+		if err := rulestore.Write(ctx, paths.Database, rules); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -3503,7 +3503,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 	}
 	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); seed && err == nil {
-		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+		if err := reservationstore.Write(ctx, paths.Database, reserves); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -3516,7 +3516,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 	} {
 		var programs []legacy.Program
 		if err := storage.ReadJSON(item.path, &programs, "[]"); seed && err == nil {
-			if err := programstore.Write(ctx, paths.Database, item.path, item.collection, programs); err != nil {
+			if err := programstore.Write(ctx, paths.Database, item.collection, programs); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3538,7 +3538,7 @@ func importTestState(t *testing.T, paths Paths) {
 	ctx := context.Background()
 	var rules []legacy.Rule
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err == nil {
-		_ = rulestore.Write(ctx, paths.Database, paths.Rules, rules)
+		_ = rulestore.Write(ctx, paths.Database, rules)
 	}
 	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(paths.Schedule, &schedule, "[]"); err == nil {
@@ -3546,7 +3546,7 @@ func importTestState(t *testing.T, paths Paths) {
 	}
 	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err == nil {
-		_ = reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves)
+		_ = reservationstore.Write(ctx, paths.Database, reserves)
 	}
 	for _, item := range []struct {
 		path       string
@@ -3557,7 +3557,7 @@ func importTestState(t *testing.T, paths Paths) {
 	} {
 		var programs []legacy.Program
 		if err := storage.ReadJSON(item.path, &programs, "[]"); err == nil {
-			_ = programstore.Write(ctx, paths.Database, item.path, item.collection, programs)
+			_ = programstore.Write(ctx, paths.Database, item.collection, programs)
 		}
 	}
 }
@@ -3565,13 +3565,13 @@ func importTestState(t *testing.T, paths Paths) {
 func exportTestState(t *testing.T, paths Paths) {
 	t.Helper()
 	ctx := context.Background()
-	if rules, err := rulestore.Read(ctx, paths.Database, paths.Rules); err == nil {
+	if rules, err := rulestore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Rules, rules, true)
 	}
 	if schedule, err := schedulestore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
 	}
-	if reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves); err == nil {
+	if reserves, err := reservationstore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
 	}
 	for _, item := range []struct {
@@ -3581,7 +3581,7 @@ func exportTestState(t *testing.T, paths Paths) {
 		{paths.Recording, programstore.Recording},
 		{paths.Recorded, programstore.Recorded},
 	} {
-		if programs, err := programstore.Read(ctx, paths.Database, item.path, item.collection); err == nil {
+		if programs, err := programstore.Read(ctx, paths.Database, item.collection); err == nil {
 			_ = storage.WriteJSONAtomic(item.path, programs, false)
 		}
 	}

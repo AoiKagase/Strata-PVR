@@ -8,7 +8,7 @@ import (
 	"strata-pvr/internal/legacy"
 )
 
-func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.Program, error) {
+func Read(ctx context.Context, databasePath string) ([]legacy.Program, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.Program,
 	return reservations, nil
 }
 
-func Write(ctx context.Context, databasePath, jsonPath string, reservations []legacy.Program) error {
+func Write(ctx context.Context, databasePath string, reservations []legacy.Program) error {
 	documents, err := Documents(reservations)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func Write(ctx context.Context, databasePath, jsonPath string, reservations []le
 	return database.ReplaceReservations(ctx, db, documents)
 }
 
-func Upsert(ctx context.Context, databasePath, jsonPath string, reservation legacy.Program) error {
+func Upsert(ctx context.Context, databasePath string, reservation legacy.Program) error {
 	document, err := json.Marshal(reservation)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func Upsert(ctx context.Context, databasePath, jsonPath string, reservation lega
 	return database.UpsertReservation(ctx, db, database.ReservationDocument{ProgramID: reservation.ID, Start: reservation.Start, End: reservation.End, Document: document})
 }
 
-func Delete(ctx context.Context, databasePath, jsonPath, programID string) (bool, error) {
+func Delete(ctx context.Context, databasePath, programID string) (bool, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return false, err

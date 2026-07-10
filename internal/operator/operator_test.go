@@ -56,14 +56,14 @@ func seedOperatorTestDatabase(t *testing.T, paths Paths) Paths {
 	ctx := context.Background()
 	var reserves []legacy.Program
 	if storage.ReadJSON(paths.Reserves, &reserves, "[]") == nil {
-		if err := reservationstore.Write(ctx, paths.Database, paths.Reserves, reserves); err != nil {
+		if err := reservationstore.Write(ctx, paths.Database, reserves); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, item := range []struct{ path, collection string }{{paths.Recording, programstore.Recording}, {paths.Recorded, programstore.Recorded}} {
 		var programs []legacy.Program
 		if storage.ReadJSON(item.path, &programs, "[]") == nil {
-			if err := programstore.Write(ctx, paths.Database, item.path, item.collection, programs); err != nil {
+			if err := programstore.Write(ctx, paths.Database, item.collection, programs); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -73,11 +73,11 @@ func seedOperatorTestDatabase(t *testing.T, paths Paths) Paths {
 
 func exportOperatorTestState(paths Paths) {
 	ctx := context.Background()
-	if reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves); err == nil {
+	if reserves, err := reservationstore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Reserves, reserves, false)
 	}
 	for _, item := range []struct{ path, collection string }{{paths.Recording, programstore.Recording}, {paths.Recorded, programstore.Recorded}} {
-		if programs, err := programstore.Read(ctx, paths.Database, item.path, item.collection); err == nil {
+		if programs, err := programstore.Read(ctx, paths.Database, item.collection); err == nil {
 			_ = storage.WriteJSONAtomic(item.path, programs, false)
 		}
 	}
@@ -85,14 +85,10 @@ func exportOperatorTestState(paths Paths) {
 
 func readOperatorTestPrograms(paths Paths, collection string, target *[]legacy.Program) error {
 	databasePath := paths.Database
-	jsonPath := paths.Recorded
-	if collection == programstore.Recording {
-		jsonPath = paths.Recording
-	}
 	if databasePath == "" {
 		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
 	}
-	programs, err := programstore.Read(context.Background(), databasePath, jsonPath, collection)
+	programs, err := programstore.Read(context.Background(), databasePath, collection)
 	if err == nil {
 		*target = programs
 	}
@@ -104,7 +100,7 @@ func readOperatorTestReserves(paths Paths, target *[]legacy.Program) error {
 	if databasePath == "" {
 		databasePath = filepath.Join(filepath.Dir(paths.Recording), "strata.db")
 	}
-	reserves, err := reservationstore.Read(context.Background(), databasePath, paths.Reserves)
+	reserves, err := reservationstore.Read(context.Background(), databasePath)
 	if err == nil {
 		*target = reserves
 	}
@@ -314,7 +310,7 @@ func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	program := legacy.Program{ID: "21i3v9", Title: "Database", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "27"}, IsManualReserved: true}
-	if err := reservationstore.Upsert(context.Background(), paths.Database, paths.Reserves, program); err != nil {
+	if err := reservationstore.Upsert(context.Background(), paths.Database, program); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
@@ -325,15 +321,15 @@ func TestRunOnceMovesProgramToRecordedInStrataDatabase(t *testing.T) {
 	if result.Completed != 1 {
 		t.Fatalf("result = %#v", result)
 	}
-	recording, err := programstore.Read(context.Background(), paths.Database, paths.Recording, programstore.Recording)
+	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recorded, err := programstore.Read(context.Background(), paths.Database, paths.Recorded, programstore.Recorded)
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reserves, err := reservationstore.Read(context.Background(), paths.Database, paths.Reserves)
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +531,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	program.Abort = true
-	if err := programstore.Upsert(context.Background(), paths.Database, paths.Recording, programstore.Recording, program); err != nil {
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -746,7 +742,7 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := programstore.Write(context.Background(), paths.Database, paths.Recording, programstore.Recording, recording); err != nil {
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{

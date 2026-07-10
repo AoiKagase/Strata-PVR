@@ -51,7 +51,7 @@ func seedCLITestDatabase(p paths) {
 	ctx := context.Background()
 	var rules []legacy.Rule
 	if storage.ReadJSON(p.rules, &rules, "[]") == nil {
-		_ = rulestore.Write(ctx, p.database, p.rules, rules)
+		_ = rulestore.Write(ctx, p.database, rules)
 	}
 	var schedule []legacy.ChannelSchedule
 	if storage.ReadJSON(p.schedule, &schedule, "[]") == nil {
@@ -59,12 +59,12 @@ func seedCLITestDatabase(p paths) {
 	}
 	var reserves []legacy.Program
 	if storage.ReadJSON(p.reserves, &reserves, "[]") == nil {
-		_ = reservationstore.Write(ctx, p.database, p.reserves, reserves)
+		_ = reservationstore.Write(ctx, p.database, reserves)
 	}
 	for _, item := range []struct{ path, collection string }{{p.recording, programstore.Recording}, {p.recorded, programstore.Recorded}} {
 		var programs []legacy.Program
 		if storage.ReadJSON(item.path, &programs, "[]") == nil {
-			_ = programstore.Write(ctx, p.database, item.path, item.collection, programs)
+			_ = programstore.Write(ctx, p.database, item.collection, programs)
 		}
 	}
 }
@@ -758,7 +758,7 @@ func TestCleanupRemovesStrataRecordedRowAndPreviewCache(t *testing.T) {
 		{ID: "missing", Recorded: filepath.ToSlash(filepath.Join(dir, "missing.m2ts"))},
 	}
 	for _, program := range programs {
-		if err := programstore.Upsert(context.Background(), databasePath, filepath.Join("data", "recorded.json"), programstore.Recorded, program); err != nil {
+		if err := programstore.Upsert(context.Background(), databasePath, programstore.Recorded, program); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -785,7 +785,7 @@ func TestCleanupRemovesStrataRecordedRowAndPreviewCache(t *testing.T) {
 	if err := Run(context.Background(), []string{"cleanup"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	recorded, err := programstore.Read(context.Background(), databasePath, filepath.Join("data", "recorded.json"), programstore.Recorded)
+	recorded, err := programstore.Read(context.Background(), databasePath, programstore.Recorded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -845,7 +845,7 @@ func TestRulesPrintsTabSeparatedTable(t *testing.T) {
 		t.Fatalf("detailed rules output missing titles: %s", out.String())
 	}
 	rules = append(rules, legacy.Rule{Types: []string{"BS"}})
-	if err := rulestore.Write(context.Background(), filepath.Join("data", "strata.db"), "rules.json", rules); err != nil {
+	if err := rulestore.Write(context.Background(), filepath.Join("data", "strata.db"), rules); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -878,7 +878,7 @@ func TestReserve(t *testing.T) {
 	if err := Run(context.Background(), []string{"reserve", "p1", "--1seg"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	reserves, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "reserves.json"))
+	reserves, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1003,7 +1003,7 @@ func TestRuleLifecycle(t *testing.T) {
 	if err := Run(context.Background(), []string{"rule", "-type", "GR", "-title", "笑点"}, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1013,14 +1013,14 @@ func TestRuleLifecycle(t *testing.T) {
 	if err := Run(context.Background(), []string{"disrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"))
 	if len(rules) != 1 || !rules[0].IsDisabled {
 		t.Fatalf("rule not disabled: %#v", rules)
 	}
 	if err := Run(context.Background(), []string{"rmrule", "0"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	rules, _ = rulestore.Read(context.Background(), filepath.Join("data", "strata.db"))
 	if len(rules) != 0 {
 		t.Fatalf("rule not removed: %#v", rules)
 	}
@@ -1040,7 +1040,7 @@ func TestRuleCommandDeletesNullMarkers(t *testing.T) {
 	if err := Run(context.Background(), []string{"rule", "-n", "0", "-title", "null", "-start", "-1", "-mini", "-1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"), "rules.json")
+	rules, err := rulestore.Read(context.Background(), filepath.Join("data", "strata.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1163,7 +1163,7 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 		t.Fatalf("unexpected stop output: %s", out.String())
 	}
 	var recording []legacy.Program
-	if values, err := programstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "recording.json"), programstore.Recording); err != nil {
+	if values, err := programstore.Read(context.Background(), filepath.Join("data", "strata.db"), programstore.Recording); err != nil {
 		t.Fatal(err)
 	} else {
 		recording = values
@@ -1172,7 +1172,7 @@ func TestStopMarksRecordingAbortAndAutoReserveSkip(t *testing.T) {
 		t.Fatalf("recording abort was not set: %#v", recording)
 	}
 	var reserves []legacy.Program
-	if values, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"), filepath.Join("data", "reserves.json")); err != nil {
+	if values, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db")); err != nil {
 		t.Fatal(err)
 	} else {
 		reserves = values
@@ -1194,20 +1194,20 @@ func TestStopUsesStrataDatabaseWithoutRewritingJSON(t *testing.T) {
 	}
 	databasePath := filepath.Join("data", "strata.db")
 	recording := legacy.Program{ID: "auto", Title: "Database recording"}
-	if err := programstore.Upsert(context.Background(), databasePath, filepath.Join("data", "recording.json"), programstore.Recording, recording); err != nil {
+	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, recording); err != nil {
 		t.Fatal(err)
 	}
-	if err := reservationstore.Upsert(context.Background(), databasePath, filepath.Join("data", "reserves.json"), legacy.Program{ID: "auto"}); err != nil {
+	if err := reservationstore.Upsert(context.Background(), databasePath, legacy.Program{ID: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := Run(context.Background(), []string{"stop", "auto"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	recordings, err := programstore.Read(context.Background(), databasePath, filepath.Join("data", "recording.json"), programstore.Recording)
+	recordings, err := programstore.Read(context.Background(), databasePath, programstore.Recording)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reserves, err := reservationstore.Read(context.Background(), databasePath, filepath.Join("data", "reserves.json"))
+	reserves, err := reservationstore.Read(context.Background(), databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}

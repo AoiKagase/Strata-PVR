@@ -24,10 +24,10 @@ func TestSQLiteReservationStoreIgnoresLegacyJSON(t *testing.T) {
 	}
 	db.Close()
 	want := []legacy.Program{{ID: "database", Start: 100, End: 200, IsManualReserved: true}}
-	if err := Write(ctx, databasePath, jsonPath, want); err != nil {
+	if err := Write(ctx, databasePath, want); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Read(ctx, databasePath, jsonPath)
+	got, err := Read(ctx, databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}
