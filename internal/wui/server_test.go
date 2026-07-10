@@ -3034,13 +3034,11 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := os.MkdirAll(paths.LogDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	schedule := []legacy.ChannelSchedule{{
-		Programs: []legacy.Program{
-			{ID: "aaa", Title: "Reserve"},
-			{ID: "bbb", Title: "Conflict"},
-		},
-	}}
-	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+	reservations := []legacy.Program{
+		{ID: "aaa", Title: "Reserve"},
+		{ID: "bbb", Title: "Conflict", IsConflict: true},
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, reservations, false); err != nil {
 		t.Fatal(err)
 	}
 	logData := "old\nRUNNING SCHEDULER.\nRESERVE: aaa\n!CONFLICT: bbb\nRESERVE: missing\n"
@@ -3074,11 +3072,8 @@ func TestAPISchedulerJSONTXTAndPut(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Time == 0 || len(result.Reserves) != 2 || result.Reserves[0].ID != "aaa" || result.Reserves[1].ID != "" || len(result.Conflicts) != 1 || result.Conflicts[0].ID != "bbb" {
+	if result.Time == 0 || len(result.Reserves) != 1 || result.Reserves[0].ID != "aaa" || len(result.Conflicts) != 1 || result.Conflicts[0].ID != "bbb" {
 		t.Fatalf("unexpected scheduler result: %#v", result)
-	}
-	if !strings.Contains(res.Body.String(), "null") {
-		t.Fatalf("missing scheduler program should be preserved as null: %s", res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/scheduler.txt", nil)
@@ -3130,26 +3125,6 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("scheduler force did not run")
-	}
-}
-
-func TestParseSchedulerLogProgramUsesLegacyIDPattern(t *testing.T) {
-	tests := []struct {
-		line string
-		kind string
-		id   string
-		ok   bool
-	}{
-		{"RESERVE: abc-123, title", "RESERVE", "abc-123", true},
-		{"!CONFLICT: def456 (rule)", "CONFLICT", "def456", true},
-		{"RESERVE: ABC", "", "", false},
-		{"RESERVE: ", "", "", false},
-	}
-	for _, tt := range tests {
-		kind, id, ok := parseSchedulerLogProgram(tt.line)
-		if kind != tt.kind || id != tt.id || ok != tt.ok {
-			t.Fatalf("%q => (%q, %q, %v), want (%q, %q, %v)", tt.line, kind, id, ok, tt.kind, tt.id, tt.ok)
-		}
 	}
 }
 

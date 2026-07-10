@@ -1203,7 +1203,7 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 			_, _ = w.Write(data)
 		}
 	default:
-		result, ok, err := s.schedulerResultFromLog(logPath)
+		result, ok, err := s.schedulerResult(logPath)
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
@@ -1337,7 +1337,7 @@ func (s *server) runScheduler(ctx context.Context, simulation bool) error {
 	return err
 }
 
-func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, error) {
+func (s *server) schedulerResult(path string) (map[string]any, bool, error) {
 	result := map[string]any{
 		"time":      int64(0),
 		"conflicts": []legacy.Program{},
@@ -1350,44 +1350,19 @@ func (s *server) schedulerResultFromLog(path string) (map[string]any, bool, erro
 		}
 		return result, false, err
 	}
-	data, err := os.ReadFile(path)
+	reservations, err := reservationstore.Read(context.Background(), s.paths.Database)
 	if err != nil {
 		return result, false, err
 	}
-	schedules, err := s.readSchedule()
-	if err != nil {
-		return result, false, err
-	}
-	conflicts := []any{}
-	reserves := []any{}
-	lines := strings.Split(string(data), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if strings.Contains(line, "RUNNING SCHEDULER.") {
-			break
-		}
-		kind, id, ok := parseSchedulerLogProgram(line)
-		if !ok {
-			continue
-		}
-		program := legacy.GetProgramByID(id, schedules, nil)
-		if kind == "CONFLICT" {
-			if program == nil {
-				conflicts = append(conflicts, nil)
-			} else {
-				conflicts = append(conflicts, *program)
-			}
-		}
-		if kind == "RESERVE" {
-			if program == nil {
-				reserves = append(reserves, nil)
-			} else {
-				reserves = append(reserves, *program)
-			}
+	conflicts := []legacy.Program{}
+	reserves := []legacy.Program{}
+	for _, program := range reservations {
+		if program.IsConflict {
+			conflicts = append(conflicts, program)
+		} else if !program.IsSkip {
+			reserves = append(reserves, program)
 		}
 	}
-	reverseAny(conflicts)
-	reverseAny(reserves)
 	result["time"] = info.ModTime().UnixMilli()
 	result["conflicts"] = conflicts
 	result["reserves"] = reserves
@@ -3287,41 +3262,9 @@ func legacyRecordedXSPFTitle(value string) string {
 	return value
 }
 
-func parseSchedulerLogProgram(line string) (string, string, bool) {
-	for _, kind := range []string{"RESERVE", "CONFLICT"} {
-		prefix := kind + ": "
-		if !strings.Contains(line, prefix) {
-			continue
-		}
-		rest := line[strings.Index(line, prefix)+len(prefix):]
-		id := legacySchedulerLogID(rest)
-		if id == "" {
-			return "", "", false
-		}
-		return kind, id, true
-	}
-	return "", "", false
-}
-
-func legacySchedulerLogID(value string) string {
-	for i, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			continue
-		}
-		return value[:i]
-	}
-	return value
-}
-
 func reversePrograms(programs []legacy.Program) {
 	for i, j := 0, len(programs)-1; i < j; i, j = i+1, j-1 {
 		programs[i], programs[j] = programs[j], programs[i]
-	}
-}
-
-func reverseAny(values []any) {
-	for i, j := 0, len(values)-1; i < j; i, j = i+1, j-1 {
-		values[i], values[j] = values[j], values[i]
 	}
 }
 
