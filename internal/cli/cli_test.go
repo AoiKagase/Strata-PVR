@@ -29,10 +29,8 @@ func TestMain(m *testing.M) {
 			return runtimePaths()
 		}
 		p := paths{
-			config: "config.json", rules: "rules.json",
+			config:   "config.json",
 			database: filepath.Join("data", "strata.db"),
-			schedule: filepath.Join("data", "schedule.json"), reserves: filepath.Join("data", "reserves.json"),
-			recording: filepath.Join("data", "recording.json"), recorded: filepath.Join("data", "recorded.json"),
 		}
 		return p
 	}
@@ -50,18 +48,18 @@ func seedCLITestDatabase(p paths) {
 	_ = os.MkdirAll(filepath.Dir(p.database), 0o755)
 	ctx := context.Background()
 	var rules []legacy.Rule
-	if storage.ReadJSON(p.rules, &rules, "[]") == nil {
+	if storage.ReadJSON("rules.json", &rules, "[]") == nil {
 		_ = rulestore.Write(ctx, p.database, rules)
 	}
 	var schedule []legacy.ChannelSchedule
-	if storage.ReadJSON(p.schedule, &schedule, "[]") == nil {
+	if storage.ReadJSON(filepath.Join("data", "schedule.json"), &schedule, "[]") == nil {
 		_ = schedulestore.Write(ctx, p.database, schedule)
 	}
 	var reserves []legacy.Program
-	if storage.ReadJSON(p.reserves, &reserves, "[]") == nil {
+	if storage.ReadJSON(filepath.Join("data", "reserves.json"), &reserves, "[]") == nil {
 		_ = reservationstore.Write(ctx, p.database, reserves)
 	}
-	for _, item := range []struct{ path, collection string }{{p.recording, programstore.Recording}, {p.recorded, programstore.Recorded}} {
+	for _, item := range []struct{ path, collection string }{{filepath.Join("data", "recording.json"), programstore.Recording}, {filepath.Join("data", "recorded.json"), programstore.Recorded}} {
 		var programs []legacy.Program
 		if storage.ReadJSON(item.path, &programs, "[]") == nil {
 			_ = programstore.Write(ctx, p.database, item.collection, programs)
@@ -85,7 +83,7 @@ func TestRequireStrataRuntimeRejectsLegacyRootConfig(t *testing.T) {
 
 func TestRuntimePathsUseOnlyNativeData(t *testing.T) {
 	p := runtimePaths()
-	if p.config != filepath.Join("data", "config.json") || p.database != filepath.Join("data", "strata.db") || p.rules != filepath.Join("data", "rules.json") {
+	if p.config != filepath.Join("data", "config.json") || p.database != filepath.Join("data", "strata.db") {
 		t.Fatalf("unexpected runtime paths: %#v", p)
 	}
 	if !isRuntimeCommand([]string{"reserves"}) || !isRuntimeCommand([]string{"service", "wui", "execute"}) {
@@ -1131,7 +1129,7 @@ func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := search(paths{config: filepath.Join("data", "config.json"), database: databasePath, schedule: filepath.Join("data", "schedule.json")}, []string{"-title", "ABC"}, &out); err != nil {
+	if err := search(paths{config: filepath.Join("data", "config.json"), database: databasePath}, []string{"-title", "ABC"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "p1") {

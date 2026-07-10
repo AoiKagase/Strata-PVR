@@ -29,13 +29,8 @@ import (
 )
 
 type paths struct {
-	config    string
-	database  string
-	rules     string
-	schedule  string
-	reserves  string
-	recording string
-	recorded  string
+	config   string
+	database string
 }
 
 var resolveRuntimePaths = runtimePaths
@@ -77,11 +72,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "rules":
 		return ruleList(p, args[1:], stdout)
 	case "reserves":
-		return programList(p.reserves, p.database, "reservations", args[1:], stdout)
+		return programList(p.database, "reservations", args[1:], stdout)
 	case "recording":
-		return programList(p.recording, p.database, programstore.Recording, args[1:], stdout)
+		return programList(p.database, programstore.Recording, args[1:], stdout)
 	case "recorded":
-		return programList(p.recorded, p.database, programstore.Recorded, args[1:], stdout)
+		return programList(p.database, programstore.Recorded, args[1:], stdout)
 	case "cleanup":
 		return cleanup(p, args[1:], stdout)
 	case "update":
@@ -126,13 +121,8 @@ func isRuntimeCommand(args []string) bool {
 
 func runtimePaths() paths {
 	return paths{
-		config:    filepath.Join("data", "config.json"),
-		database:  filepath.Join("data", "strata.db"),
-		rules:     filepath.Join("data", "rules.json"),
-		schedule:  filepath.Join("data", "schedule.json"),
-		reserves:  filepath.Join("data", "reserves.json"),
-		recording: filepath.Join("data", "recording.json"),
-		recorded:  filepath.Join("data", "recorded.json"),
+		config:   filepath.Join("data", "config.json"),
+		database: filepath.Join("data", "strata.db"),
 	}
 }
 
@@ -499,19 +489,17 @@ func search(p paths, args []string, stdout io.Writer) error {
 	return nil
 }
 
-func programList(path, databasePath, collection string, args []string, stdout io.Writer) error {
+func programList(databasePath, collection string, args []string, stdout io.Writer) error {
 	opts, err := parseSearchArgs(args)
 	if err != nil {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm("config.json")
 	var programs []legacy.Program
-	if databasePath != "" && collection == "reservations" {
+	if collection == "reservations" {
 		programs, err = reservationstore.Read(context.Background(), databasePath)
-	} else if databasePath != "" {
-		programs, err = programstore.Read(context.Background(), databasePath, collection)
 	} else {
-		err = storage.ReadJSON(path, &programs, "[]")
+		programs, err = programstore.Read(context.Background(), databasePath, collection)
 	}
 	if err != nil {
 		return err
