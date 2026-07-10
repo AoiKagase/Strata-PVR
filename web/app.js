@@ -1460,7 +1460,10 @@
   }
 
   function channelURL(channelID, resource, ext, query) {
-    var url = "/api/channel/" + encodeURIComponent(channelID) + "/" + resource + "." + ext;
+    var url = "/api/channel/" + encodeURIComponent(channelID) + "/" + resource;
+    if (ext) {
+      url += "." + ext;
+    }
     if (!query) {
       return url;
     }
@@ -2860,7 +2863,7 @@
       if (group.logo) {
         var logo = document.createElement("img");
         logo.className = "schedule-channel-logo";
-        logo.src = channelURL(group.id, "logo", "png");
+        logo.src = channelURL(group.id, "logo", "");
         logo.alt = "";
         logo.loading = "lazy";
         mediaRow.appendChild(logo);
