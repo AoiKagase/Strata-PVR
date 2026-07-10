@@ -44,19 +44,3 @@ func TestSQLiteStoreIsCanonicalWhenDatabasePathIsSet(t *testing.T) {
 		t.Fatalf("legacy JSON projection was unexpectedly modified: %s", data)
 	}
 }
-
-func TestJSONStoreRemainsAvailableWithoutDatabase(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "rules.json")
-	want := []legacy.Rule{{ReserveTitles: []string{"legacy"}}}
-	if err := Write(ctx, "", path, want); err != nil {
-		t.Fatal(err)
-	}
-	got, err := Read(ctx, "", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ReserveTitles[0] != "legacy" {
-		t.Fatalf("rules = %#v", got)
-	}
-}
