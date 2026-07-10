@@ -36,9 +36,7 @@ PVR 実装です。Go 製の単体バイナリとして動作し、既存の
 
 配布済みバイナリの実行にGo、SQLite、Cコンパイラは不要です。ソースから
 ビルドする場合だけGo 1.25以上が必要です。通常の実行にNode.js、npm、
-webpackは不要です。旧Node時代の
-`installer`、`updater`、`test <app>`、`ircbot` 相当の自動処理は Go
-ランタイムでは意図的に実行しません。
+webpackは不要です。
 
 この Windows 開発環境では Go が次の場所にあります。`go` が `PATH` に
 ない場合は直接指定してください。

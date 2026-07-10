@@ -489,28 +489,6 @@ func TestInitializeStrataRejectsLegacyConfig(t *testing.T) {
 	}
 }
 
-func TestUpdaterAcceptedWithoutNodeRuntime(t *testing.T) {
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"updater"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	if !strings.Contains(text, "automatic git/service/installer operations are intentionally not performed") || !strings.Contains(text, "Node.js/npm modules are not required") {
-		t.Fatalf("unexpected updater output: %s", text)
-	}
-}
-
-func TestInstallerAcceptedWithoutNodeRuntime(t *testing.T) {
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"installer"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	if !strings.Contains(text, "Node.js/npm modules are not required") || !strings.Contains(text, "Automatic Node-era dependency installation is intentionally not performed") {
-		t.Fatalf("unexpected installer output: %s", text)
-	}
-}
-
 func TestServiceInitscriptIncludesRestart(t *testing.T) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -603,28 +581,6 @@ func TestPrepareServiceRuntimeCreatesRuntimeDirectories(t *testing.T) {
 	}
 	if _, err := os.Stat("log"); err != nil {
 		t.Fatalf("log directory was not prepared: %v", err)
-	}
-}
-
-func TestTestCommandAcceptedWithoutUsrBinExecution(t *testing.T) {
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"test", "ffmpeg", "-version"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	if !strings.Contains(text, "usr/bin/ffmpeg is not executed") || !strings.Contains(text, "Node.js/npm modules are not required") {
-		t.Fatalf("unexpected test command output: %s", text)
-	}
-}
-
-func TestIRCBotAcceptedAsUnimplementedGoRuntimeFeature(t *testing.T) {
-	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"ircbot"}, &out, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	if !strings.Contains(text, "experimental Node-era IRC bot is not implemented") || !strings.Contains(text, "Go API") {
-		t.Fatalf("unexpected ircbot output: %s", text)
 	}
 }
 

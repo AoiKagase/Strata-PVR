@@ -62,20 +62,6 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	switch args[0] {
-	case "installer":
-		fmt.Fprintln(stdout, "Strata PVR installer: Node.js/npm modules are not required.")
-		fmt.Fprintln(stdout, "Automatic Node-era dependency installation is intentionally not performed; build or install the strata-pvr binary directly.")
-		return nil
-	case "updater":
-		fmt.Fprintln(stdout, "Strata PVR updater: automatic git/service/installer operations are intentionally not performed.")
-		fmt.Fprintln(stdout, "Update the repository and rebuild strata-pvr; Node.js/npm modules are not required.")
-		return nil
-	case "test":
-		return testCommand(args[1:], stdout)
-	case "ircbot":
-		fmt.Fprintln(stdout, "Strata PVR ircbot: the experimental Node-era IRC bot is not implemented in the Go runtime.")
-		fmt.Fprintln(stdout, "Use WUI/API or build an external bot against the Go API.")
-		return nil
 	case "service":
 		return service(ctx, p, args[1:], stdout)
 	case "reserve":
@@ -468,15 +454,6 @@ func migrateLegacyJSONFiles(tempDir string) error {
 			return err
 		}
 	}
-	return nil
-}
-
-func testCommand(args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Usage: test <app> [options]")
-	}
-	fmt.Fprintf(stdout, "Strata PVR test: usr/bin/%s is not executed by the Go runtime.\n", args[0])
-	fmt.Fprintln(stdout, "Install and run external tools explicitly; Node.js/npm modules are not required.")
 	return nil
 }
 
@@ -1689,8 +1666,6 @@ Commands:
 init                    Initialize a new Strata installation in data/.
 migrate                 Convert migrate/ Chinachu files into a Strata installation.
 migration               Alias of migrate.
-installer               Run a Installer.
-updater                 Run a Updater.
 service <name> <action> Service-utility.
 
 update                  Run a Scheduler.
@@ -1713,10 +1688,6 @@ recording               Show a list of recording programs.
 recorded                Show a list of recorded programs.
 
 cleanup                 Clean-up the recorded list.
-
-ircbot [options]        Connect to IRC server and run a ircbot. (Experimental)
-
-test <app> [options]    Run <app> in usr/bin
 
 help                    Output this information.
 
