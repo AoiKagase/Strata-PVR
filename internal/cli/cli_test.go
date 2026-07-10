@@ -55,7 +55,7 @@ func seedCLITestDatabase(p paths) {
 	}
 	var schedule []legacy.ChannelSchedule
 	if storage.ReadJSON(p.schedule, &schedule, "[]") == nil {
-		_ = schedulestore.Write(ctx, p.database, p.schedule, schedule)
+		_ = schedulestore.Write(ctx, p.database, schedule)
 	}
 	var reserves []legacy.Program
 	if storage.ReadJSON(p.reserves, &reserves, "[]") == nil {
@@ -1128,7 +1128,7 @@ func TestSearchUsesConfigNormalizationForm(t *testing.T) {
 	if err := storage.ReadJSON(filepath.Join("data", "schedule.json"), &schedules, "[]"); err != nil {
 		t.Fatal(err)
 	}
-	if err := schedulestore.Write(context.Background(), databasePath, filepath.Join("data", "schedule.json"), schedules); err != nil {
+	if err := schedulestore.Write(context.Background(), databasePath, schedules); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer

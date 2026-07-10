@@ -41,7 +41,7 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 		}
 		var schedule []legacy.ChannelSchedule
 		_ = storage.ReadJSON(paths.Schedule, &schedule, "[]")
-		if err := schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule); err != nil {
+		if err := schedulestore.Write(ctx, paths.Database, schedule); err != nil {
 			t.Fatal(err)
 		}
 		var reserves []legacy.Program
@@ -52,7 +52,7 @@ func runWithSourceTest(t *testing.T, ctx context.Context, paths Paths, cfg *conf
 	}
 	result, err := RunWithSource(ctx, paths, cfg, source, simulation, now)
 	if legacyFixture {
-		if schedule, readErr := schedulestore.Read(ctx, paths.Database, paths.Schedule); readErr == nil {
+		if schedule, readErr := schedulestore.Read(ctx, paths.Database); readErr == nil {
 			_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
 		}
 		if reserves, readErr := reservationstore.Read(ctx, paths.Database, paths.Reserves); readErr == nil {
@@ -226,7 +226,7 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	if _, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, src, false, now); err != nil {
 		t.Fatal(err)
 	}
-	schedule, err := schedulestore.Read(context.Background(), paths.Database, paths.Schedule)
+	schedule, err := schedulestore.Read(context.Background(), paths.Database)
 	if err != nil {
 		t.Fatal(err)
 	}

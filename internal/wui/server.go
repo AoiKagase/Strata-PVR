@@ -831,7 +831,7 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	schedule, readErr := schedulestore.Read(r.Context(), s.paths.Database, s.paths.Schedule)
+	schedule, readErr := schedulestore.Read(r.Context(), s.paths.Database)
 	if readErr != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -3053,7 +3053,7 @@ func logDir(paths Paths) string {
 }
 
 func (s *server) readSchedule() ([]legacy.ChannelSchedule, error) {
-	return schedulestore.Read(context.Background(), s.paths.Database, s.paths.Schedule)
+	return schedulestore.Read(context.Background(), s.paths.Database)
 }
 
 func (s *server) findScheduleChannel(id string) (*legacy.ChannelSchedule, error) {

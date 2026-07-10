@@ -180,31 +180,22 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 	if !simulation {
-		if paths.Database != "" {
-			scheduleDocuments, err := schedulestore.Documents(schedule)
-			if err != nil {
-				return Result{}, err
-			}
-			reservationDocuments, err := reservationstore.Documents(reserves)
-			if err != nil {
-				return Result{}, err
-			}
-			db, release, err := database.Acquire(ctx, paths.Database)
-			if err != nil {
-				return Result{}, err
-			}
-			err = database.ReplaceSchedulerState(ctx, db, scheduleDocuments, reservationDocuments)
-			release()
-			if err != nil {
-				return Result{}, err
-			}
-		} else {
-			if err := schedulestore.Write(ctx, "", paths.Schedule, schedule); err != nil {
-				return Result{}, err
-			}
-			if err := reservationstore.Write(ctx, "", paths.Reserves, reserves); err != nil {
-				return Result{}, err
-			}
+		scheduleDocuments, err := schedulestore.Documents(schedule)
+		if err != nil {
+			return Result{}, err
+		}
+		reservationDocuments, err := reservationstore.Documents(reserves)
+		if err != nil {
+			return Result{}, err
+		}
+		db, release, err := database.Acquire(ctx, paths.Database)
+		if err != nil {
+			return Result{}, err
+		}
+		err = database.ReplaceSchedulerState(ctx, db, scheduleDocuments, reservationDocuments)
+		release()
+		if err != nil {
+			return Result{}, err
 		}
 		if err := logging.AppendLine(paths.Log, "WRITE: %s", paths.Schedule); err != nil {
 			return Result{}, err

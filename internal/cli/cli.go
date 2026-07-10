@@ -251,7 +251,7 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 	if err := storage.ReadJSON(filepath.Join(tempDir, "schedule.json"), &migratedSchedule, "[]"); err != nil {
 		return err
 	}
-	if err := schedulestore.Write(ctx, filepath.Join(tempDir, "strata.db"), filepath.Join(tempDir, "schedule.json"), migratedSchedule); err != nil {
+	if err := schedulestore.Write(ctx, filepath.Join(tempDir, "strata.db"), migratedSchedule); err != nil {
 		return err
 	}
 	counts := map[string]int{
@@ -476,7 +476,7 @@ func search(p paths, args []string, stdout io.Writer) error {
 		return err
 	}
 	opts.normalizationForm = loadNormalizationForm(p.config)
-	schedule, err := schedulestore.Read(context.Background(), p.database, p.schedule)
+	schedule, err := schedulestore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}
@@ -1076,7 +1076,7 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	id, rest := args[0], args[1:]
 	simulation := hasFlag(rest, "-s", "--simulation")
 	oneSeg := hasFlag(rest, "--1seg", "-1seg")
-	schedule, err := schedulestore.Read(context.Background(), p.database, p.schedule)
+	schedule, err := schedulestore.Read(context.Background(), p.database)
 	if err != nil {
 		return err
 	}

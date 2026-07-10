@@ -3497,7 +3497,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 	}
 	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(paths.Schedule, &schedule, "[]"); seed && err == nil {
-		if err := schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule); err != nil {
+		if err := schedulestore.Write(ctx, paths.Database, schedule); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -3542,7 +3542,7 @@ func importTestState(t *testing.T, paths Paths) {
 	}
 	var schedule []legacy.ChannelSchedule
 	if err := storage.ReadJSON(paths.Schedule, &schedule, "[]"); err == nil {
-		_ = schedulestore.Write(ctx, paths.Database, paths.Schedule, schedule)
+		_ = schedulestore.Write(ctx, paths.Database, schedule)
 	}
 	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err == nil {
@@ -3568,7 +3568,7 @@ func exportTestState(t *testing.T, paths Paths) {
 	if rules, err := rulestore.Read(ctx, paths.Database, paths.Rules); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Rules, rules, true)
 	}
-	if schedule, err := schedulestore.Read(ctx, paths.Database, paths.Schedule); err == nil {
+	if schedule, err := schedulestore.Read(ctx, paths.Database); err == nil {
 		_ = storage.WriteJSONAtomic(paths.Schedule, schedule, false)
 	}
 	if reserves, err := reservationstore.Read(ctx, paths.Database, paths.Reserves); err == nil {

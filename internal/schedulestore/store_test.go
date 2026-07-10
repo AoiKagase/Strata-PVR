@@ -28,10 +28,10 @@ func TestSQLiteScheduleStoreIgnoresLegacyJSON(t *testing.T) {
 		Channel:  legacy.Channel{ID: "database", Name: "Database Channel"},
 		Programs: []legacy.Program{{ID: "program-1", Start: 100, End: 200, Title: "Program"}},
 	}}
-	if err := Write(ctx, databasePath, jsonPath, want); err != nil {
+	if err := Write(ctx, databasePath, want); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Read(ctx, databasePath, jsonPath)
+	got, err := Read(ctx, databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 	"strata-pvr/internal/legacy"
 )
 
-func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.ChannelSchedule, error) {
+func Read(ctx context.Context, databasePath string) ([]legacy.ChannelSchedule, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func Read(ctx context.Context, databasePath, jsonPath string) ([]legacy.ChannelS
 	return schedule, nil
 }
 
-func Write(ctx context.Context, databasePath, jsonPath string, schedule []legacy.ChannelSchedule) error {
+func Write(ctx context.Context, databasePath string, schedule []legacy.ChannelSchedule) error {
 	documents, err := Documents(schedule)
 	if err != nil {
 		return err
