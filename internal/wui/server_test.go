@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -3000,7 +3001,7 @@ func TestRunWritesWUILog(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, paths) }()
+	go func() { done <- Run(ctx, paths.runtime()) }()
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
 		data, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
 		if err == nil && strings.Contains(string(data), "HTTP Server Listening on") {
@@ -3371,7 +3372,7 @@ func TestAPIConfigPutRequiresValidJSON(t *testing.T) {
 func TestOpenServerHandlerSkipsAuth(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	handler := newHandler(paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: "unused"}}}, false)
+	handler := newHandler(paths.runtime(), &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: "unused"}}}, false)
 	req := httptest.NewRequest(http.MethodGet, "/api/status.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -3384,7 +3385,7 @@ func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	cfg := &config.Config{WUIHost: "127.0.0.1", WUIPort: 20772, WUIAuthenticationEnabled: true}
-	servers, err := buildHTTPServers(paths, cfg)
+	servers, err := buildHTTPServers(paths.runtime(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3466,8 +3467,32 @@ func TestAccessLogUsesRequestMethod(t *testing.T) {
 	}
 }
 
-func testPaths(dir string) Paths {
+type wuiTestPaths struct {
+	Config         string
+	Database       string
+	Rules          string
+	Schedule       string
+	Reserves       string
+	Recording      string
+	Recorded       string
+	WebRoot        string
+	LogDir         string
+	SchedulerPID   string
+	OperatorPID    string
+	Scheduler      func(context.Context, bool) error
+	databaseHandle *sql.DB
+}
+
+func (p wuiTestPaths) runtime() Paths {
 	return Paths{
+		Config: p.Config, Database: p.Database, WebRoot: p.WebRoot, LogDir: p.LogDir,
+		SchedulerPID: p.SchedulerPID, OperatorPID: p.OperatorPID, Scheduler: p.Scheduler,
+		databaseHandle: p.databaseHandle,
+	}
+}
+
+func testPaths(dir string) wuiTestPaths {
+	return wuiTestPaths{
 		Config:    filepath.Join(dir, "config.json"),
 		Rules:     filepath.Join(dir, "rules.json"),
 		Schedule:  filepath.Join(dir, "data", "schedule.json"),
@@ -3478,7 +3503,7 @@ func testPaths(dir string) Paths {
 	}
 }
 
-func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler {
+func newTestHandler(t *testing.T, paths wuiTestPaths, cfg *config.Config) http.Handler {
 	t.Helper()
 	ctx := context.Background()
 	if paths.Database == "" {
@@ -3521,7 +3546,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 			}
 		}
 	}
-	handler := NewHandler(paths, cfg)
+	handler := NewHandler(paths.runtime(), cfg)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if seed {
 			importTestState(t, paths)
@@ -3533,7 +3558,7 @@ func newTestHandler(t *testing.T, paths Paths, cfg *config.Config) http.Handler 
 	})
 }
 
-func importTestState(t *testing.T, paths Paths) {
+func importTestState(t *testing.T, paths wuiTestPaths) {
 	t.Helper()
 	ctx := context.Background()
 	var rules []legacy.Rule
@@ -3562,7 +3587,7 @@ func importTestState(t *testing.T, paths Paths) {
 	}
 }
 
-func exportTestState(t *testing.T, paths Paths) {
+func exportTestState(t *testing.T, paths wuiTestPaths) {
 	t.Helper()
 	ctx := context.Background()
 	if rules, err := rulestore.Read(ctx, paths.Database); err == nil {

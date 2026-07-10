@@ -45,11 +45,6 @@ import (
 type Paths struct {
 	Config         string
 	Database       string
-	Rules          string
-	Schedule       string
-	Reserves       string
-	Recording      string
-	Recorded       string
 	WebRoot        string
 	LogDir         string
 	SchedulerPID   string
@@ -688,17 +683,17 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "json") {
 			return
 		}
-		s.handleProgramCollection(w, r, s.paths.Recording)
+		s.handleProgramCollection(w, r, programstore.Recording)
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "preview":
 		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
 			return
 		}
-		s.handleProgramPreview(w, r, s.paths.Recording, parts[1])
+		s.handleProgramPreview(w, r, programstore.Recording, parts[1])
 	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
 			return
 		}
-		s.handleProgramWatch(w, r, s.paths.Recording, parts[1], apiType, true)
+		s.handleProgramWatch(w, r, programstore.Recording, parts[1], apiType, true)
 	case len(parts) >= 2 && parts[0] == "recording":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -723,12 +718,12 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !requireAPIType(w, r, apiType, "png", "jpg", "txt") {
 			return
 		}
-		s.handleProgramPreview(w, r, s.paths.Recorded, parts[1])
+		s.handleProgramPreview(w, r, programstore.Recorded, parts[1])
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "mp4", "xspf", "m2ts") {
 			return
 		}
-		s.handleProgramWatch(w, r, s.paths.Recorded, parts[1], apiType, false)
+		s.handleProgramWatch(w, r, programstore.Recorded, parts[1], apiType, false)
 	case len(parts) >= 2 && parts[0] == "recorded":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -786,13 +781,13 @@ func (s *server) handleReservations(w http.ResponseWriter, r *http.Request) {
 	writeCompactJSON(w, http.StatusOK, reservations)
 }
 
-func (s *server) handleProgramCollection(w http.ResponseWriter, r *http.Request, path string) {
+func (s *server) handleProgramCollection(w http.ResponseWriter, r *http.Request, collection string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	programs, err := s.readPrograms(r.Context(), path)
+	programs, err := s.readPrograms(r.Context(), collection)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -800,20 +795,8 @@ func (s *server) handleProgramCollection(w http.ResponseWriter, r *http.Request,
 	writeCompactJSON(w, http.StatusOK, programs)
 }
 
-func (s *server) readPrograms(ctx context.Context, path string) ([]legacy.Program, error) {
-	collection := programstore.Recorded
-	if path == s.paths.Recording {
-		collection = programstore.Recording
-	}
+func (s *server) readPrograms(ctx context.Context, collection string) ([]legacy.Program, error) {
 	return programstore.Read(ctx, s.paths.Database, collection)
-}
-
-func (s *server) writePrograms(ctx context.Context, path string, programs []legacy.Program) error {
-	collection := programstore.Recorded
-	if path == s.paths.Recording {
-		collection = programstore.Recording
-	}
-	return programstore.Write(ctx, s.paths.Database, collection, programs)
 }
 
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
@@ -822,11 +805,7 @@ func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	schedulePath := s.paths.Schedule
-	if s.paths.Database != "" {
-		schedulePath = s.paths.Database
-	}
-	info, err := os.Stat(schedulePath)
+	info, err := os.Stat(s.paths.Database)
 	if err != nil && !os.IsNotExist(err) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1180,7 +1159,7 @@ func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) storageUsage() (int64, system.DiskUsage, error) {
-	recorded, err := s.readPrograms(context.Background(), s.paths.Recorded)
+	recorded, err := s.readPrograms(context.Background(), programstore.Recorded)
 	if err != nil {
 		return 0, system.DiskUsage{}, err
 	}
@@ -1545,7 +1524,7 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1586,7 +1565,7 @@ func (s *server) handleRecordedCleanup(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1688,7 +1667,7 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 
 func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	recording, err := s.readPrograms(r.Context(), s.paths.Recording)
+	recording, err := s.readPrograms(r.Context(), programstore.Recording)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1730,7 +1709,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 
 func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1760,7 +1739,7 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 }
 
 func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
-	recorded, err := s.readPrograms(r.Context(), s.paths.Recorded)
+	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -1818,13 +1797,13 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 	}
 }
 
-func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, path, id, apiType string, requirePID bool) {
+func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, collection, id, apiType string, requirePID bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	programs, err := s.readPrograms(r.Context(), path)
+	programs, err := s.readPrograms(r.Context(), collection)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2320,7 +2299,7 @@ func setAttachmentFileName(w http.ResponseWriter, filePath, ext string) {
 	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(base+"."+ext))
 }
 
-func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, path, id string) {
+func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, collection, id string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
@@ -2331,7 +2310,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
 	}
-	programs, err := s.readPrograms(r.Context(), path)
+	programs, err := s.readPrograms(r.Context(), collection)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
@@ -2342,7 +2321,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	program := programs[index]
-	if path == s.paths.Recording && !programHasPID(program) {
+	if collection == programstore.Recording && !programHasPID(program) {
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
@@ -2370,7 +2349,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, pa
 	if r.URL.Query().Get("type") == "png" || apiType == "png" {
 		codec = "png"
 	}
-	recording := path == s.paths.Recording
+	recording := collection == programstore.Recording
 	cacheKey := previewCacheKey(id, width, height, codec, previewPosition(r))
 	if !recording && s.paths.Database != "" {
 		if output, ok := s.readPreviewCache(r.Context(), cacheKey, filePath, info); ok {

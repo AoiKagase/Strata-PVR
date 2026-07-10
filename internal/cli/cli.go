@@ -1346,11 +1346,6 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 			return wui.Run(ctx, wui.Paths{
 				Config:       p.config,
 				Database:     p.database,
-				Rules:        p.rules,
-				Schedule:     p.schedule,
-				Reserves:     p.reserves,
-				Recording:    p.recording,
-				Recorded:     p.recorded,
 				WebRoot:      "web",
 				LogDir:       "log",
 				SchedulerPID: filepath.Join("data", "scheduler.pid"),
