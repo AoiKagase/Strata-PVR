@@ -176,7 +176,6 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 	if auth {
 		handler = server.withAuth(handler)
 	}
-	handler = server.withMethodOverride(handler)
 	handler = server.withHostRequired(handler)
 	handler = server.withAccessLog(handler)
 	return server.withCommonHeaders(handler)
@@ -413,24 +412,6 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-func (s *server) withMethodOverride(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-		method := query.Get("method")
-		if override := query.Get("_method"); override != "" {
-			method = override
-		}
-		if method != "" {
-			r = r.Clone(r.Context())
-			r.Method = strings.ToUpper(method)
-			query.Del("method")
-			query.Del("_method")
-			r.URL.RawQuery = query.Encode()
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *server) withHostRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host == "" {
@@ -466,23 +447,12 @@ func (s *server) withAccessLog(next http.Handler) http.Handler {
 			filepath.Join(s.logDir(), "wui"),
 			"%d %s:%s %s %q",
 			recorder.status,
-			legacyLogMethod(r),
+			r.Method,
 			r.URL.RequestURI(),
 			s.remoteAddress(r),
 			userAgent,
 		)
 	})
-}
-
-func legacyLogMethod(r *http.Request) string {
-	query := r.URL.Query()
-	if method := query.Get("_method"); method != "" {
-		return strings.ToUpper(method)
-	}
-	if method := query.Get("method"); method != "" {
-		return strings.ToUpper(method)
-	}
-	return r.Method
 }
 
 func (s *server) remoteAddress(r *http.Request) string {

@@ -1110,7 +1110,7 @@ func TestAPIReserveAndRecordingMutationsUseStrataDatabase(t *testing.T) {
 	}
 }
 
-func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
+func TestAPIReserveSkipUsesPUT(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc", IsManualReserved: true}}, false); err != nil {
@@ -1118,11 +1118,11 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/reserves/abc/skip.json?method=put", nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/reserves/abc/skip.json", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
-		t.Fatalf("method override status = %d body=%s", res.Code, res.Body.String())
+		t.Fatalf("skip status = %d body=%s", res.Code, res.Body.String())
 	}
 	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
@@ -1132,11 +1132,11 @@ func TestAPIMethodQueryOverrideMatchesLegacyWUI(t *testing.T) {
 		t.Fatalf("reserve was not skipped: %#v", reserves)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/reserves/abc/unskip.json?_method=put", nil)
+	req = httptest.NewRequest(http.MethodPut, "/api/reserves/abc/unskip.json", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
-		t.Fatalf("_method override status = %d body=%s", res.Code, res.Body.String())
+		t.Fatalf("unskip status = %d body=%s", res.Code, res.Body.String())
 	}
 	reserves = nil
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
@@ -1286,7 +1286,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	paths := testPaths(dir)
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, `/api/rules.json?method=post&types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
+	req := httptest.NewRequest(http.MethodPost, `/api/rules.json?types=["GR"]&reserve_titles=["Title"]&isEnabled=false`, nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
@@ -1313,11 +1313,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 	if string(rules[0]["isDisabled"]) != "true" {
 		t.Fatalf("isDisabled = %s", rules[0]["isDisabled"])
 	}
-	if _, ok := rules[0]["method"]; ok {
-		t.Fatalf("method override query leaked into rule: %#v", rules[0])
-	}
-
-	req = httptest.NewRequest(http.MethodGet, `/api/rules/0.json?_method=put&categories=["anime"]&sid=101`, nil)
+	req = httptest.NewRequest(http.MethodPut, `/api/rules/0.json?categories=["anime"]&sid=101`, nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -3446,18 +3442,18 @@ func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	}
 }
 
-func TestAccessLogUsesLegacyMethodOverride(t *testing.T) {
+func TestAccessLogUsesRequestMethod(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/api/status.json?method=GET", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/status.json", nil)
 	req.RemoteAddr = "10.0.0.1:12345"
 	res := httptest.NewRecorder()
 
 	handler.ServeHTTP(res, req)
 
-	if res.Code != http.StatusOK {
+	if res.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
 	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
@@ -3465,8 +3461,8 @@ func TestAccessLogUsesLegacyMethodOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logBytes)
-	if !strings.Contains(log, `200 GET:/api/status.json?method=GET 10.0.0.1`) {
-		t.Fatalf("access log did not use legacy override method/url: %q", log)
+	if !strings.Contains(log, `405 POST:/api/status.json 10.0.0.1`) {
+		t.Fatalf("access log did not use request method: %q", log)
 	}
 }
 
