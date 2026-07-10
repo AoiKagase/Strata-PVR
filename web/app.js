@@ -1,6 +1,7 @@
 (function () {
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
   var listFiltersStorageKey = "strata-pvr.listFilters";
+  var recordedPageSizeStorageKey = "strata-pvr.recordedPageSize";
   var scheduleZoomStorageKey = "strata-pvr.scheduleZoomLevel";
   var scheduleWindowHoursByMode = {
     "day": 24,
@@ -15,6 +16,8 @@
   ];
   var scheduleDefaultZoomLevel = "standard";
   var scheduleMinimumProgramMinutes = 30;
+  var recordedPageSizeOptions = [50, 100, 200];
+  var recordedDefaultPageSize = 50;
   var programDialogReturnFocus = null;
   var playerDialogReturnFocus = null;
   var confirmDialogReturnFocus = null;
@@ -56,6 +59,8 @@
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
     listFilters: loadListFilters(),
+    recordedPage: 1,
+    recordedPageSize: loadRecordedPageSize(),
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
     hasLoaded: false,
@@ -118,6 +123,31 @@
     try {
       if (window.localStorage) {
         window.localStorage.setItem(scheduleZoomStorageKey, state.scheduleZoomLevel);
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
+    }
+  }
+
+  function normalizeRecordedPageSize(value) {
+    var size = Number(value);
+    return recordedPageSizeOptions.indexOf(size) >= 0 ? size : recordedDefaultPageSize;
+  }
+
+  function loadRecordedPageSize() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(recordedPageSizeStorageKey) : "";
+      return normalizeRecordedPageSize(raw);
+    } catch (error) {
+      return recordedDefaultPageSize;
+    }
+  }
+
+  function saveRecordedPageSize() {
+    state.recordedPageSize = normalizeRecordedPageSize(state.recordedPageSize);
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(recordedPageSizeStorageKey, String(state.recordedPageSize));
       }
     } catch (error) {
       // localStorage can be unavailable in private or embedded contexts.
@@ -2468,6 +2498,47 @@
     });
   }
 
+  function recordedPageCount(total) {
+    return Math.max(1, Math.ceil(total / state.recordedPageSize));
+  }
+
+  function clampRecordedPage(total) {
+    var maxPage = recordedPageCount(total);
+    state.recordedPage = Math.max(1, Math.min(maxPage, Number(state.recordedPage) || 1));
+    return state.recordedPage;
+  }
+
+  function recordedPageItems(items) {
+    var page = clampRecordedPage((items || []).length);
+    var start = (page - 1) * state.recordedPageSize;
+    return (items || []).slice(start, start + state.recordedPageSize);
+  }
+
+  function updateRecordedPaginationControls(total) {
+    var pageSize = normalizeRecordedPageSize(state.recordedPageSize);
+    state.recordedPageSize = pageSize;
+    var page = clampRecordedPage(total);
+    var maxPage = recordedPageCount(total);
+    var start = total > 0 ? ((page - 1) * pageSize) + 1 : 0;
+    var end = total > 0 ? Math.min(total, page * pageSize) : 0;
+    var pageSizeSelect = byId("recordedListPageSize");
+    if (pageSizeSelect) {
+      pageSizeSelect.value = String(pageSize);
+    }
+    text(byId("recordedListPageSummary"), total > 0 ? start + "-" + end + " / " + total + "件" : "0件");
+    [
+      { id: "recordedListFirstPage", disabled: page <= 1 || total === 0 },
+      { id: "recordedListPrevPage", disabled: page <= 1 || total === 0 },
+      { id: "recordedListNextPage", disabled: page >= maxPage || total === 0 },
+      { id: "recordedListLastPage", disabled: page >= maxPage || total === 0 }
+    ].forEach(function (item) {
+      var button = byId(item.id);
+      if (button) {
+        button.disabled = item.disabled;
+      }
+    });
+  }
+
   function renderOnAirList() {
     var root = byId("onAirList");
     if (!root) {
@@ -4108,17 +4179,19 @@
     var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
     var recordedNewestFirst = sortedPrograms(state.recorded, "recorded");
     var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
+    var pagedRecorded = recordedPageItems(filteredRecorded);
 
     updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
     updateListCategoryOptions("recordedListCategory", state.recorded, "recorded");
     updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
+    updateRecordedPaginationControls(filteredRecorded.length);
 
     renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", filteredRecorded, "条件に一致する録画済み番組はありません", 100, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
     renderRules();
@@ -4338,6 +4411,9 @@
       query.value = current.query || "";
       query.addEventListener("input", function () {
         state.listFilters[filterName].query = query.value;
+        if (filterName === "recorded") {
+          state.recordedPage = 1;
+        }
         saveListFilters();
         render();
       });
@@ -4345,6 +4421,9 @@
     if (category) {
       category.addEventListener("change", function () {
         state.listFilters[filterName].category = category.value;
+        if (filterName === "recorded") {
+          state.recordedPage = 1;
+        }
         saveListFilters();
         render();
       });
@@ -4357,6 +4436,9 @@
       state.listFilters[filterName].sort = sort.value;
       sort.addEventListener("change", function () {
         state.listFilters[filterName].sort = sort.value;
+        if (filterName === "recorded") {
+          state.recordedPage = 1;
+        }
         saveListFilters();
         render();
       });
@@ -4366,6 +4448,9 @@
   function resetListFilterControls(filterName, ids, renderFn) {
     var defaults = defaultListFilter(filterName);
     state.listFilters[filterName] = defaults;
+    if (filterName === "recorded") {
+      state.recordedPage = 1;
+    }
     [
       { id: ids.query, value: defaults.query || "" },
       { id: ids.category, value: defaults.category || defaults.state || "" },
@@ -4399,6 +4484,53 @@
     }
   }
 
+  function bindRecordedPagination() {
+    var pageSize = byId("recordedListPageSize");
+    if (pageSize) {
+      pageSize.value = String(state.recordedPageSize);
+      pageSize.addEventListener("change", function () {
+        state.recordedPageSize = normalizeRecordedPageSize(pageSize.value);
+        state.recordedPage = 1;
+        saveRecordedPageSize();
+        render();
+      });
+    }
+    [
+      { id: "recordedListFirstPage", icon: "chevrons-left", label: "最初のページ" },
+      { id: "recordedListPrevPage", icon: "chevron-left", label: "前のページ" },
+      { id: "recordedListNextPage", icon: "chevron-right", label: "次のページ" },
+      { id: "recordedListLastPage", icon: "chevrons-right", label: "最後のページ" }
+    ].forEach(function (control) {
+      setIconOnlyControl(byId(control.id), control.icon, control.label);
+    });
+    [
+      { id: "recordedListFirstPage", page: function () { return 1; } },
+      { id: "recordedListPrevPage", page: function () { return state.recordedPage - 1; } },
+      { id: "recordedListNextPage", page: function () { return state.recordedPage + 1; } },
+      {
+        id: "recordedListLastPage",
+        page: function () {
+          var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
+          return recordedPageCount(filteredRecorded.length);
+        }
+      }
+    ].forEach(function (control) {
+      var button = byId(control.id);
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", function () {
+        var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
+        state.recordedPage = Math.max(1, Math.min(recordedPageCount(filteredRecorded.length), control.page()));
+        render();
+        var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-row[tabindex='0']");
+        if (firstRow && typeof firstRow.focus === "function") {
+          firstRow.focus({ preventScroll: true });
+        }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     syncStickyOffsets();
     window.addEventListener("resize", syncStickyOffsets);
@@ -4430,6 +4562,7 @@
     }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
+    bindRecordedPagination();
     resetListFilter("reserves", {
       button: "reserveListFilterReset",
       category: "reserveListCategory",
