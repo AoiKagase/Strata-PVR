@@ -354,7 +354,7 @@
   }
 
 	function sendConfigJSON(raw) {
-		return fetch("/api/config.json", {
+		return fetch("/api/config", {
 			body: raw,
 			credentials: "same-origin",
 			headers: { "Content-Type": "application/json" },
@@ -1352,7 +1352,7 @@
     }
     setBusy("録画済みクリーンアップ確認中");
     setRecordedCleanupStatus("録画ファイルの存在を確認しています。", "");
-    return request("recorded/cleanup.json", "GET").then(function (result) {
+    return request("recorded/cleanup", "GET").then(function (result) {
       if (!result.removed) {
         setBusy("録画済みクリーンアップ対象なし");
         setRecordedCleanupStatus(summarizeRecordedCleanup(result, false), "success");
@@ -1373,7 +1373,7 @@
           return;
         }
         setBusy("録画済みクリーンアップ中");
-        return request("recorded/cleanup.json", "PUT").then(function (applied) {
+        return request("recorded/cleanup", "PUT").then(function (applied) {
           setRecordedCleanupStatus(summarizeRecordedCleanup(applied, true), "success");
           return refresh();
         });
@@ -1947,11 +1947,11 @@
         }));
       } else if (name === "skip" && program.isReserved && !program.isManualReserved && !program.isSkip && !program.isRecording) {
         row.appendChild(actionButton("スキップ", "自動予約をスキップ", function () {
-          runAction("reserves/" + encodeURIComponent(program.id) + "/skip.json", "PUT");
+          runAction("reserves/" + encodeURIComponent(program.id) + "/skip", "PUT");
         }));
       } else if (name === "unskip" && program.isReserved && !program.isManualReserved && program.isSkip && !program.isRecording) {
         row.appendChild(actionButton("解除", "スキップを解除", function () {
-          runAction("reserves/" + encodeURIComponent(program.id) + "/unskip.json", "PUT");
+          runAction("reserves/" + encodeURIComponent(program.id) + "/unskip", "PUT");
         }));
       } else if (name === "stop" && program.isRecording) {
         row.appendChild(actionButton("停止", "録画を停止", function () {
@@ -1965,7 +1965,7 @@
         }));
       } else if (name === "preview-recording" && program.isRecording) {
         row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
-          openURL("/api/recording/" + encodeURIComponent(program.id) + "/preview.png");
+          openURL("/api/recording/" + encodeURIComponent(program.id) + "/preview");
         }));
       } else if (name === "watch-mp4") {
         row.appendChild(actionButton("視聴", "録画済み番組を視聴", function () {
@@ -2089,7 +2089,7 @@
   }
 
   function programPreviewURL(program, resource, size) {
-    return "/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size=" + encodeURIComponent(size || "160x90");
+    return "/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview?size=" + encodeURIComponent(size || "160x90");
   }
 
   function programPreviewUnavailable(program, resource) {
@@ -3626,7 +3626,7 @@
   }
 
   function forceScheduler() {
-    runAction("scheduler/force.json", "PUT", "スケジューラを実行しますか？");
+    runAction("scheduler/force", "PUT", "スケジューラを実行しますか？");
   }
 
   function controlString(id) {
@@ -3972,7 +3972,7 @@
         return;
       }
       setBusy("処理中");
-      sendJSON("rules.json", "POST", rule).then(function () {
+      sendJSON("rules", "POST", rule).then(function () {
         clearRuleForm();
         state.editingRuleFormIndex = null;
         renderRuleFormState();
@@ -4179,17 +4179,17 @@
     setBusy("読み込み中");
     renderInitialLoadingState();
     Promise.all([
-      api("status.json"),
-      api("reserves.json"),
-      api("recording.json"),
-      api("recorded.json"),
-      api("schedule.json"),
-      api("rules.json"),
-      api("config.json"),
-      api("storage.json").catch(function () {
+      api("status"),
+      api("reserves"),
+      api("recording"),
+      api("recorded"),
+      api("schedule"),
+      api("rules"),
+      api("config"),
+      api("storage").catch(function () {
         return null;
       }),
-      api("metrics.json").catch(function () {
+      api("metrics").catch(function () {
         return null;
       })
     ]).then(function (result) {
@@ -4216,13 +4216,13 @@
 
   function refreshOperationalData() {
     Promise.all([
-      api("status.json"),
-      api("reserves.json"),
-      api("recording.json"),
-      api("storage.json").catch(function () {
+      api("status"),
+      api("reserves"),
+      api("recording"),
+      api("storage").catch(function () {
         return state.storage;
       }),
-      api("metrics.json").catch(function () {
+      api("metrics").catch(function () {
         return state.metrics;
       })
     ]).then(function (result) {
@@ -4237,7 +4237,7 @@
   }
 
   function refreshMetrics() {
-    api("metrics.json").then(function (result) {
+    api("metrics").then(function (result) {
       state.metrics = result || null;
       renderMetrics();
       updateOperationalStatus();
@@ -4249,9 +4249,9 @@
   function refreshLogs() {
     setBusy("ログ読み込み中");
     Promise.all([
-      apiText("log/scheduler.txt"),
-      apiText("log/operator.txt"),
-      apiText("log/wui.txt")
+      apiText("log/scheduler"),
+      apiText("log/operator"),
+      apiText("log/wui")
     ]).then(function (result) {
       setLog("schedulerLog", result[0]);
       setLog("operatorLog", result[1]);

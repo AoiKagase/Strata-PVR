@@ -171,11 +171,8 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusUnsupportedMediaType {
+	if res.Code != http.StatusOK {
 		t.Fatalf("status without extension status = %d body=%s", res.Code, res.Body.String())
-	}
-	if res.Body.String() != "Unsupported Media Type\n" {
-		t.Fatalf("status without extension body=%q", res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodHead, "/api/schedule.txt", nil)
@@ -200,11 +197,8 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 	}
 
 	for _, target := range []string{
-		"/api/recording/missing/preview",
 		"/api/recording/missing/watch",
-		"/api/recorded/missing/preview",
 		"/api/recorded/missing/watch",
-		"/api/channel/missing/logo",
 		"/api/channel/missing/watch",
 		"/api/channel/missing/logo.jpg",
 	} {
@@ -212,6 +206,18 @@ func TestAPIRejectsUnsupportedResourceTypes(t *testing.T) {
 		res = httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
 		if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
+			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
+		}
+	}
+	for _, target := range []string{
+		"/api/recording/missing/preview",
+		"/api/recorded/missing/preview",
+		"/api/channel/missing/logo",
+	} {
+		req = httptest.NewRequest(http.MethodGet, target, nil)
+		res = httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusNotFound {
 			t.Fatalf("%s status=%d body=%q", target, res.Code, res.Body.String())
 		}
 	}
@@ -556,7 +562,7 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 		filepath.Join("..", "..", "web", "app.js"): {
 			`function programPreviewURL(program, resource, size)`,
 			`function renderProgramPreview(program, resource)`,
-			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview.png?size="`,
+			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview?size="`,
 			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
 			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`openAdjustablePlayer(program.title || program.id || "録画済み", function (query)`,
@@ -1755,7 +1761,7 @@ func TestAPIRecordedFileJSONM2TSAndDelete(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/recorded/abc/file", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusUnsupportedMediaType || res.Body.String() != "Unsupported Media Type\n" {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"size": 6`) {
 		t.Fatalf("file without extension status=%d body=%q", res.Code, res.Body.String())
 	}
 

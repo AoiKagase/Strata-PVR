@@ -550,6 +550,9 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	apiType := apiExtension(path)
 	path = trimLastExtension(path)
 	parts := splitPath(path)
+	if apiType == "" {
+		apiType = nativeAPIType(parts)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if len(parts) > 0 && parts[0] == "index" && apiType == "html" {
 		legacyHTTPError(w, r, http.StatusBadRequest)
@@ -2284,6 +2287,9 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, co
 		return
 	}
 	apiType := apiExtension(r.URL.Path)
+	if apiType == "" {
+		apiType = "png"
+	}
 	if apiType != "png" && apiType != "jpg" && apiType != "txt" {
 		legacyHTTPError(w, r, http.StatusUnsupportedMediaType)
 		return
@@ -3425,6 +3431,19 @@ func knownAPIResource(name string) bool {
 	default:
 		return false
 	}
+}
+
+func nativeAPIType(parts []string) string {
+	if len(parts) >= 2 && parts[0] == "log" {
+		return "txt"
+	}
+	if len(parts) == 3 && parts[2] == "preview" {
+		return "png"
+	}
+	if len(parts) == 3 && parts[0] == "channel" && parts[2] == "logo" {
+		return "png"
+	}
+	return "json"
 }
 
 func apiExtension(path string) string {
