@@ -1865,7 +1865,15 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	}
 	gotArgs = gotFileArgs
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-ss 2 -f mpegts -i " + recordedPath, "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p", "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-t 30"} {
+	encoder, err := detectedH264Encoder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoderOptions := "-profile:v constrained_baseline -pix_fmt yuv420p"
+	if encoder == "libx264" {
+		encoderOptions = "-profile:v main -preset veryfast -pix_fmt yuv420p"
+	}
+	for _, want := range []string{"-ss 2 -f mpegts -i " + recordedPath, "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v " + encoder, encoderOptions, "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}

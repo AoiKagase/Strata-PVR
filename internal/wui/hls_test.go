@@ -8,7 +8,7 @@ import (
 
 func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
 	dir := t.TempDir()
-	args := hlsFFmpegArgs("recording.m2ts", dir, hlsPresets["540p"], 12, 30, "secondary")
+	args := hlsFFmpegArgs("recording.m2ts", dir, hlsPresets["540p"], 12, 30, "secondary", "libopenh264")
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
 		"-ss 12", "-t 30", "-map 0:a:1?", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p",

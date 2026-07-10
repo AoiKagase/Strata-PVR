@@ -166,6 +166,10 @@ func (s *server) serveHLSSegment(w http.ResponseWriter, r *http.Request, name st
 }
 
 func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
+	encoder, err := detectedH264Encoder()
+	if err != nil {
+		return nil, err
+	}
 	key := fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%s", filePath, quality, start, duration, audio)
 	sum := sha256.Sum256([]byte(key))
 	id := hex.EncodeToString(sum[:12])
@@ -189,7 +193,7 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), cancel: cancel, done: make(chan struct{})}
-	args := hlsFFmpegArgs(filePath, dir, preset, start, duration, audio)
+	args := hlsFFmpegArgs(filePath, dir, preset, start, duration, audio, encoder)
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	logFile, err := os.Create(filepath.Join(dir, "ffmpeg.log"))
 	if err != nil {
@@ -248,7 +252,7 @@ func (m *hlsSessionManager) expire(id string) {
 	_ = os.RemoveAll(session.dir)
 }
 
-func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio string) []string {
+func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio, encoder string) []string {
 	args := []string{"-v", "error", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err"}
 	if start > 0 {
 		args = append(args, "-ss", strconv.Itoa(start))
@@ -262,8 +266,9 @@ func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio st
 		audioMap = "0:a:1?"
 	}
 	filter := fmt.Sprintf("yadif,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", p.width, p.height, p.width, p.height)
-	args = append(args, "-map", "0:v:0", "-map", audioMap, "-sn", "-dn", "-filter:v", filter,
-		"-c:v", "libopenh264", "-profile:v", "constrained_baseline", "-pix_fmt", "yuv420p", "-r", "24", "-g", "48", "-keyint_min", "48",
+	args = append(args, "-map", "0:v:0", "-map", audioMap, "-sn", "-dn", "-filter:v", filter, "-c:v", encoder)
+	args = appendH264CompatibilityArgs(args, encoder)
+	args = append(args, "-r", "24", "-g", "48", "-keyint_min", "48",
 		"-b:v", p.video, "-maxrate:v", p.video, "-bufsize:v", bitrateTimes(p.video, 2),
 		"-c:a", "aac", "-ac", "2", "-ar", "48000", "-b:a", p.audio,
 		"-hls_time", "4", "-hls_playlist_type", "vod", "-hls_flags", "independent_segments+temp_file",

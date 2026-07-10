@@ -2787,12 +2787,26 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 }
 
 func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
+	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
+		if _, err := detectedH264Encoder(); err != nil {
+			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "H.264 encoder detection failed: %v", err)
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
+			return
+		}
+	}
 	args := watchFFmpegArgs(r, format, live)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status)
 }
 
 func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
+	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
+		if _, err := detectedH264Encoder(); err != nil {
+			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "H.264 encoder detection failed: %v", err)
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
+			return
+		}
+	}
 	args := watchFFmpegFileArgs(r, format, filePath)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK)
@@ -2837,7 +2851,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if format == "mp4" {
 		container = "mp4"
 		if videoCodec == "" {
-			videoCodec = "libopenh264"
+			videoCodec, _ = detectedH264Encoder()
 		}
 		if audioCodec == "" {
 			audioCodec = "aac"
@@ -2909,9 +2923,9 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		}
 	}
 	if videoCodec == "libx264" {
-		args = append(args, "-profile:v", "baseline", "-preset", "ultrafast", "-tune", "fastdecode,zerolatency")
+		args = appendH264CompatibilityArgs(args, videoCodec)
 	} else if videoCodec == "libopenh264" {
-		args = append(args, "-profile:v", "constrained_baseline", "-pix_fmt", "yuv420p")
+		args = appendH264CompatibilityArgs(args, videoCodec)
 	}
 	if container == "mp4" {
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
