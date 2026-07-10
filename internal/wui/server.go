@@ -1578,7 +1578,6 @@ type recordedCleanupResult struct {
 	Total      int                   `json:"total"`
 	Removed    int                   `json:"removed"`
 	Kept       int                   `json:"kept"`
-	Backup     string                `json:"backup,omitempty"`
 	Items      []recordedCleanupItem `json:"items"`
 	Recorded   []legacy.Program      `json:"-"`
 	removedIDs []string
@@ -1631,24 +1630,11 @@ func (s *server) runRecordedCleanup(recorded []legacy.Program, apply bool) (reco
 	}
 	result.Recorded = kept
 	if apply && result.Removed > 0 {
-		if s.paths.Database == "" {
-			backup, err := storage.BackupFile(s.paths.Recorded)
-			if err != nil {
+		for _, id := range result.removedIDs {
+			if err := programstore.Remove(context.Background(), s.paths.Database, programstore.Recorded, id); err != nil {
 				return result, err
 			}
-			result.Backup = backup
-		}
-		if s.paths.Database == "" {
-			if err := s.writePrograms(context.Background(), s.paths.Recorded, kept); err != nil {
-				return result, err
-			}
-		} else {
-			for _, id := range result.removedIDs {
-				if err := programstore.Remove(context.Background(), s.paths.Database, programstore.Recorded, id); err != nil {
-					return result, err
-				}
-				s.removeProgramPreviewCache(context.Background(), id)
-			}
+			s.removeProgramPreviewCache(context.Background(), id)
 		}
 	}
 	return result, nil
@@ -1763,12 +1749,6 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	case http.MethodDelete:
 		if recorded[index].Recorded != "" {
 			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
-		}
-		if s.paths.Database == "" {
-			if _, err := storage.BackupFile(s.paths.Recorded); err != nil {
-				legacyHTTPError(w, r, http.StatusInternalServerError)
-				return
-			}
 		}
 		if err := programstore.Remove(r.Context(), s.paths.Database, programstore.Recorded, id); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)

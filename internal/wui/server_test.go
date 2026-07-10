@@ -1653,7 +1653,7 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &dryRun); err != nil {
 		t.Fatal(err)
 	}
-	if dryRun.Total != 3 || dryRun.Kept != 1 || dryRun.Removed != 2 || dryRun.Backup != "" {
+	if dryRun.Total != 3 || dryRun.Kept != 1 || dryRun.Removed != 2 {
 		t.Fatalf("unexpected dry-run result: %#v", dryRun)
 	}
 	var afterDryRun []legacy.Program
@@ -1681,7 +1681,7 @@ func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &applied); err != nil {
 		t.Fatal(err)
 	}
-	if applied.Removed != 2 || applied.Kept != 1 || applied.Backup != "" {
+	if applied.Removed != 2 || applied.Kept != 1 {
 		t.Fatalf("unexpected apply result: %#v", applied)
 	}
 	backups, err = filepath.Glob(paths.Recorded + ".bak-*")

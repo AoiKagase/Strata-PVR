@@ -1272,12 +1272,6 @@ func cleanup(p paths, args []string, stdout io.Writer) error {
 		return nil
 	}
 	if len(removed) > 0 {
-		if p.database == "" {
-			if _, err := storage.BackupFile(p.recorded); err != nil {
-				return err
-			}
-			return programstore.Write(context.Background(), "", programstore.Recorded, kept)
-		}
 		for _, id := range removed {
 			if err := programstore.Remove(context.Background(), p.database, programstore.Recorded, id); err != nil {
 				return err
