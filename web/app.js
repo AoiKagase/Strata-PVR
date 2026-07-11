@@ -775,9 +775,11 @@
       decorated._reserveState = reserve;
     }
     if (active) {
+      decorated.abort = Boolean(active.abort);
+    }
+    if (active && !active.abort) {
       decorated.isRecording = true;
       decorated.isManualReserved = Boolean(active.isManualReserved || decorated.isManualReserved);
-      decorated.abort = Boolean(active.abort);
       decorated.pid = active.pid;
       decorated.recorded = active.recorded || decorated.recorded;
       decorated._recordingState = active;
@@ -804,6 +806,12 @@
       }
     }
     return null;
+  }
+
+  function activeRecordingPrograms() {
+    return (state.recording || []).filter(function (program) {
+      return program && !program.abort;
+    });
   }
 
   function programDialogActions(program) {
@@ -4542,7 +4550,7 @@
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
     updateRecordedPaginationControls(filteredRecorded.length);
 
-    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
+    renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
@@ -4563,7 +4571,7 @@
     updateOperationalStatus();
 
     if (state.currentView === "dashboard") {
-      renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
+      renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
       renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
       renderOnAirList();
       return;

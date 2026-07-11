@@ -580,8 +580,11 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 		filepath.Join("..", "..", "web", "app.js"): {
 			`function programPreviewURL(program, resource, size)`,
 			`function renderProgramPreview(program, resource)`,
+			`function activeRecordingPrograms()`,
+			`return (state.recording || []).filter(function (program)`,
+			`if (active && !active.abort)`,
 			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview?size="`,
-			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });`,
+			`renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });`,
 			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`openAdjustablePlayer(program.title || program.id || "録画済み", function (query)`,
 			`return recordedWatchURL(program, "mp4", query);`,
