@@ -610,6 +610,7 @@ func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
 		`"all": 0`,
 		`saveHiddenChannels`,
 		`renderScheduleGuide`,
+		`text(byId("scheduleRecordingSummary"), "録画中 " + activeRecordingPrograms().length)`,
 	} {
 		if !strings.Contains(appText, want) {
 			t.Fatalf("native WUI app missing %q", want)

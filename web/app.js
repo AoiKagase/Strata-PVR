@@ -1347,7 +1347,7 @@
       scheduleOperator.textContent = statusText;
       scheduleOperator.className = "schedule-status-pill" + (state.lastError ? " error" : (alive ? " ok" : ""));
     }
-    text(byId("scheduleRecordingSummary"), "録画中 " + state.recording.length);
+    text(byId("scheduleRecordingSummary"), "録画中 " + activeRecordingPrograms().length);
     text(byId("scheduleReserveSummary"), "予約 " + state.reserves.length);
     text(byId("scheduleConflictSummary"), "競合 " + conflicts);
     toggleClass(byId("scheduleConflictSummary"), "has-conflicts", conflicts > 0);
