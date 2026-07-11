@@ -85,6 +85,7 @@
       <div class="main-nav-links">
         <a href="#dashboard" data-view-link="dashboard" class="active">ダッシュボード</a>
         <a href="#schedule" data-view-link="schedule">番組表</a>
+        <a href="#search" data-view-link="search">番組検索</a>
         <a href="#reserves" data-view-link="reserves">予約</a>
         <a href="#recorded" data-view-link="recorded">録画済み</a>
         <a href="#rules" data-view-link="rules">ルール</a>
@@ -191,6 +192,73 @@
         <span id="scheduleZoomLabel" class="schedule-zoom-label">標準</span>
         <button id="scheduleZoomInButton" type="button" title="時間間隔を広くする" aria-label="番組表を拡大">+</button>
       </div>
+    </section>
+
+    <section class="view" data-view="search" hidden>
+      <div class="view-head">
+        <div>
+          <h2>番組検索</h2>
+          <p>番組表から条件に一致する今後の番組を検索します。</p>
+        </div>
+      </div>
+      <div class="list-filter-controls search-filter-controls" aria-label="番組検索条件">
+        <label class="control-field" for="searchQuery">
+          <span>検索</span>
+          <input id="searchQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
+        </label>
+        <label class="control-field" for="searchCategory">
+          <span>ジャンル</span>
+          <select id="searchCategory">
+            <option value="">全ジャンル</option>
+          </select>
+        </label>
+        <label class="control-field" for="searchType">
+          <span>種別</span>
+          <select id="searchType">
+            <option value="">すべて</option>
+            <option value="GR">GR</option>
+            <option value="BS">BS</option>
+            <option value="CS">CS</option>
+            <option value="EX">EX</option>
+          </select>
+        </label>
+        <label class="control-field" for="searchTitle">
+          <span>タイトル</span>
+          <input id="searchTitle" type="search" autocomplete="off" placeholder="タイトル">
+        </label>
+        <label class="control-field" for="searchDescription">
+          <span>説明</span>
+          <input id="searchDescription" type="search" autocomplete="off" placeholder="説明文">
+        </label>
+        <label class="control-field" for="searchProgramID">
+          <span>番組ID</span>
+          <input id="searchProgramID" type="search" autocomplete="off" placeholder="program id">
+        </label>
+        <label class="control-field" for="searchChannelID">
+          <span>チャンネルID</span>
+          <input id="searchChannelID" type="search" autocomplete="off" placeholder="channel id">
+        </label>
+        <label class="control-field" for="searchStartHour">
+          <span>何時から</span>
+          <input id="searchStartHour" type="number" min="0" max="23" step="1" inputmode="numeric" placeholder="0">
+        </label>
+        <label class="control-field" for="searchEndHour">
+          <span>何時まで</span>
+          <input id="searchEndHour" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="24">
+        </label>
+        <button id="searchFilterReset" class="filter-clear-button" type="button">クリア</button>
+        <span id="searchListFilterSummary" class="list-filter-summary">0件</span>
+      </div>
+      <div class="list-pagination-controls">
+        <span id="searchPageSummary" class="list-page-summary">番組検索</span>
+        <div class="pagination-buttons">
+          <button id="searchFirstPage" type="button" title="最初のページ">最初</button>
+          <button id="searchPrevPage" type="button" title="前のページ">前へ</button>
+          <button id="searchNextPage" type="button" title="次のページ">次へ</button>
+          <button id="searchLastPage" type="button" title="最後のページ">最後</button>
+        </div>
+      </div>
+      <div id="searchList" class="list empty">番組検索データがありません</div>
     </section>
 
     <section class="view" data-view="reserves" hidden>

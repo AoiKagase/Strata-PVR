@@ -31,3 +31,32 @@ func TestBuildScheduleFiltersAndOrders(t *testing.T) {
 		t.Fatalf("unexpected programs: %#v", schedule[0].Programs)
 	}
 }
+
+func TestProgramFlagsKeepARIBExternalCharacters(t *testing.T) {
+	title := "番組\ue0f8\ue0f9\ue0fa\ue0fb\ue0fc\ue0fd\ue0fe\ue0ff\ue180\ue181\ue182\ue183\ue184\ue185\ue186\ue187\ue18a\ue18b\ue18c\ue18d\ue18e⚿\ue190\ue191\ue192\ue193\ue194\ue195\ue196\ue197\ue198\ue199\ue19a㊙\ue19c"
+	if got := stripProgramFlags(title); got != "番組" {
+		t.Fatalf("stripProgramFlags = %q", got)
+	}
+	got := extractFlags(title)
+	want := []string{"HV", "SD", "P", "W", "MV", "手", "字", "双", "デ", "S", "二", "多", "解", "SS", "B", "N", "天", "交", "映", "無", "料", "鍵マーク", "前", "後", "再", "新", "初", "終", "生", "販", "声", "吹", "PPV", "秘", "ほか"}
+	if len(got) != len(want) {
+		t.Fatalf("extractFlags = %#v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("extractFlags[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestProgramFlagsIncludeNewAndEnd(t *testing.T) {
+	title := "[新][終]番組"
+	if got := stripProgramFlags(title); got != "番組" {
+		t.Fatalf("stripProgramFlags = %q", got)
+	}
+	got := extractFlags(title)
+	want := []string{"新", "終"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("extractFlags = %#v, want %#v", got, want)
+	}
+}

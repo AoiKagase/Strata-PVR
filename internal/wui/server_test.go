@@ -684,6 +684,42 @@ func TestNativeDashboardShowsProgramCategoryChips(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardShowsProgramFlagBadges(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function programFlagNames(program)`,
+			`function stripProgramFlags(title)`,
+			`function setProgramTitleContent(root, program)`,
+			`function isAribExternalFlag(value)`,
+			`function normalizeAribExternalFlags(value)`,
+			`var displayProgram = cloneProgram(program || {});`,
+			`"\uE0F8": "HV"`,
+			`"\uE19C": "ほか"`,
+			`"㊙": "秘"`,
+			`program-flag-badge program-flag-`,
+			`setProgramTitleContent(title, program);`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.program-flag-badge`,
+			`.program-flag-new`,
+			`.program-flag-end`,
+			`.program-flag-repeat`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardStorageSummaryShowsRecordedTarget(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {
@@ -1590,6 +1626,52 @@ func TestAPIScheduleChannelRoutes(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("missing channel status = %d", res.Code)
+	}
+}
+
+func TestAPISearchUsesStrataRouteAndLegacyFilters(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	schedule := []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{ID: "1gqk8hs", Name: "Test Channel", Type: "GR"},
+		Programs: []legacy.Program{
+			{ID: "past", Title: "過去", Start: now.Add(-2 * time.Hour).UnixMilli(), End: now.Add(-time.Hour).UnixMilli()},
+			{ID: "wanted", FullTitle: "検索対象番組", Detail: "説明文", Category: "anime", Start: now.Add(time.Hour).UnixMilli(), End: now.Add(2 * time.Hour).UnixMilli()},
+			{ID: "other", Title: "別番組", Category: "news", Start: now.Add(3 * time.Hour).UnixMilli(), End: now.Add(4 * time.Hour).UnixMilli()},
+		},
+	}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?chid=1gqk8hs&title=%E6%A4%9C%E7%B4%A2&cat=anime", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("search status = %d body=%s", res.Code, res.Body.String())
+	}
+	var programs []legacy.Program
+	if err := json.Unmarshal(res.Body.Bytes(), &programs); err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) != 1 || programs[0].ID != "wanted" || programs[0].Channel.ID != "1gqk8hs" {
+		t.Fatalf("unexpected search result: %#v", programs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/search?start=invalid", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("invalid search hour status = %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/search", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusMethodNotAllowed || res.Header().Get("Allow") != "HEAD, GET" {
+		t.Fatalf("search method status=%d allow=%q", res.Code, res.Header().Get("Allow"))
 	}
 }
 

@@ -793,6 +793,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleSchedule(w, r)
+	case len(parts) == 1 && parts[0] == "search":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleSearch(w, r)
 	case len(parts) == 2 && parts[0] == "schedule" && parts[1] == "programs":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -3539,6 +3544,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"PUT"}, true
 	case len(parts) == 1 && parts[0] == "schedule":
 		return []string{"HEAD", "GET"}, true
+	case len(parts) == 1 && parts[0] == "search":
+		return []string{"HEAD", "GET"}, true
 	case len(parts) == 2 && parts[0] == "schedule" && (parts[1] == "programs" || parts[1] == "broadcasting"):
 		return []string{"GET"}, true
 	case len(parts) == 2 && parts[0] == "schedule":
@@ -3589,7 +3596,7 @@ func methodAllowed(method string, allowed []string) bool {
 
 func knownAPIResource(name string) bool {
 	switch name {
-	case "status", "scheduler", "storage", "metrics", "log", "config", "rules", "schedule", "reserves", "recording", "recorded", "program", "channel":
+	case "status", "scheduler", "storage", "metrics", "log", "config", "rules", "schedule", "search", "reserves", "recording", "recorded", "program", "channel":
 		return true
 	default:
 		return false

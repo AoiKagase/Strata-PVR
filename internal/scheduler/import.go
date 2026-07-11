@@ -134,6 +134,12 @@ func convertPrograms(channel legacy.Channel, programs []mirakurun.Program) []leg
 }
 
 func stripProgramFlags(title string) string {
+	title = strings.Map(func(r rune) rune {
+		if isARIBExternalFlag(r) {
+			return -1
+		}
+		return r
+	}, title)
 	replacer := strings.NewReplacer("[無料]", "", "[生放送]", "", "[新]", "", "[終]", "", "[再]", "", "[字]", "", "[デ]", "", "[解]", "", "[無]", "", "[二]", "", "[S]", "", "[SS]", "", "[初]", "", "[生]", "", "[Ｎ]", "", "[映]", "", "[多]", "", "[双]", "")
 	return strings.TrimSpace(replacer.Replace(title))
 }
@@ -145,10 +151,47 @@ func extractFlags(title string) []string {
 	}
 	known := []string{"新", "終", "再", "字", "デ", "解", "無", "二", "S", "SS", "初", "生", "Ｎ", "映", "多", "双"}
 	flags := []string{}
+	seen := map[string]bool{}
+	for _, r := range title {
+		if flag, ok := aribExternalFlagName(r); ok {
+			if !seen[flag] {
+				flags = append(flags, flag)
+				seen[flag] = true
+			}
+		}
+	}
 	for _, flag := range known {
 		if strings.Contains(title, "["+flag+"]") || strings.Contains(title, "【"+flag+"】") || strings.Contains(title, "("+flag+")") {
-			flags = append(flags, flag)
+			if !seen[flag] {
+				flags = append(flags, flag)
+				seen[flag] = true
+			}
 		}
 	}
 	return flags
+}
+
+func isARIBExternalFlag(r rune) bool {
+	_, ok := aribExternalFlagName(r)
+	return ok
+}
+
+func aribExternalFlagName(r rune) (string, bool) {
+	if name, ok := map[rune]string{
+		'\ue0f8': "HV", rune(0xe0f9): "SD", '\ue0fa': "P", '\ue0fb': "W", '\ue0fc': "MV",
+		'\ue0fd': "手", '\ue0fe': "字", '\ue0ff': "双",
+		'\ue180': "デ", '\ue181': "S", '\ue182': "二", '\ue183': "多", '\ue184': "解", '\ue185': "SS", '\ue186': "B", '\ue187': "N",
+		'\ue18a': "天", '\ue18b': "交", '\ue18c': "映", '\ue18d': "無", '\ue18e': "料",
+		'⚿': "鍵マーク", '\ue190': "前", '\ue191': "後", '\ue192': "再", '\ue193': "新", '\ue194': "初", '\ue195': "終", '\ue196': "生", '\ue197': "販", '\ue198': "声", '\ue199': "吹", '\ue19a': "PPV", '㊙': "秘", '\ue19c': "ほか",
+	}[r]; ok {
+		return name, true
+	}
+	// Normalize the Unicode form used by older Chinachu/Mirakurun data too.
+	if name, ok := map[rune]string{
+		'🈟': "新", '🈡': "終", '🈞': "再", '🈑': "字", '🈓': "デ", '🈖': "解", '🈚': "無", '🈔': "二",
+		'🅂': "S", '🅍': "SS", '🈠': "初", '🈢': "生", '🄽': "N", '🈙': "映", '🈕': "多", '🈒': "双",
+	}[r]; ok {
+		return name, true
+	}
+	return "", false
 }

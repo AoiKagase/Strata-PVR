@@ -65,6 +65,7 @@
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
     listFilters: loadListFilters(),
+    searchPage: 1,
     recordedPage: 1,
     recordedPageSize: loadRecordedPageSize(),
     programStateIndex: { reserves: {}, recording: {} },
@@ -166,7 +167,8 @@
     return {
       rules: { query: "", state: "", sort: "indexAsc" },
       recorded: { query: "", category: "", sort: "startDesc" },
-      reserves: { query: "", category: "", sort: "startAsc" }
+      reserves: { query: "", category: "", sort: "startAsc" },
+      search: { query: "", category: "", type: "", title: "", description: "", programID: "", channelID: "", startHour: "", endHour: "" }
     };
   }
 
@@ -632,7 +634,129 @@
   }
 
   function programTitle(program) {
-    return program.fullTitle || program.title || program.id || "無題";
+    var raw = program && (program.title || program.fullTitle) || "";
+    return normalizeAribExternalFlags(stripProgramFlags(raw)) || program.id || "無題";
+  }
+
+  function programFullTitle(program) {
+    return normalizeAribExternalFlags(program.fullTitle || program.title || program.id || "無題");
+  }
+
+  function programFlagNames(program) {
+    var known = ["新", "終", "再", "字", "デ", "解", "無", "二", "S", "SS", "初", "生", "Ｎ", "映", "多", "双"];
+    var aliases = { "無料": "無", "生放送": "生" };
+    var found = {};
+    var flags = [];
+    function add(flag) {
+      if (!found[flag]) {
+        found[flag] = true;
+        flags.push(flag);
+      }
+    }
+    (Array.isArray(program && program.flags) ? program.flags : []).forEach(function (flag) {
+      var value = String(flag || "");
+      if (value) {
+        add(aribExternalFlagName(value) || value);
+      }
+    });
+    var raw = String(program && (program.fullTitle || program.title) || "");
+    known.forEach(function (flag) {
+      var escaped = flag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp("(?:\\[|【|\\()" + escaped + "(?:\\]|】|\\))").test(raw)) {
+        add(flag);
+      }
+    });
+    Object.keys(aliases).forEach(function (source) {
+      var escaped = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp("(?:\\[|【|\\()" + escaped + "(?:\\]|】|\\))").test(raw)) {
+        add(aliases[source]);
+      }
+    });
+    Array.from(raw).forEach(function (symbol) {
+      if (isAribExternalFlag(symbol)) {
+        add(aribExternalFlagName(symbol));
+      }
+    });
+    return flags;
+  }
+
+  function isAribExternalFlag(value) {
+    if (!value || value.length === 0) {
+      return false;
+    }
+    return Boolean(aribExternalFlagName(value));
+  }
+
+  function aribExternalFlagName(value) {
+    var names = {
+      "\uE0F8": "HV", "\uE0F9": "SD", "\uE0FA": "P", "\uE0FB": "W", "\uE0FC": "MV",
+      "\uE0FD": "手", "\uE0FE": "字", "\uE0FF": "双",
+      "\uE180": "デ", "\uE181": "S", "\uE182": "二", "\uE183": "多", "\uE184": "解", "\uE185": "SS", "\uE186": "B", "\uE187": "N",
+      "\uE18A": "天", "\uE18B": "交", "\uE18C": "映", "\uE18D": "無", "\uE18E": "料",
+      "⚿": "鍵マーク", "\uE190": "前", "\uE191": "後", "\uE192": "再", "\uE193": "新", "\uE194": "初", "\uE195": "終", "\uE196": "生", "\uE197": "販", "\uE198": "声", "\uE199": "吹", "\uE19A": "PPV", "㊙": "秘", "\uE19C": "ほか"
+    };
+    if (Object.prototype.hasOwnProperty.call(names, value)) {
+      return names[value];
+    }
+    var legacyNames = {
+      "🈟": "新", "🈡": "終", "🈞": "再", "🈑": "字", "🈓": "デ", "🈖": "解", "🈚": "無", "🈔": "二",
+      "🅂": "S", "🅍": "SS", "🈠": "初", "🈢": "生", "🄽": "N", "🈙": "映", "🈕": "多", "🈒": "双"
+    };
+    if (Object.prototype.hasOwnProperty.call(legacyNames, value)) {
+      return legacyNames[value];
+    }
+    return "";
+  }
+
+  function normalizeAribExternalFlags(value) {
+    return Array.from(String(value || "")).map(function (character) {
+      return aribExternalFlagName(character) || character;
+    }).join("");
+  }
+
+  function stripProgramFlags(title) {
+    var known = ["無料", "生放送", "新", "終", "再", "字", "デ", "解", "無", "二", "S", "SS", "初", "生", "Ｎ", "映", "多", "双"];
+    var pattern = known.map(function (flag) {
+      return flag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }).join("|");
+    return Array.from(String(title || "").replace(new RegExp("(?:\\[|【|\\()(?:" + pattern + ")(?:\\]|】|\\))", "g"), "")).filter(function (character) {
+      return !isAribExternalFlag(character);
+    }).join("").replace(/^\s+|\s+$/g, "");
+  }
+
+  function programFlagClass(flag) {
+    return {
+      "新": "new",
+      "終": "end",
+      "再": "repeat",
+      "字": "caption",
+      "無": "free",
+      "生": "live"
+    }[flag] || "default";
+  }
+
+  function setProgramTitleContent(root, program) {
+    if (!root) {
+      return;
+    }
+    var flags = programFlagNames(program);
+    var displayProgram = cloneProgram(program || {});
+    var rawTitle = displayProgram.fullTitle || displayProgram.title || displayProgram.id || "無題";
+    displayProgram.title = normalizeAribExternalFlags(stripProgramFlags(rawTitle));
+    displayProgram.fullTitle = normalizeAribExternalFlags(rawTitle);
+    root.innerHTML = "";
+    flags.forEach(function (flag) {
+      var badge = document.createElement("span");
+      badge.className = "program-flag-badge program-flag-" + programFlagClass(flag);
+      badge.textContent = flag;
+      badge.title = "番組フラグ: " + flag;
+      badge.setAttribute("aria-label", flag);
+      root.appendChild(badge);
+    });
+    var label = document.createElement("span");
+    label.className = "program-title-label";
+    label.textContent = programTitle(displayProgram);
+    root.appendChild(label);
   }
 
   function channelName(program) {
@@ -1108,7 +1232,52 @@
 
   function currentView() {
     var hash = (window.location.hash || "#dashboard").replace("#", "");
-    return hash || "dashboard";
+    if (/^!\/search\/top\//.test(hash)) {
+      applyLegacySearchHash(hash);
+      return "search";
+    }
+    return (hash.split("?", 1)[0] || "dashboard");
+  }
+
+  function decodeHashValue(value) {
+    try {
+      return decodeURIComponent(String(value || "").replace(/\+/g, " "));
+    } catch (error) {
+      return String(value || "");
+    }
+  }
+
+  function parseSearchHashQuery(value) {
+    var result = {};
+    String(value || "").replace(/^\?|\/$/g, "").split("&").forEach(function (part) {
+      if (!part) {
+        return;
+      }
+      var separator = part.indexOf("=");
+      var key = separator >= 0 ? part.slice(0, separator) : part;
+      var item = separator >= 0 ? part.slice(separator + 1) : "";
+      result[decodeHashValue(key)] = decodeHashValue(item);
+    });
+    return result;
+  }
+
+  function applyLegacySearchHash(hash) {
+    var match = hash.match(/^!\/search\/top\/([^/]*)\/?$/);
+    if (!match) {
+      return;
+    }
+    var params = parseSearchHashQuery(match[1]);
+    var filter = defaultListFilter("search");
+    filter.title = params.title || "";
+    filter.description = params.desc || params.description || "";
+    filter.category = params.cat || params.category || "";
+    filter.type = params.type || "";
+    filter.programID = params.pgid || params.programID || "";
+    filter.channelID = params.chid || params.channelID || "";
+    filter.startHour = params.start || params.startHour || "";
+    filter.endHour = params.end || params.endHour || "";
+    state.listFilters.search = filter;
+    state.searchPage = Math.max(1, (parseInt(params.page, 10) || 0) + 1);
   }
 
   function syncStickyOffsets() {
@@ -1296,6 +1465,8 @@
         startMetricsRefresh();
       } else if (state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves") {
         renderOperationalData();
+      } else if (state.currentView === "search") {
+        renderSearch();
       } else if (state.currentView === "rules") {
         renderRules();
         renderRuleFormState();
@@ -1371,6 +1542,7 @@
   function focusCurrentSearch() {
     var view = currentView();
     var focusByView = {
+      "search": "searchQuery",
       "reserves": "reserveListQuery",
       "recorded": "recordedListQuery",
       "rules": "ruleListQuery",
@@ -2436,11 +2608,13 @@
     button.type = "button";
     button.className = "channel-link";
     button.textContent = label || channelID || "不明なチャンネル";
-    button.title = "番組表をこのチャンネルで絞り込む";
+    button.title = "番組をこのチャンネルで検索";
     button.addEventListener("click", function () {
-      state.scheduleChannel = channelID || "";
-      window.location.hash = "schedule";
-      renderSchedule();
+      state.listFilters.search.channelID = channelID || "";
+      state.searchPage = 1;
+      saveListFilters();
+      window.location.hash = "search";
+      renderSearch();
     });
     return button;
   }
@@ -2620,8 +2794,8 @@
     var title = document.createElement("button");
     title.type = "button";
     title.className = "program-title-button";
-    title.textContent = programTitle(program);
-    title.title = "番組詳細を開く";
+    setProgramTitleContent(title, program);
+    title.title = programFullTitle(program) + "\n番組詳細を開く";
     title.addEventListener("click", function () {
       openProgramDialog(program);
     });
@@ -2691,8 +2865,8 @@
     nowPlaying.type = "button";
     nowPlaying.className = "program-title-button live-channel-program";
     if (current) {
-      nowPlaying.textContent = programTitle(current);
-      nowPlaying.title = "番組詳細を開く";
+      setProgramTitleContent(nowPlaying, current);
+      nowPlaying.title = programFullTitle(current) + "\n番組詳細を開く";
       nowPlaying.addEventListener("click", function () {
         openProgramDialog(current);
       });
@@ -2838,6 +3012,161 @@
     root.className = "list";
     items.slice(0, limit || 8).forEach(function (program) {
       root.appendChild(renderProgramRow(program, actions, true, options));
+    });
+  }
+
+  var searchPageSize = 50;
+
+  function searchResults() {
+    var filter = state.listFilters.search || defaultListFilter("search");
+    var query = normalizeSearchText(filter.query);
+    var title = normalizeSearchText(filter.title);
+    var description = normalizeSearchText(filter.description);
+    var now = Date.now();
+    var results = [];
+    (state.schedule || []).forEach(function (channel) {
+      (channel.programs || []).forEach(function (source) {
+        if (!source || (source.end || 0) < now) {
+          return;
+        }
+        var program = cloneProgram(source);
+        if (!program.channel) {
+          program.channel = channel;
+        } else if (typeof program.channel === "object") {
+          program.channel = cloneProgram(program.channel);
+          if (!program.channel.id && channel.id) {
+            program.channel.id = channel.id;
+          }
+          if (!program.channel.name && channel.name) {
+            program.channel.name = channel.name;
+          }
+          if (!program.channel.type && channel.type) {
+            program.channel.type = channel.type;
+          }
+        }
+        var haystack = normalizeSearchText([
+          program.id, programTitle(program), program.title, program.fullTitle,
+          program.detail, program.description, programCategory(program), channelName(program)
+        ].join(" "));
+        if (query && haystack.indexOf(query) < 0) {
+          return;
+        }
+        if (title && normalizeSearchText(programTitle(program)).indexOf(title) < 0) {
+          return;
+        }
+        if (description && normalizeSearchText(program.detail || program.description || "").indexOf(description) < 0) {
+          return;
+        }
+        if (filter.category && programCategory(program) !== filter.category) {
+          return;
+        }
+        if (filter.type && programChannelType(program) !== filter.type) {
+          return;
+        }
+        if (filter.programID && String(program.id || "") !== String(filter.programID)) {
+          return;
+        }
+        if (filter.channelID && programChannelID(program) !== String(filter.channelID)) {
+          return;
+        }
+        if (!matchesSearchHours(program, filter.startHour, filter.endHour)) {
+          return;
+        }
+        results.push(program);
+      });
+    });
+    return results.sort(function (a, b) {
+      return (a.start || 0) - (b.start || 0);
+    });
+  }
+
+  function matchesSearchHours(program, startHour, endHour) {
+    if (!startHour && !endHour) {
+      return true;
+    }
+    var startRule = startHour === "" ? 0 : Number(startHour);
+    var endRule = endHour === "" ? 24 : Number(endHour);
+    if (!isFinite(startRule) || !isFinite(endRule)) {
+      return true;
+    }
+    var start = new Date(program.start || 0).getHours();
+    var end = new Date(programEnd(program)).getHours();
+    if (start > end) {
+      end += 24;
+    }
+    if (startRule > endRule) {
+      return !((startRule > start) && (endRule < end));
+    }
+    return !(startRule > start || endRule < end);
+  }
+
+  function renderSearchFilterOptions(results) {
+    var categories = {};
+    (state.schedule || []).forEach(function (channel) {
+      (channel.programs || []).forEach(function (program) {
+        if (program && program.category) {
+          categories[String(program.category)] = true;
+        }
+      });
+    });
+    var category = byId("searchCategory");
+    if (category) {
+      var currentCategory = (state.listFilters.search || {}).category || "";
+      category.innerHTML = "<option value=\"\">全ジャンル</option>";
+      Object.keys(categories).sort().forEach(function (value) {
+        var option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        category.appendChild(option);
+      });
+      category.value = currentCategory;
+      if (category.value !== currentCategory) {
+        state.listFilters.search.category = "";
+      }
+    }
+    var type = byId("searchType");
+    if (type) {
+      type.value = (state.listFilters.search || {}).type || "";
+    }
+    var count = results.length;
+    var pageCount = Math.max(1, Math.ceil(count / searchPageSize));
+    state.searchPage = Math.max(1, Math.min(pageCount, Number(state.searchPage) || 1));
+    var start = count ? (state.searchPage - 1) * searchPageSize + 1 : 0;
+    var end = count ? Math.min(count, state.searchPage * searchPageSize) : 0;
+    text(byId("searchListFilterSummary"), count ? start + "-" + end + " / " + count + "件" : "0件");
+    text(byId("searchPageSummary"), count ? state.searchPage + " / " + pageCount + "ページ" : "0ページ");
+    [
+      { id: "searchFirstPage", disabled: state.searchPage <= 1 || !count },
+      { id: "searchPrevPage", disabled: state.searchPage <= 1 || !count },
+      { id: "searchNextPage", disabled: state.searchPage >= pageCount || !count },
+      { id: "searchLastPage", disabled: state.searchPage >= pageCount || !count }
+    ].forEach(function (item) {
+      var button = byId(item.id);
+      if (button) {
+        button.disabled = item.disabled;
+      }
+    });
+  }
+
+  function renderSearch() {
+    var results = searchResults();
+    renderSearchFilterOptions(results);
+    var start = (state.searchPage - 1) * searchPageSize;
+    renderList("searchList", results.slice(start, start + searchPageSize), "条件に一致する番組はありません", searchPageSize, ["reserve", "skip", "unskip", "create-rule-from-program"]);
+    var filter = state.listFilters.search || defaultListFilter("search");
+    [
+      ["searchQuery", filter.query],
+      ["searchTitle", filter.title],
+      ["searchDescription", filter.description],
+      ["searchProgramID", filter.programID],
+      ["searchChannelID", filter.channelID],
+      ["searchStartHour", filter.startHour],
+      ["searchEndHour", filter.endHour]
+    ].forEach(function (item) {
+      var control = byId(item[0]);
+      if (control && control.value !== item[1]) {
+        control.value = item[1] || "";
+      }
     });
   }
 
@@ -3335,10 +3664,10 @@
     card.classList.toggle("short", durationMinutes < 15);
     card.classList.toggle("very-short", durationMinutes < 8);
     card.classList.toggle("selected", isActiveProgram(program));
-    card.title = [programTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
+    card.title = [programFullTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", [programTitle(program), stateLabel, "の詳細を開く"].filter(Boolean).join(" "));
+    card.setAttribute("aria-label", [programFullTitle(program), programFlagNames(program).join(" "), stateLabel, "の詳細を開く"].filter(Boolean).join(" "));
 
     var time = document.createElement("span");
     time.className = "schedule-card-time";
@@ -3352,7 +3681,7 @@
     }
 
     var title = document.createElement("strong");
-    title.textContent = programTitle(program);
+    setProgramTitleContent(title, program);
 
     var meta = document.createElement("span");
     meta.className = "schedule-card-meta";
@@ -3384,7 +3713,7 @@
     var end = programEnd(program);
     state.selectedProgram = program;
     state.activeProgramID = program && program.id ? program.id : "";
-    text(title, programTitle(program));
+    setProgramTitleContent(title, program);
     setProgramMeta(meta, [formatTime(program.start) + " - " + formatTime(end), channelName(program), formatDuration(program.start, end)], program);
     renderProgramDialogPreview(preview, program);
     text(description, program.detail || program.description || "番組説明はありません。");
@@ -4557,6 +4886,7 @@
     renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderOnAirList();
     renderSchedule();
+    renderSearch();
     renderRules();
     renderSettings();
     renderStatus(state.currentView === "status");
@@ -4578,6 +4908,10 @@
     }
     if (state.currentView === "schedule") {
       renderSchedule();
+      return;
+    }
+    if (state.currentView === "search") {
+      renderSearch();
       return;
     }
     if (state.currentView === "reserves") {
@@ -4935,6 +5269,55 @@
         }
       });
     }
+  }
+
+  function bindSearchControls() {
+    var fields = {
+      query: "searchQuery",
+      category: "searchCategory",
+      type: "searchType",
+      title: "searchTitle",
+      description: "searchDescription",
+      programID: "searchProgramID",
+      channelID: "searchChannelID",
+      startHour: "searchStartHour",
+      endHour: "searchEndHour"
+    };
+    Object.keys(fields).forEach(function (key) {
+      var control = byId(fields[key]);
+      if (!control) {
+        return;
+      }
+      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", function () {
+        state.listFilters.search[key] = control.value.trim ? control.value.trim() : control.value;
+        state.searchPage = 1;
+        saveListFilters();
+        renderSearch();
+      });
+    });
+    var reset = byId("searchFilterReset");
+    if (reset) {
+      reset.addEventListener("click", function () {
+        state.listFilters.search = defaultListFilter("search");
+        state.searchPage = 1;
+        saveListFilters();
+        renderSearch();
+      });
+    }
+    [
+      { id: "searchFirstPage", page: function () { return 1; } },
+      { id: "searchPrevPage", page: function () { return state.searchPage - 1; } },
+      { id: "searchNextPage", page: function () { return state.searchPage + 1; } },
+      { id: "searchLastPage", page: function () { return Math.max(1, Math.ceil(searchResults().length / searchPageSize)); } }
+    ].forEach(function (item) {
+      var button = byId(item.id);
+      if (button) {
+        button.addEventListener("click", function () {
+          state.searchPage = item.page();
+          renderSearch();
+        });
+      }
+    });
   }
 
   function bindRecordedPagination() {
@@ -5376,6 +5759,7 @@
         changeScheduleZoom(1);
       });
     }
+    bindSearchControls();
     document.addEventListener("keydown", function (event) {
       if (!event.ctrlKey || !document.activeElement || !document.activeElement.closest(".schedule-guide-scroll")) {
         return;

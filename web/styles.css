@@ -898,6 +898,7 @@ summary:focus-visible,
 .program-title-button {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   min-height: 28px;
   padding: 1px 0;
   border: 0;
@@ -914,6 +915,54 @@ summary:focus-visible,
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.program-title-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.program-flag-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 1px 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface-control-soft);
+  color: var(--ink-soft) !important;
+  font-size: 10px !important;
+  font-weight: 850;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.program-flag-new {
+  border-color: var(--reserved);
+  background: var(--reserved-soft);
+  color: var(--reserved-strong) !important;
+}
+
+.program-flag-end {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error-strong) !important;
+}
+
+.program-flag-repeat,
+.program-flag-caption {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong) !important;
+}
+
+.program-flag-free {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn-strong) !important;
 }
 
 .program-row span {
@@ -1424,10 +1473,26 @@ summary:focus-visible,
 }
 
 .schedule-card strong {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
   overflow: hidden;
   font-size: 10px;
   line-height: 1.08;
   overflow-wrap: anywhere;
+}
+
+.schedule-card .program-title-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schedule-card .program-flag-badge {
+  min-width: 15px;
+  min-height: 14px;
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 8px !important;
 }
 
 .schedule-card.short strong {
