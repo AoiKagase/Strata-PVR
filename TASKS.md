@@ -20,33 +20,33 @@
 
 ### Implementation tasks
 
-- [ ] `internal/wui` に embedded assets 用の `embed.FS` を追加する。
-- [ ] `web/` 配下の静的ファイルを Go バイナリへ埋め込む。
-- [ ] WUI サーバの静的ファイル配信を、embedded FS と外部 directory FS の両方に対応させる。
-- [ ] config に外部 Web UI ディレクトリ指定を追加する。
+- [x] `internal/wui` に embedded assets 用の `embed.FS` を追加する。
+- [x] `web/` 配下の静的ファイルを Go バイナリへ埋め込む。
+- [x] WUI サーバの静的ファイル配信を、embedded FS と外部 directory FS の両方に対応させる。
+- [x] config に外部 Web UI ディレクトリ指定を追加する。
   - 候補名: `wuiWebDir`
-- [ ] CLI option が必要か検討する。
+- [x] CLI option が必要か検討する。
   - 候補: `--web-dir`
   - config と CLI の両方を持つ場合は CLI を優先する。
-- [ ] 起動ログへ asset source を出力する。
-- [ ] `README.md` に配布時と開発時の Web UI assets の扱いを追記する。
-- [ ] `config.sample.json` に `wuiWebDir` の例を追加する。
+- [x] 起動ログへ asset source を出力する。
+- [x] `README.md` に配布時と開発時の Web UI assets の扱いを追記する。
+- [x] `config.sample.json` に `wuiWebDir` の例を追加する。
 
 ### Acceptance criteria
 
-- [ ] `web/` ディレクトリが無い配布先でも WUI が起動し、`/`、`/index.html`、`/styles.css`、`/app.js` が返る。
-- [ ] `wuiWebDir` を指定すると、そのディレクトリの `index.html`、`styles.css`、`app.js` が優先される。
-- [ ] 不正な `wuiWebDir` は起動時または WUI 初期化時に分かるエラーになる。
+- [x] `web/` ディレクトリが無い配布先でも WUI が起動し、`/`、`/index.html`、`/styles.css`、`/app.js` が返る。
+- [x] `wuiWebDir` を指定すると、そのディレクトリの `index.html`、`styles.css`、`app.js` が優先される。
+- [x] 不正な `wuiWebDir` は起動時または WUI 初期化時に分かるエラーになる。
 - [ ] 既存の API ルーティング `/api/...` と静的ファイル配信が衝突しない。
 - [ ] 通常のローカル開発では外部 `web/` を使ってリビルド無しに確認できる運用を維持できる。
 
 ### Tests
 
 - [ ] `go test ./...`
-- [ ] embedded assets のみで `/` が HTML を返すテスト。
-- [ ] embedded assets のみで `/styles.css` と `/app.js` が適切な Content-Type で返るテスト。
-- [ ] 外部 `wuiWebDir` 指定時に外部ファイルが embedded より優先されるテスト。
-- [ ] 不正な外部 directory 指定のエラーテスト。
+- [x] embedded assets のみで `/` が HTML を返すテスト。
+- [x] embedded assets のみで `/styles.css` と `/app.js` が適切な Content-Type で返るテスト。
+- [x] 外部 `wuiWebDir` 指定時に外部ファイルが embedded より優先されるテスト。
+- [x] 不正な外部 directory 指定のエラーテスト。
 
 ### Notes
 

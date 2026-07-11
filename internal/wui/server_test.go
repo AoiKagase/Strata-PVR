@@ -3446,6 +3446,77 @@ func TestStaticServingUsesWebRoot(t *testing.T) {
 	}
 }
 
+func TestStaticServingUsesEmbeddedAssetsWithoutExternalDirectory(t *testing.T) {
+	paths := testPaths(t.TempDir())
+	handler := newHandler(paths.runtime(), &config.Config{}, false)
+
+	for _, test := range []struct {
+		path        string
+		contentType string
+		contains    string
+	}{
+		{path: "/", contentType: "text/html; charset=utf-8", contains: "<!doctype html"},
+		{path: "/index.html", contentType: "text/html; charset=utf-8", contains: "<!doctype html"},
+		{path: "/styles.css", contentType: "text/css; charset=utf-8", contains: "--"},
+		{path: "/app.js", contentType: "application/javascript", contains: "fetch("},
+	} {
+		req := httptest.NewRequest(http.MethodGet, test.path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d body=%s", test.path, res.Code, res.Body.String())
+		}
+		if got := res.Header().Get("Content-Type"); got != test.contentType {
+			t.Fatalf("%s Content-Type = %q, want %q", test.path, got, test.contentType)
+		}
+		if !strings.Contains(res.Body.String(), test.contains) {
+			t.Fatalf("%s body does not contain %q", test.path, test.contains)
+		}
+	}
+}
+
+func TestStaticServingUsesConfiguredExternalDirectoryBeforeEmbeddedAssets(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("external index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("external css"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app.js"), []byte("external js"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	paths := testPaths(t.TempDir())
+	handler := newHandler(paths.runtime(), &config.Config{WUIWebDir: dir}, false)
+
+	for _, path := range []string{"/", "/index.html", "/styles.css", "/app.js"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "external") {
+			t.Fatalf("%s status=%d body=%q", path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestInvalidConfiguredExternalWebDirectoryIsRejected(t *testing.T) {
+	paths := testPaths(t.TempDir())
+	if _, err := buildHTTPServers(paths.runtime(), &config.Config{WUIWebDir: filepath.Join(t.TempDir(), "missing")}); err == nil {
+		t.Fatal("missing configured web directory should be rejected")
+	}
+}
+
+func TestBuildHTTPServersReportsAssetSource(t *testing.T) {
+	dir := t.TempDir()
+	servers, err := buildHTTPServers(testPaths(t.TempDir()).runtime(), &config.Config{WUIWebDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := servers[0].assetLog, "web assets: external path="+dir; got != want {
+		t.Fatalf("asset log = %q, want %q", got, want)
+	}
+}
+
 func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

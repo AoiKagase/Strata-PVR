@@ -14,6 +14,7 @@ type Document struct {
 	Mirakurun    MirakurunSettings    `json:"mirakurun"`
 	Recording    RecordingSettings    `json:"recording"`
 	Web          WebSettings          `json:"web"`
+	WUIWebDir    string               `json:"wuiWebDir,omitempty"`
 	PreviewCache PreviewCacheSettings `json:"previewCache,omitempty"`
 	Services     ServiceSettings      `json:"services"`
 	Advanced     AdvancedSettings     `json:"advanced,omitempty"`
@@ -75,6 +76,7 @@ type Config struct {
 	WUIAuthenticationEnabled   bool
 	WUIPort                    int
 	WUIHost                    string
+	WUIWebDir                  string
 	NormalizationForm          string
 	RecordedFormat             string
 	RecordingPriority          int
@@ -195,6 +197,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.StorageLowSpaceAction = doc.Recording.LowSpace.Action
 	cfg.WUIHost = doc.Web.ListenAddress
 	cfg.WUIPort = doc.Web.Port
+	cfg.WUIWebDir = doc.WUIWebDir
 	cfg.WUIAuthenticationEnabled = doc.Web.Authentication.Enabled
 	if doc.Web.Authentication.Enabled {
 		if len(doc.Web.Authentication.Users) == 0 {

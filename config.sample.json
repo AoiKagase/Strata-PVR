@@ -21,6 +21,7 @@
       "enabled": false
     }
   },
+  "wuiWebDir": "",
   "previewCache": {
     "maxAgeDays": 30,
     "maxSizeMB": 1024

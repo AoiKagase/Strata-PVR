@@ -73,6 +73,22 @@ func TestLoadStrataDocument(t *testing.T) {
 	}
 }
 
+func TestLoadStrataDocumentMapsWUIWebDir(t *testing.T) {
+	doc := DefaultDocument()
+	doc.WUIWebDir = "./custom-web"
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WUIWebDir != doc.WUIWebDir {
+		t.Fatalf("WUIWebDir = %q, want %q", cfg.WUIWebDir, doc.WUIWebDir)
+	}
+}
+
 func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

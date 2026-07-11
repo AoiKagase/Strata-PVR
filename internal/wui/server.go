@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"mime"
 	"net"
@@ -41,6 +42,7 @@ import (
 	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
+	webassets "strata-pvr/web"
 )
 
 type Paths struct {
@@ -123,6 +125,11 @@ func Run(ctx context.Context, paths Paths) error {
 	}
 	errCh := make(chan serverError, len(servers))
 	for _, srv := range servers {
+		if srv.assetLog != "" {
+			if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s", srv.assetLog); err != nil {
+				return err
+			}
+		}
 		if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s Listening on %s", srv.label, srv.server.Addr); err != nil {
 			return err
 		}
@@ -154,9 +161,14 @@ func NewHandler(paths Paths, cfg *config.Config) http.Handler {
 }
 
 func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
+	assets, err := resolveAssetSource(paths, cfg)
+	return newHandlerWithAssets(paths, cfg, auth, assets, err)
+}
+
+func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) http.Handler {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, webRoot: findWebRoot(paths.WebRoot), metrics: newMetricHistory(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(),
 		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
 		hls: newHLSSessionManager(paths),
 	}
@@ -182,7 +194,9 @@ type server struct {
 	paths       Paths
 	cfg         *config.Config
 	db          *sql.DB
-	webRoot     string
+	assets      fs.FS
+	assetLog    string
+	assetErr    error
 	metrics     *metricHistory
 	configMu    sync.Mutex
 	authMu      sync.Mutex
@@ -302,8 +316,9 @@ func clampPercent(value float64) float64 {
 }
 
 type runningServer struct {
-	server *http.Server
-	label  string
+	server   *http.Server
+	label    string
+	assetLog string
 }
 
 type serverError struct {
@@ -312,13 +327,17 @@ type serverError struct {
 }
 
 func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) {
+	assets, err := resolveAssetSource(paths, cfg)
+	if err != nil {
+		return nil, err
+	}
 	return []runningServer{{
 		server: &http.Server{
 			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
-			Handler:           newHandler(paths, cfg, true),
+			Handler:           newHandlerWithAssets(paths, cfg, true, assets, nil),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
-		label: "HTTP Server",
+		label: "HTTP Server", assetLog: assets.log,
 	}}, nil
 }
 
@@ -470,7 +489,11 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	if s.webRoot == "" {
+	if s.assetErr != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	if s.assets == nil {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
@@ -490,23 +513,31 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if contentType := staticContentType(filePath); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	http.FileServer(http.Dir(s.webRoot)).ServeHTTP(w, r)
+	serveRequest := r
+	if path.Base(r.URL.Path) == "index.html" {
+		serveRequest = r.Clone(r.Context())
+		serveRequest.URL.Path = path.Dir(r.URL.Path) + "/"
+		if serveRequest.URL.Path == "//" {
+			serveRequest.URL.Path = "/"
+		}
+	}
+	http.FileServer(http.FS(s.assets)).ServeHTTP(w, serveRequest)
 }
 
-func (s *server) staticFileInfo(urlPath string) (string, os.FileInfo, bool) {
+func (s *server) staticFileInfo(urlPath string) (string, fs.FileInfo, bool) {
 	clean := path.Clean("/" + urlPath)
 	rel := strings.TrimPrefix(clean, "/")
 	if rel == "" || strings.HasSuffix(urlPath, "/") {
 		rel = path.Join(rel, "index.html")
 	}
-	filePath := filepath.Join(s.webRoot, filepath.FromSlash(rel))
-	info, err := os.Stat(filePath)
+	filePath := rel
+	info, err := fs.Stat(s.assets, rel)
 	if err != nil {
 		return filePath, nil, false
 	}
 	if info.IsDir() {
-		filePath = filepath.Join(filePath, "index.html")
-		info, err = os.Stat(filePath)
+		filePath = path.Join(filePath, "index.html")
+		info, err = fs.Stat(s.assets, filePath)
 		if err != nil {
 			return filePath, nil, false
 		}
@@ -3315,17 +3346,30 @@ func reversePrograms(programs []legacy.Program) {
 	}
 }
 
-func findWebRoot(configured string) string {
-	candidates := []string{configured, "web"}
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
-		}
-		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			return candidate
-		}
+type assetSource struct {
+	files fs.FS
+	log   string
+}
+
+func resolveAssetSource(paths Paths, cfg *config.Config) (assetSource, error) {
+	configured := paths.WebRoot
+	if configured == "" && cfg != nil {
+		configured = cfg.WUIWebDir
 	}
-	return ""
+	if configured != "" {
+		st, err := os.Stat(configured)
+		if err != nil {
+			return assetSource{}, fmt.Errorf("web assets directory %q is unavailable: %w", configured, err)
+		}
+		if !st.IsDir() {
+			return assetSource{}, fmt.Errorf("web assets path %q is not a directory", configured)
+		}
+		return assetSource{files: os.DirFS(configured), log: "web assets: external path=" + configured}, nil
+	}
+	if st, err := os.Stat("web"); err == nil && st.IsDir() {
+		return assetSource{files: os.DirFS("web"), log: "web assets: external path=web"}, nil
+	}
+	return assetSource{files: webassets.FS, log: "web assets: embedded"}, nil
 }
 
 func splitPath(path string) []string {

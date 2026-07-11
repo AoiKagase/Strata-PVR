@@ -1331,13 +1331,27 @@ func service(ctx context.Context, p paths, args []string, stdout io.Writer) erro
 }
 
 func runComponent(ctx context.Context, p paths, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
+	if len(args) == 0 {
+		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler> [--web-dir <path>]")
 	}
-	return runNamedComponent(ctx, p, args[0])
+	if args[0] != "wui" {
+		if len(args) != 1 {
+			return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler> [--web-dir <path>]")
+		}
+		return runNamedComponent(ctx, p, args[0])
+	}
+	webDir, err := parseWebDirFlag(args[1:])
+	if err != nil {
+		return err
+	}
+	return runNamedComponentWithWebDir(ctx, p, args[0], webDir)
 }
 
 func runNamedComponent(ctx context.Context, p paths, name string) error {
+	return runNamedComponentWithWebDir(ctx, p, name, "")
+}
+
+func runNamedComponentWithWebDir(ctx context.Context, p paths, name, webDir string) error {
 	if name != "operator" && name != "scheduler" && name != "wui" {
 		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
 	}
@@ -1364,7 +1378,7 @@ func runNamedComponent(ctx context.Context, p paths, name string) error {
 		return wui.Run(ctx, wui.Paths{
 			Config:       p.config,
 			Database:     p.database,
-			WebRoot:      "web",
+			WebRoot:      webDir,
 			LogDir:       "log",
 			SchedulerPID: filepath.Join("data", "scheduler.pid"),
 			OperatorPID:  filepath.Join("data", "operator.pid"),
@@ -1372,6 +1386,19 @@ func runNamedComponent(ctx context.Context, p paths, name string) error {
 	default:
 		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")
 	}
+}
+
+func parseWebDirFlag(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	if len(args) == 2 && args[0] == "--web-dir" && args[1] != "" {
+		return args[1], nil
+	}
+	if len(args) == 1 && strings.HasPrefix(args[0], "--web-dir=") && strings.TrimPrefix(args[0], "--web-dir=") != "" {
+		return strings.TrimPrefix(args[0], "--web-dir="), nil
+	}
+	return "", fmt.Errorf("Usage: strata-pvr run wui [--web-dir <path>]")
 }
 
 func prepareServiceRuntimeFor(p paths) error {

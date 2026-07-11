@@ -189,7 +189,12 @@ SQLiteのWAL利用中に`strata.db`だけをコピーすると未反映データ
 ## Web UI
 
 `./strata-pvr run wui` で Go 製 WUI/API サーバを起動します。
-同梱の `web/` はビルド不要の HTML/CSS/JavaScript です。
+HTML/CSS/JavaScript はバイナリに埋め込まれているため、配布時に `web/` を
+同梱する必要はありません。開発時やカスタマイズ時に外部ファイルを使う場合は、
+設定の `wuiWebDir` または `run wui --web-dir <path>` を指定します。`wuiWebDir`
+を指定すると外部ディレクトリが埋め込み assets より優先されます。未指定時に
+カレントディレクトリの `web/` が存在すれば、それも開発用の外部 assets として
+自動利用します。
 
 Web UI では次の操作ができます。
 
