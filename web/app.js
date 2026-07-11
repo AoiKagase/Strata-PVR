@@ -2460,7 +2460,7 @@
     image.className = "program-preview-image";
     image.alt = "";
     image.loading = "lazy";
-    image.src = programPreviewURL(program, resource, "160x90");
+    image.src = programPreviewURL(program, resource, "160x90") + (resource === "recording" ? "&_=" + Date.now() : "");
     image.addEventListener("error", function () {
       var row = image.closest(".program-row");
       if (row) {
@@ -4542,7 +4542,7 @@
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
     updateRecordedPaginationControls(filteredRecorded.length);
 
-    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
+    renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
@@ -4563,7 +4563,7 @@
     updateOperationalStatus();
 
     if (state.currentView === "dashboard") {
-      renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
+      renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
       renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
       renderOnAirList();
       return;

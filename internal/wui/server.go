@@ -1886,7 +1886,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 			return
 		}
 		if requirePID {
-			s.streamFFmpeg(w, r, newGrowingFileReader(r.Context(), filePath, 0), "mp4", true)
+			s.streamFFmpeg(w, r, newGrowingFileReader(r.Context(), filePath, info.Size()), "mp4", true)
 			return
 		}
 		s.streamFFmpegFile(w, r, filePath, "mp4")

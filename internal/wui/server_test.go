@@ -581,11 +581,11 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			`function programPreviewURL(program, resource, size)`,
 			`function renderProgramPreview(program, resource)`,
 			`"/api/" + resource + "/" + encodeURIComponent(program.id) + "/preview?size="`,
-			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });`,
+			`renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });`,
 			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`openAdjustablePlayer(program.title || program.id || "録画済み", function (query)`,
 			`return recordedWatchURL(program, "mp4", query);`,
-			`actionButton("静止画", "録画中の静止画を開く"`,
+			`image.src = programPreviewURL(program, resource, "160x90") + (resource === "recording" ? "&_=" + Date.now() : "");`,
 			`row.classList.remove("with-preview");`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
@@ -2669,7 +2669,9 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	old := runFFmpegStream
 	var gotInput string
 	var gotArgs []string
+	ffmpegStarted := make(chan struct{})
 	runFFmpegStream = func(_ context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
+		close(ffmpegStarted)
 		buf := make([]byte, 4)
 		if _, err := io.ReadFull(input, buf); err != nil {
 			return nil, nil, err
@@ -2682,11 +2684,28 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.mp4?b:v=1m", nil)
 	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(res, req)
+		close(done)
+	}()
+	select {
+	case <-ffmpegStarted:
+	case <-time.After(time.Second):
+		t.Fatal("recording watch did not start ffmpeg")
+	}
+	if err := os.WriteFile(recordedPath, []byte("livefollow"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("recording watch did not follow appended data")
+	}
 	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
-	if gotInput != "live" {
+	if gotInput != "foll" {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
