@@ -125,6 +125,9 @@ func Run(ctx context.Context, paths Paths) error {
 	}
 	errCh := make(chan serverError, len(servers))
 	for _, srv := range servers {
+		if srv.wui != nil {
+			srv.wui.startMetrics(ctx)
+		}
 		if srv.assetLog != "" {
 			if err := logging.AppendLine(filepath.Join(logDir(paths), "wui"), "%s", srv.assetLog); err != nil {
 				return err
@@ -166,9 +169,14 @@ func newHandler(paths Paths, cfg *config.Config, auth bool) http.Handler {
 }
 
 func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) http.Handler {
+	_, handler := newServerWithAssets(paths, cfg, auth, assets, assetErr)
+	return handler
+}
+
+func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(),
 		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
 		hls: newHLSSessionManager(paths),
 	}
@@ -187,22 +195,24 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 	}
 	handler = server.withHostRequired(handler)
 	handler = server.withAccessLog(handler)
-	return server.withCommonHeaders(handler)
+	return server, server.withCommonHeaders(handler)
 }
 
 type server struct {
-	paths       Paths
-	cfg         *config.Config
-	db          *sql.DB
-	assets      fs.FS
-	assetLog    string
-	assetErr    error
-	metrics     *metricHistory
-	configMu    sync.Mutex
-	authMu      sync.Mutex
-	authCache   map[[sha256.Size]byte]time.Time
-	authWorkers chan struct{}
-	hls         *hlsSessionManager
+	paths        Paths
+	cfg          *config.Config
+	db           *sql.DB
+	assets       fs.FS
+	assetLog     string
+	assetErr     error
+	metrics      *metricHistory
+	recordedSize *recordedSizeCache
+	metricsOnce  sync.Once
+	configMu     sync.Mutex
+	authMu       sync.Mutex
+	authCache    map[[sha256.Size]byte]time.Time
+	authWorkers  chan struct{}
+	hls          *hlsSessionManager
 }
 
 type metricHistory struct {
@@ -210,6 +220,62 @@ type metricHistory struct {
 	samples  []metricSample
 	lastCPU  *system.CPUTimes
 	lastTime time.Time
+}
+
+type recordedSizeCache struct {
+	mu          sync.Mutex
+	initialized bool
+	total       int64
+	files       map[string]int64
+}
+
+func newRecordedSizeCache() *recordedSizeCache {
+	return &recordedSizeCache{files: make(map[string]int64)}
+}
+
+func (c *recordedSizeCache) update(programs []legacy.Program) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	next := make(map[string]int64, len(programs))
+	total := c.total
+	for _, program := range programs {
+		if program.Recorded == "" {
+			continue
+		}
+		if _, ok := next[program.Recorded]; ok {
+			continue
+		}
+		info, err := os.Stat(filepath.FromSlash(program.Recorded))
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		size := allocatedFileSize(info)
+		if previous, ok := c.files[program.Recorded]; ok {
+			total += size - previous
+		} else {
+			total += size
+		}
+		next[program.Recorded] = size
+	}
+	for path, size := range c.files {
+		if _, ok := next[path]; !ok {
+			total -= size
+		}
+	}
+	if total < 0 {
+		total = 0
+	}
+	c.files = next
+	c.total = total
+	c.initialized = true
+	return total
+}
+
+func (c *recordedSizeCache) current() (int64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.total, c.initialized
 }
 
 type metricSample struct {
@@ -284,6 +350,60 @@ func (h *metricHistory) sample(recordedSize int64, storageUsage system.DiskUsage
 	return sample
 }
 
+func (h *metricHistory) latest() (metricSample, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.samples) == 0 {
+		return metricSample{}, false
+	}
+	return h.samples[len(h.samples)-1], true
+}
+
+func (s *server) startMetrics(ctx context.Context) {
+	s.metricsOnce.Do(func() {
+		go func() {
+			s.collectMetrics(ctx)
+			ticker := time.NewTicker(metricSampleInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					s.collectMetrics(ctx)
+				}
+			}
+		}()
+	})
+}
+
+func (s *server) collectMetrics(ctx context.Context) {
+	recordedSize, _ := s.recordedSize.current()
+	if refreshedSize, err := s.refreshRecordedSize(ctx); err == nil {
+		recordedSize = refreshedSize
+	}
+	usage, err := system.GetDiskUsage(s.recordedStoragePath())
+	if err != nil {
+		if previous, ok := s.metrics.latest(); ok {
+			usage = system.DiskUsage{
+				Used:  previous.StorageUsed,
+				Size:  previous.StorageTotal,
+				Avail: previous.StorageAvail,
+			}
+		}
+	}
+	s.metrics.sample(recordedSize, usage)
+}
+
+func (s *server) refreshRecordedSize(ctx context.Context) (int64, error) {
+	ctx = database.WithHandle(ctx, s.db)
+	recorded, err := s.readPrograms(ctx, programstore.Recorded)
+	if err != nil {
+		return 0, err
+	}
+	return s.recordedSize.update(recorded), nil
+}
+
 func (h *metricHistory) recent() []metricSample {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -319,6 +439,7 @@ type runningServer struct {
 	server   *http.Server
 	label    string
 	assetLog string
+	wui      *server
 }
 
 type serverError struct {
@@ -331,13 +452,14 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 	if err != nil {
 		return nil, err
 	}
+	wui, handler := newServerWithAssets(paths, cfg, true, assets, nil)
 	return []runningServer{{
 		server: &http.Server{
 			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
-			Handler:           newHandlerWithAssets(paths, cfg, true, assets, nil),
+			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
-		label: "HTTP Server", assetLog: assets.log,
+		label: "HTTP Server", assetLog: assets.log, wui: wui,
 	}}, nil
 }
 
@@ -1176,12 +1298,14 @@ func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	recordedSize, usage, err := s.storageUsage()
-	if err != nil {
+	if _, ok := s.metrics.latest(); !ok {
+		s.collectMetrics(r.Context())
+	}
+	sample, ok := s.metrics.latest()
+	if !ok {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	sample := s.metrics.sample(recordedSize, usage)
 	writePrettyJSON(w, http.StatusOK, map[string]any{
 		"windowSeconds": int64(metricHistoryWindow.Seconds()),
 		"sampleSeconds": int64(metricSampleInterval.Seconds()),
@@ -1191,18 +1315,12 @@ func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) storageUsage() (int64, system.DiskUsage, error) {
-	recorded, err := s.readPrograms(context.Background(), programstore.Recorded)
-	if err != nil {
-		return 0, system.DiskUsage{}, err
-	}
-	var recordedSize int64
-	for _, program := range recorded {
-		if program.Recorded == "" {
-			continue
-		}
-		info, err := os.Stat(filepath.FromSlash(program.Recorded))
-		if err == nil && info.Mode().IsRegular() {
-			recordedSize += allocatedFileSize(info)
+	recordedSize, initialized := s.recordedSize.current()
+	if !initialized {
+		var err error
+		recordedSize, err = s.refreshRecordedSize(context.Background())
+		if err != nil {
+			return 0, system.DiskUsage{}, err
 		}
 	}
 	recordedDir := s.recordedStoragePath()

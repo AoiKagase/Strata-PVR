@@ -3710,3 +3710,36 @@ func exportTestState(t *testing.T, paths wuiTestPaths) {
 		}
 	}
 }
+
+func TestRecordedSizeCacheTracksFileChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recorded.ts")
+	initialData := make([]byte, 1<<20)
+	if err := os.WriteFile(path, initialData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	programs := []legacy.Program{{Recorded: filepath.ToSlash(path)}}
+	cache := newRecordedSizeCache()
+	initialInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialSize := allocatedFileSize(initialInfo)
+	if got := cache.update(programs); got != initialSize {
+		t.Fatalf("initial cached size = %d, want %d", got, initialSize)
+	}
+
+	if err := os.WriteFile(path, append(initialData, make([]byte, 1<<20)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	grownInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grownSize := allocatedFileSize(grownInfo)
+	if got := cache.update(programs); got != grownSize {
+		t.Fatalf("grown cached size = %d, want %d", got, grownSize)
+	}
+	if got := cache.update(nil); got != 0 {
+		t.Fatalf("removed cached size = %d, want 0", got)
+	}
+}
