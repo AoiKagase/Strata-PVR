@@ -69,6 +69,11 @@
     recordedPageSize: loadRecordedPageSize(),
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
+    rulesLoaded: false,
+    configLoaded: false,
+    storageLoaded: false,
+    viewDataRequests: {},
+    viewDataErrors: {},
     hasLoaded: false,
     isLoading: false,
     lastError: null
@@ -221,6 +226,30 @@
     if (node) {
       node.textContent = value;
     }
+  }
+
+  function announce(message) {
+    var liveRegion = byId("liveAnnouncement");
+    if (liveRegion) {
+      liveRegion.textContent = "";
+      window.setTimeout(function () {
+        liveRegion.textContent = message || "";
+      }, 0);
+    }
+  }
+
+  function debounce(fn, delay) {
+    var timer = null;
+    return function () {
+      var args = arguments;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(function () {
+        timer = null;
+        fn.apply(null, args);
+      }, delay);
+    };
   }
 
   function toggleClass(node, className, enabled) {
@@ -1091,12 +1120,36 @@
     var expanded = Boolean(open);
     document.body.classList.toggle("schedule-menu-open", expanded);
     var button = byId("scheduleMenuButton");
+    var drawer = byId("mainNavDrawer");
     var backdrop = byId("scheduleMenuBackdrop");
+    var mobileSchedule = isMobileScheduleLayout() && state.currentView === "schedule";
     if (button) {
       button.setAttribute("aria-expanded", expanded ? "true" : "false");
     }
+    if (drawer) {
+      drawer.inert = mobileSchedule && !expanded;
+      if (mobileSchedule) {
+        drawer.setAttribute("aria-hidden", expanded ? "false" : "true");
+      } else {
+        drawer.removeAttribute("aria-hidden");
+      }
+      if (!expanded && mobileSchedule && drawer.contains(document.activeElement) && button && typeof button.focus === "function") {
+        button.focus();
+      }
+    }
     if (backdrop) {
       backdrop.hidden = !expanded;
+    }
+    if (expanded && drawer && isMobileScheduleLayout() && state.currentView === "schedule") {
+      window.setTimeout(function () {
+        if (!document.body.classList.contains("schedule-menu-open")) {
+          return;
+        }
+        var firstLink = drawer.querySelector("a");
+        if (firstLink && typeof firstLink.focus === "function") {
+          firstLink.focus();
+        }
+      }, 0);
     }
   }
 
@@ -1108,13 +1161,83 @@
     var expanded = Boolean(open);
     document.body.classList.toggle("schedule-filter-open", expanded);
     var button = byId("scheduleFilterButton");
+    var controls = byId("scheduleNavControls");
     if (button) {
       button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+    if (!expanded && controls && controls.contains(document.activeElement) && button && typeof button.focus === "function") {
+      button.focus();
     }
   }
 
   function closeScheduleFilter() {
     setScheduleFilterOpen(false);
+  }
+
+  function loadViewData(view, force) {
+    var path = "";
+    var readyKey = "";
+    if (view === "rules") {
+      path = "rules";
+      readyKey = "rulesLoaded";
+    } else if (view === "settings") {
+      path = "config";
+      readyKey = "configLoaded";
+    } else if (view === "status") {
+      path = "storage";
+      readyKey = "storageLoaded";
+    }
+    if (!path) {
+      return Promise.resolve();
+    }
+    if (!force && state[readyKey]) {
+      return Promise.resolve();
+    }
+    if (state.viewDataRequests[view]) {
+      return state.viewDataRequests[view];
+    }
+    state[readyKey] = false;
+    state.viewDataErrors[view] = null;
+    if (view === "rules") {
+      renderRules();
+    } else if (view === "settings") {
+      renderSettings();
+    }
+    var requestPromise = api(path).then(function (result) {
+      if (path === "rules") {
+        state.rules = result || [];
+      } else if (path === "config") {
+        state.config = result || {};
+      } else if (path === "storage") {
+        state.storage = result || null;
+      }
+      state[readyKey] = true;
+      if (state.currentView === view) {
+        if (view === "rules") {
+          renderRules();
+        } else if (view === "settings") {
+          renderSettings();
+        } else if (view === "status") {
+          renderStatus(false);
+        }
+      }
+    }).catch(function (error) {
+      state.viewDataErrors[view] = error;
+      if (state.currentView === view) {
+        if (view === "rules") {
+          renderRules();
+        } else if (view === "settings") {
+          renderSettings();
+        } else if (view === "status") {
+          renderStatus(false);
+        }
+      }
+      showError(error);
+    }).finally(function () {
+      state.viewDataRequests[view] = null;
+    });
+    state.viewDataRequests[view] = requestPromise;
+    return requestPromise;
   }
 
   function firstScheduleChannelID(channels) {
@@ -1161,9 +1284,17 @@
     if (state.hasLoaded) {
       if (state.currentView === "status") {
         renderStatus();
+        loadViewData("status");
         startMetricsRefresh();
       } else if (state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves") {
         renderOperationalData();
+      } else if (state.currentView === "rules") {
+        renderRules();
+        renderRuleFormState();
+        loadViewData("rules");
+      } else if (state.currentView === "settings") {
+        renderSettings();
+        loadViewData("settings");
       } else if (state.currentView === "logs") {
         refreshLogs();
       }
@@ -1174,6 +1305,8 @@
     if (state.currentView !== "schedule") {
       closeScheduleMenu();
       closeScheduleFilter();
+    } else {
+      setScheduleMenuOpen(document.body.classList.contains("schedule-menu-open"));
     }
     document.querySelectorAll(".management-menu").forEach(function (menu) {
       menu.open = name === "status" || name === "settings" || name === "logs";
@@ -1252,7 +1385,7 @@
     if (!view) {
       return [];
     }
-    return Array.prototype.slice.call(view.querySelectorAll(".program-row[tabindex='0']"));
+    return Array.prototype.slice.call(view.querySelectorAll(".program-row .program-title-button"));
   }
 
   function focusAdjacentRow(delta) {
@@ -1327,6 +1460,12 @@
     };
     window.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && closeTopDialog()) {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Escape" && (document.body.classList.contains("schedule-menu-open") || document.body.classList.contains("schedule-filter-open"))) {
+        closeScheduleFilter();
+        closeScheduleMenu();
         event.preventDefault();
         return;
       }
@@ -2425,7 +2564,7 @@
       return;
     }
 
-    fetch(previewURL).then(function (response) {
+    fetchWithTimeout(previewURL, { credentials: "same-origin" }).then(function (response) {
       if (root.getAttribute("data-preview-id") !== program.id) {
         return null;
       }
@@ -2434,7 +2573,7 @@
         return null;
       }
       if (!response.ok) {
-        clearProgramDialogPreview(root);
+        renderProgramDialogPreviewAlert(root, "プレビューを取得できませんでした。時間をおいて再試行してください。");
         return null;
       }
       return response.blob();
@@ -2448,7 +2587,7 @@
       appendProgramDialogPreviewImage(root, resource, objectURL);
     }).catch(function () {
       if (root.getAttribute("data-preview-id") === program.id) {
-        clearProgramDialogPreview(root);
+        renderProgramDialogPreviewAlert(root, "プレビューを取得できませんでした。時間をおいて再試行してください。");
       }
     });
   }
@@ -2464,20 +2603,8 @@
     item.classList.toggle("with-preview", Boolean(options.preview));
     item.classList.toggle("selected", isActiveProgram(program));
     item.classList.toggle("skip", Boolean(program.isSkip));
-    item.tabIndex = 0;
-    item.setAttribute("role", "group");
-    item.setAttribute("aria-label", programTitle(program) + " の詳細を開く");
     item.addEventListener("dblclick", function (event) {
       if (!isEditableTarget(event.target)) {
-        openProgramDialog(program);
-      }
-    });
-    item.addEventListener("keydown", function (event) {
-      if (event.target !== item) {
-        return;
-      }
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
         openProgramDialog(program);
       }
     });
@@ -3414,6 +3541,16 @@
     if (!root) {
       return;
     }
+    if (!state.rulesLoaded) {
+      root.className = "list empty";
+      if (state.viewDataErrors.rules) {
+        setRecoverableListPlaceholder("ruleList", "ルールを読み込めませんでした");
+      } else {
+        root.textContent = "ルールを読み込み中";
+      }
+      updateListFilterSummary("ruleListFilterSummary", 0, 0);
+      return;
+    }
     root.innerHTML = "";
     if (!state.rules || state.rules.length === 0) {
       root.className = "list empty";
@@ -3736,6 +3873,27 @@
   function renderSettings() {
     var root = byId("settingsList");
     if (!root) {
+      return;
+    }
+    if (!state.configLoaded) {
+      root.innerHTML = "";
+      var loadingKey = document.createElement("dt");
+      var loadingValue = document.createElement("dd");
+      loadingKey.textContent = "設定";
+      loadingValue.textContent = state.viewDataErrors.settings ? "設定を読み込めませんでした" : "読み込み中";
+      root.appendChild(loadingKey);
+      root.appendChild(loadingValue);
+      if (state.viewDataErrors.settings) {
+        var retryValue = document.createElement("dd");
+        retryValue.appendChild(actionButton("再試行", "設定を再読み込み", function () {
+          loadViewData("settings", true);
+        }));
+        root.appendChild(retryValue);
+      }
+      var strataPanel = byId("strataConfigPanel");
+      if (strataPanel) {
+        strataPanel.hidden = true;
+      }
       return;
     }
     var cfg = state.config || {};
@@ -4486,6 +4644,10 @@
       }
     });
     document.body.classList.toggle("is-loading", Boolean(loading));
+    var mainContent = byId("mainContent");
+    if (mainContent) {
+      mainContent.setAttribute("aria-busy", loading ? "true" : "false");
+    }
   }
 
   function renderInitialLoadingState() {
@@ -4533,6 +4695,7 @@
 
   function showError(error) {
     state.lastError = error;
+    announce(error && error.message);
     var badge = byId("statusBadge");
     if (badge) {
       badge.textContent = error.message;
@@ -4556,15 +4719,7 @@
       api("reserves"),
       api("recording"),
       api("recorded"),
-      api("schedule"),
-      api("rules"),
-      api("config"),
-      api("storage").catch(function () {
-        return null;
-      }),
-      state.currentView === "status" ? api("metrics").catch(function () {
-        return null;
-      }) : Promise.resolve(state.metrics)
+      api("schedule")
     ]).then(function (result) {
       if (version !== refreshVersion) {
         return;
@@ -4574,15 +4729,16 @@
       state.recording = result[2] || [];
       state.recorded = result[3] || [];
       state.schedule = result[4] || [];
-      state.rules = result[5] || [];
-      state.config = result[6] || {};
-      state.storage = result[7] || null;
-      state.metrics = result[8] || null;
       state.hasLoaded = true;
       state.lastError = null;
       render();
       if (state.currentView === "status") {
-        startMetricsRefresh(false);
+        loadViewData("status", true);
+        startMetricsRefresh();
+      } else if (state.currentView === "rules") {
+        loadViewData("rules", true);
+      } else if (state.currentView === "settings") {
+        loadViewData("settings", true);
       }
     }).catch(function (error) {
       renderInitialLoadError(error);
@@ -4590,6 +4746,9 @@
     }).finally(function () {
       state.isLoading = false;
       setRefreshLoading(false);
+      if (state.currentView === "status") {
+        refreshMetrics();
+      }
       if (refreshQueued) {
         refreshQueued = false;
         refresh();
@@ -4618,6 +4777,7 @@
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
       state.storage = result[3] || null;
+      state.storageLoaded = true;
       state.lastError = null;
       if (document.visibilityState !== "hidden") {
         renderOperationalData();
@@ -4670,7 +4830,7 @@
   }
 
   function refreshLogs() {
-    if (document.visibilityState === "hidden" || (state.hasLoaded && state.currentView !== "logs")) {
+    if (document.visibilityState === "hidden" || state.currentView !== "logs") {
       return;
     }
     setBusy("ログ読み込み中");
@@ -4691,6 +4851,7 @@
     var category = byId(categoryID);
     var sort = byId(sortID);
     var current = state.listFilters[filterName] || {};
+    var renderFiltered = debounce(render, 120);
     if (query) {
       query.value = current.query || "";
       query.addEventListener("input", function () {
@@ -4699,7 +4860,7 @@
           state.recordedPage = 1;
         }
         saveListFilters();
-        render();
+        renderFiltered();
       });
     }
     if (category) {
@@ -4807,7 +4968,7 @@
         var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
         state.recordedPage = Math.max(1, Math.min(recordedPageCount(filteredRecorded.length), control.page()));
         render();
-        var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-row[tabindex='0']");
+        var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-title-button");
         if (firstRow && typeof firstRow.focus === "function") {
           firstRow.focus({ preventScroll: true });
         }
@@ -4819,11 +4980,17 @@
     syncStickyOffsets();
     window.addEventListener("resize", syncStickyOffsets);
     window.addEventListener("orientationchange", syncStickyOffsets);
+    var previousMobileScheduleLayout = isMobileScheduleLayout();
     window.addEventListener("resize", function () {
-      if (!isMobileScheduleLayout()) {
+      var mobileScheduleLayout = isMobileScheduleLayout();
+      if (mobileScheduleLayout !== previousMobileScheduleLayout) {
+        closeScheduleMenu();
+        closeScheduleFilter();
+      } else if (!mobileScheduleLayout) {
         closeScheduleMenu();
         closeScheduleFilter();
       }
+      previousMobileScheduleLayout = mobileScheduleLayout;
     });
     initNavigation();
     document.querySelectorAll("[data-view-link]").forEach(function (link) {
@@ -4859,10 +5026,11 @@
     var ruleListQuery = byId("ruleListQuery");
     if (ruleListQuery) {
       ruleListQuery.value = state.listFilters.rules.query || "";
+      var renderRulesFiltered = debounce(renderRules, 120);
       ruleListQuery.addEventListener("input", function () {
         state.listFilters.rules.query = ruleListQuery.value;
         saveListFilters();
-        renderRules();
+        renderRulesFiltered();
       });
     }
     var ruleListState = byId("ruleListState");

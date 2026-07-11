@@ -74,9 +74,53 @@
   --shadow-ui: oklch(15% 0.025 230 / 0.14);
   --shadow-drawer: oklch(15% 0.025 230 / 0.18);
   --schedule-backdrop: oklch(18% 0.025 230 / 0.28);
+  --topbar-glow: oklch(52% 0.13 235 / 0.22);
+  --nav-surface: oklch(90.5% 0.008 245);
+  --view-head-surface: linear-gradient(90deg, var(--panel) 0, var(--panel) 62%, var(--panel-schedule) 100%);
+  --schedule-summary-ink: oklch(33% 0.026 230);
+  --schedule-card-line: oklch(72% 0.028 235);
+  --schedule-card-hover: oklch(97% 0.022 235);
+  --schedule-selected-ring: oklch(52% 0.13 235 / 0.2);
+  --recording-ring: oklch(52% 0.18 28 / 0.12);
+  --reserved-ring: oklch(55% 0.12 210 / 0.13);
+  --conflict-ring: oklch(62% 0.13 75 / 0.16);
+  --schedule-state-ink: oklch(97% 0.015 210);
+  --recording-state-ink: oklch(97% 0.015 28);
+  --conflict-state-ink: oklch(98% 0.01 75);
+  --skip-state-line: oklch(62% 0.014 245);
+  --skip-state-surface: oklch(37% 0.02 245);
+  --skip-state-ink: oklch(96% 0.006 245);
+  --category-anime-line: oklch(69% 0.055 292);
+  --category-anime-surface: oklch(95% 0.022 292);
+  --category-movie-line: oklch(70% 0.065 72);
+  --category-movie-surface: oklch(95.5% 0.025 72);
+  --category-news-line: oklch(69% 0.06 245);
+  --category-news-surface: oklch(95% 0.022 245);
+  --category-sports-line: oklch(68% 0.055 145);
+  --category-sports-surface: oklch(95% 0.022 145);
+  --category-drama-line: oklch(69% 0.055 10);
+  --category-drama-surface: oklch(95% 0.024 10);
+  --category-music-line: oklch(69% 0.052 265);
+  --category-music-surface: oklch(95% 0.022 265);
+  --category-information-line: oklch(69% 0.048 185);
+  --category-information-surface: oklch(95% 0.022 185);
+  --category-variety-line: oklch(71% 0.055 95);
+  --category-variety-surface: oklch(95.5% 0.026 95);
+  --category-neutral-line: oklch(72% 0.026 245);
+  --category-neutral-surface: oklch(96% 0.012 245);
+  --player-status-info: oklch(24% 0.035 190);
+  --player-control-surface: oklch(96% 0.012 190 / 0.08);
+  --player-control-hover-line: oklch(96% 0.012 190 / 0.32);
+  --player-control-hover-surface: oklch(96% 0.012 190 / 0.14);
+  --player-control-hover-ink: oklch(100% 0 0);
+  --player-control-disabled-line: oklch(96% 0.012 190 / 0.12);
+  --player-control-disabled-surface: oklch(96% 0.012 190 / 0.05);
+  --player-control-disabled-ink: oklch(85% 0.018 190 / 0.58);
+  --player-select-surface: oklch(14% 0.02 210);
+  --player-fullscreen-surface: oklch(17% 0.022 210 / 0.94);
   --console: var(--brand-strong);
   --console-muted: oklch(82% 0.014 245);
-  --topbar-height: 86px;
+  --topbar-height: 120px;
 }
 
 * {
@@ -171,7 +215,7 @@ body {
   padding: 22px clamp(18px, 4vw, 48px);
   border-bottom: 3px solid var(--accent);
   background:
-    linear-gradient(90deg, oklch(52% 0.13 235 / 0.22), transparent 44%),
+    linear-gradient(90deg, var(--topbar-glow), transparent 44%),
     var(--console);
   color: var(--brand-ink);
 }
@@ -187,7 +231,7 @@ body {
   overflow-x: auto;
   padding: 0 clamp(14px, 3vw, 40px);
   border-bottom: 1px solid var(--line);
-  background: oklch(90.5% 0.008 245);
+  background: var(--nav-surface);
 }
 
 .main-nav-links {
@@ -240,7 +284,7 @@ body {
   flex: 0 0 auto;
   padding: 13px 15px 11px;
   border-bottom: 3px solid transparent;
-  color: oklch(27% 0.03 230);
+  color: var(--ink-soft);
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
@@ -274,7 +318,7 @@ body {
   margin-right: 8px;
   padding-right: 8px;
   border-right: 1px solid var(--line);
-  color: oklch(33% 0.026 230);
+  color: var(--schedule-summary-ink);
   font-size: 12px;
   font-weight: 800;
 }
@@ -453,8 +497,7 @@ h3 {
   padding: 18px 20px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, var(--panel) 0, var(--panel) 62%, var(--panel-schedule) 100%);
+  background: var(--view-head-surface);
 }
 
 .view-head p {
@@ -680,7 +723,8 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:focus-visible,
+.program-row:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -951,51 +995,51 @@ summary:focus-visible,
 }
 
 .program-category-chip.category-anime {
-  border-color: oklch(74% 0.04 292);
-  background: oklch(95% 0.018 292);
-  color: oklch(36% 0.075 292);
+  border-color: var(--category-anime-line);
+  background: var(--category-anime-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-movie {
-  border-color: oklch(74% 0.052 72);
-  background: oklch(95.5% 0.02 72);
-  color: oklch(34% 0.065 72);
+  border-color: var(--category-movie-line);
+  background: var(--category-movie-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-news {
-  border-color: oklch(74% 0.045 245);
-  background: oklch(95% 0.018 245);
-  color: oklch(34% 0.07 245);
+  border-color: var(--category-news-line);
+  background: var(--category-news-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-sports {
-  border-color: oklch(72% 0.045 145);
-  background: oklch(95% 0.018 145);
-  color: oklch(32% 0.065 145);
+  border-color: var(--category-sports-line);
+  background: var(--category-sports-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-drama {
-  border-color: oklch(74% 0.048 10);
-  background: oklch(95% 0.02 10);
-  color: oklch(35% 0.07 10);
+  border-color: var(--category-drama-line);
+  background: var(--category-drama-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-music {
-  border-color: oklch(74% 0.045 265);
-  background: oklch(95% 0.018 265);
-  color: oklch(34% 0.07 265);
+  border-color: var(--category-music-line);
+  background: var(--category-music-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-information {
-  border-color: oklch(74% 0.046 185);
-  background: oklch(95% 0.018 185);
-  color: oklch(32% 0.06 185);
+  border-color: var(--category-information-line);
+  background: var(--category-information-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-variety {
-  border-color: oklch(76% 0.052 95);
-  background: oklch(96% 0.024 95);
-  color: oklch(34% 0.064 95);
+  border-color: var(--category-variety-line);
+  background: var(--category-variety-surface);
+  color: var(--ink-soft);
 }
 
 .program-category-chip.category-documentary,
@@ -1003,9 +1047,9 @@ summary:focus-visible,
 .program-category-chip.category-hobby,
 .program-category-chip.category-welfare,
 .program-category-chip.category-etc {
-  border-color: oklch(76% 0.024 245);
-  background: oklch(96% 0.01 245);
-  color: oklch(35% 0.026 245);
+  border-color: var(--category-neutral-line);
+  background: var(--category-neutral-surface);
+  color: var(--ink-soft);
 }
 
 .program-state-badges {
@@ -1039,9 +1083,9 @@ summary:focus-visible,
 }
 
 .program-state-badge.skip {
-  border-color: oklch(70% 0.016 245);
-  background: oklch(94% 0.01 245);
-  color: oklch(34% 0.022 245);
+  border-color: var(--skip-state-line);
+  background: var(--surface-disabled);
+  color: var(--ink-soft);
 }
 
 .inline-channel-row {
@@ -1226,7 +1270,7 @@ summary:focus-visible,
   min-height: 0;
   overflow: hidden;
   padding: 3px 5px;
-  border: 1px solid oklch(72% 0.028 235);
+  border: 1px solid var(--schedule-card-line);
   border-radius: 3px;
   background: var(--panel-schedule);
   color: var(--ink);
@@ -1244,53 +1288,53 @@ summary:focus-visible,
 .schedule-card:hover {
   z-index: 4;
   border-color: var(--accent);
-  background: oklch(97% 0.022 235);
+  background: var(--schedule-card-hover);
 }
 
 .schedule-card.selected {
   z-index: 5;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px oklch(52% 0.13 235 / 0.2);
+  box-shadow: 0 0 0 2px var(--schedule-selected-ring);
 }
 
 .schedule-card.category-anime {
-  border-color: oklch(69% 0.055 292);
-  background: oklch(95% 0.022 292);
+  border-color: var(--category-anime-line);
+  background: var(--category-anime-surface);
 }
 
 .schedule-card.category-movie {
-  border-color: oklch(70% 0.065 72);
-  background: oklch(95.5% 0.025 72);
+  border-color: var(--category-movie-line);
+  background: var(--category-movie-surface);
 }
 
 .schedule-card.category-news {
-  border-color: oklch(69% 0.06 245);
-  background: oklch(95% 0.022 245);
+  border-color: var(--category-news-line);
+  background: var(--category-news-surface);
 }
 
 .schedule-card.category-sports {
-  border-color: oklch(68% 0.055 145);
-  background: oklch(95% 0.022 145);
+  border-color: var(--category-sports-line);
+  background: var(--category-sports-surface);
 }
 
 .schedule-card.category-drama {
-  border-color: oklch(69% 0.055 10);
-  background: oklch(95% 0.024 10);
+  border-color: var(--category-drama-line);
+  background: var(--category-drama-surface);
 }
 
 .schedule-card.category-music {
-  border-color: oklch(69% 0.052 265);
-  background: oklch(95% 0.022 265);
+  border-color: var(--category-music-line);
+  background: var(--category-music-surface);
 }
 
 .schedule-card.category-information {
-  border-color: oklch(69% 0.048 185);
-  background: oklch(95% 0.022 185);
+  border-color: var(--category-information-line);
+  background: var(--category-information-surface);
 }
 
 .schedule-card.category-variety {
-  border-color: oklch(71% 0.055 95);
-  background: oklch(95.5% 0.026 95);
+  border-color: var(--category-variety-line);
+  background: var(--category-variety-surface);
 }
 
 .schedule-card.category-documentary,
@@ -1298,31 +1342,31 @@ summary:focus-visible,
 .schedule-card.category-hobby,
 .schedule-card.category-welfare,
 .schedule-card.category-etc {
-  border-color: oklch(72% 0.026 245);
-  background: oklch(96% 0.012 245);
+  border-color: var(--category-neutral-line);
+  background: var(--category-neutral-surface);
 }
 
 .schedule-card.recording {
   border: 2px solid var(--error);
   background: var(--error-soft);
-  box-shadow: 0 0 0 2px oklch(52% 0.18 28 / 0.12);
+  box-shadow: 0 0 0 2px var(--recording-ring);
 }
 
 .schedule-card.reserved {
   border: 2px solid var(--reserved);
   background: var(--reserved-soft);
-  box-shadow: 0 0 0 2px oklch(55% 0.12 210 / 0.13);
+  box-shadow: 0 0 0 2px var(--reserved-ring);
 }
 
 .schedule-card.conflict {
   border: 2px solid var(--warn);
   background: var(--warn-soft);
-  box-shadow: 0 0 0 2px oklch(62% 0.13 75 / 0.16);
+  box-shadow: 0 0 0 2px var(--conflict-ring);
 }
 
 .schedule-card.skip {
-  border-color: oklch(70% 0.016 245);
-  background: oklch(94% 0.01 245);
+  border-color: var(--line-strong);
+  background: var(--surface-disabled);
 }
 
 .schedule-now-line {
@@ -1352,7 +1396,7 @@ summary:focus-visible,
   border: 1px solid var(--reserved);
   border-radius: 3px;
   background: var(--reserved-strong);
-  color: oklch(97% 0.015 210);
+  color: var(--schedule-state-ink);
   font-size: 9px;
   font-weight: 800;
   line-height: 1.1;
@@ -1364,19 +1408,19 @@ summary:focus-visible,
 .schedule-card.recording .schedule-card-state {
   border-color: var(--error);
   background: var(--error-strong);
-  color: oklch(97% 0.015 28);
+  color: var(--recording-state-ink);
 }
 
 .schedule-card.conflict .schedule-card-state {
   border-color: var(--warn);
   background: var(--warn-strong);
-  color: oklch(98% 0.01 75);
+  color: var(--conflict-state-ink);
 }
 
 .schedule-card.skip .schedule-card-state {
-  border-color: oklch(62% 0.014 245);
-  background: oklch(37% 0.02 245);
-  color: oklch(96% 0.006 245);
+  border-color: var(--skip-state-line);
+  background: var(--skip-state-surface);
+  color: var(--skip-state-ink);
 }
 
 .schedule-card strong {
@@ -1629,7 +1673,7 @@ summary:focus-visible,
 }
 
 .player-status.info {
-  background: oklch(24% 0.035 190);
+  background: var(--player-status-info);
 }
 
 .player-status.error {
@@ -1644,14 +1688,14 @@ summary:focus-visible,
 .player-status .small-button {
   flex: 0 0 auto;
   border-color: var(--player-line);
-  background: oklch(96% 0.012 190 / 0.08);
+  background: var(--player-control-surface);
   color: var(--player-ink);
 }
 
 .player-status .small-button:hover {
-  border-color: oklch(96% 0.012 190 / 0.32);
-  background: oklch(96% 0.012 190 / 0.14);
-  color: oklch(100% 0 0);
+  border-color: var(--player-control-hover-line);
+  background: var(--player-control-hover-surface);
+  color: var(--player-control-hover-ink);
 }
 
 .embedded-player {
@@ -1684,7 +1728,7 @@ summary:focus-visible,
   padding: 0 9px;
   border: 1px solid var(--player-line);
   border-radius: 6px;
-  background: oklch(96% 0.012 190 / 0.08);
+  background: var(--player-control-surface);
   color: var(--player-ink);
   font-size: 12px;
   font-weight: 800;
@@ -1700,15 +1744,15 @@ summary:focus-visible,
 
 .player-control-button:hover,
 .player-control-link:hover {
-  border-color: oklch(96% 0.012 190 / 0.32);
-  background: oklch(96% 0.012 190 / 0.14);
-  color: oklch(100% 0 0);
+  border-color: var(--player-control-hover-line);
+  background: var(--player-control-hover-surface);
+  color: var(--player-control-hover-ink);
 }
 
 .player-control-button:disabled {
-  border-color: oklch(96% 0.012 190 / 0.12);
-  background: oklch(96% 0.012 190 / 0.05);
-  color: oklch(85% 0.018 190 / 0.58);
+  border-color: var(--player-control-disabled-line);
+  background: var(--player-control-disabled-surface);
+  color: var(--player-control-disabled-ink);
 }
 
 .player-seek {
@@ -1774,7 +1818,7 @@ summary:focus-visible,
 .player-setting-field select {
   min-height: 34px;
   border-color: var(--player-line);
-  background: oklch(14% 0.02 210);
+  background: var(--player-select-surface);
   color: var(--player-ink);
   font-size: 12px;
 }
@@ -1801,7 +1845,7 @@ summary:focus-visible,
   flex: 0 0 auto;
   opacity: 0;
   transform: translateY(12px);
-  background: oklch(17% 0.022 210 / 0.94);
+  background: var(--player-fullscreen-surface);
 }
 
 .player-shell:fullscreen .player-controls:hover,
@@ -1926,7 +1970,7 @@ summary:focus-visible,
 .config-form-control[aria-invalid="true"],
 .config-user-row input[aria-invalid="true"] {
   border-color: var(--error);
-  box-shadow: 0 0 0 2px oklch(52% 0.18 28 / 0.12);
+  box-shadow: 0 0 0 2px var(--recording-ring);
 }
 
 .rule-builder .rule-extra-json {
@@ -1959,13 +2003,9 @@ input[type="checkbox"] {
   justify-self: start;
 }
 
-.json-editor:focus,
-.compact-json-editor:focus,
-input:focus,
-select:focus,
-.program-row:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
+.json-editor:focus-visible,
+.compact-json-editor:focus-visible {
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -2960,10 +3000,6 @@ body.view-schedule .schedule-zoom-controls {
     display: grid;
   }
 
-  body.view-schedule .schedule-nav-controls > :not([for="scheduleChannel"]):not(#scheduleChannel):not([for="scheduleDay"]):not(#scheduleDay):not([for="scheduleGenre"]):not(#scheduleGenre) {
-    display: none;
-  }
-
   body.view-schedule .schedule-menu-backdrop {
     position: fixed;
     inset: 0;
@@ -3111,10 +3147,6 @@ body.view-schedule .schedule-zoom-controls {
 
   body.view-schedule.schedule-filter-open .schedule-nav-controls {
     display: grid;
-  }
-
-  body.view-schedule .schedule-nav-controls > :not([for="scheduleChannel"]):not(#scheduleChannel):not([for="scheduleDay"]):not(#scheduleDay):not([for="scheduleGenre"]):not(#scheduleGenre) {
-    display: none;
   }
 
   body.view-schedule .schedule-nav-controls select,

@@ -76,7 +76,7 @@
       <h1>Strata PVR</h1>
       <p>Strata PVR WUI for Mirakurun</p>
     </div>
-    <div id="statusBadge" class="status-badge" aria-live="polite">読み込み中</div>
+    <div id="statusBadge" class="status-badge">読み込み中</div>
   </header>
 
   <nav class="main-nav" aria-label="メインナビゲーション">
@@ -98,7 +98,7 @@
         <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
-    <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
+    <div id="scheduleStatusSummary" class="schedule-status-summary">
       <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
       <span id="scheduleRecordingSummary">録画中 0</span>
       <span id="scheduleReserveSummary">予約 0</span>
@@ -169,7 +169,6 @@
     </section>
 
     <section class="view" data-view="schedule" hidden>
-      <h2 class="screen-reader-only">番組表</h2>
       <div class="view-head">
         <div>
           <h2>番組表</h2>
@@ -295,7 +294,7 @@
       </div>
       <section class="panel">
         <div class="rule-builder">
-          <div class="rule-form-status" id="ruleFormStatus">新規作成</div>
+          <div class="rule-form-status" id="ruleFormStatus" role="status" aria-live="polite" aria-atomic="true">新規作成</div>
           <label>
             <span>予約タイトル reserve_titles</span>
             <input id="ruleTitle" type="text" autocomplete="off" placeholder="正規表現、複数はカンマ区切り">
@@ -533,6 +532,7 @@
       </section>
     </section>
   </main>
+  <div id="liveAnnouncement" class="screen-reader-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <button id="scheduleMenuBackdrop" class="schedule-menu-backdrop" type="button" aria-label="番組表メニューを閉じる" hidden></button>
 
   <dialog id="programDialog" class="program-dialog" aria-labelledby="programDialogTitle">
