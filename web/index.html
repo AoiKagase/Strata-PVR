@@ -235,8 +235,10 @@
           <input id="searchProgramID" type="search" autocomplete="off" placeholder="program id">
         </label>
         <label class="control-field" for="searchChannelID">
-          <span>チャンネルID</span>
-          <input id="searchChannelID" type="search" autocomplete="off" placeholder="channel id">
+          <span>チャンネル</span>
+          <select id="searchChannelID">
+            <option value="">全チャンネル</option>
+          </select>
         </label>
         <label class="control-field" for="searchStartHour">
           <span>何時から</span>
@@ -394,20 +396,16 @@
             <input id="ruleSid" type="number" min="1" step="1" inputmode="numeric">
           </label>
           <label>
-            <span>単一カテゴリ category</span>
-            <input id="ruleCategory" type="text" autocomplete="off">
-          </label>
-          <label>
             <span>複数カテゴリ categories</span>
-            <input id="ruleCategories" type="text" autocomplete="off" placeholder="anime, news">
+            <select id="ruleCategories" multiple size="5" aria-label="複数カテゴリを選択"></select>
           </label>
           <label>
             <span>チャンネル</span>
-            <input id="ruleChannels" type="text" autocomplete="off" placeholder="カンマ区切り">
+            <select id="ruleChannels" multiple size="5" aria-label="チャンネルを複数選択"></select>
           </label>
           <label>
             <span>除外チャンネル</span>
-            <input id="ruleIgnoreChannels" type="text" autocomplete="off" placeholder="カンマ区切り">
+            <select id="ruleIgnoreChannels" multiple size="5" aria-label="除外チャンネルを複数選択"></select>
           </label>
           <label>
             <span>フラグ</span>

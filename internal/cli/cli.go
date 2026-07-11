@@ -209,6 +209,37 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 		db.Close()
 		return err
 	}
+	var migratedSchedule []legacy.ChannelSchedule
+	if err := storage.ReadJSON(filepath.Join(tempDir, "schedule.json"), &migratedSchedule, "[]"); err != nil {
+		db.Close()
+		return err
+	}
+	ruleWarnings, err := validateMigratedRules(migratedRules, migratedSchedule)
+	if err != nil {
+		db.Close()
+		return err
+	}
+	warnings = append(warnings, ruleWarnings...)
+	createdAt, _ := json.Marshal(time.Now().UTC().Format(time.RFC3339Nano))
+	for index, raw := range migratedRules {
+		var rule map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			db.Close()
+			return fmt.Errorf("prepare migrated rule %d: %w", index, err)
+		}
+		if rule == nil {
+			continue
+		}
+		if _, ok := rule["createdAt"]; !ok {
+			rule["createdAt"] = createdAt
+			encoded, err := json.Marshal(rule)
+			if err != nil {
+				db.Close()
+				return fmt.Errorf("prepare migrated rule %d: %w", index, err)
+			}
+			migratedRules[index] = encoded
+		}
+	}
 	if err := database.ReplaceRules(ctx, db, migratedRules); err != nil {
 		db.Close()
 		return err
@@ -234,10 +265,6 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 		return err
 	}
 	if err := db.Close(); err != nil {
-		return err
-	}
-	var migratedSchedule []legacy.ChannelSchedule
-	if err := storage.ReadJSON(filepath.Join(tempDir, "schedule.json"), &migratedSchedule, "[]"); err != nil {
 		return err
 	}
 	if err := schedulestore.Write(ctx, filepath.Join(tempDir, "strata.db"), migratedSchedule); err != nil {
@@ -309,6 +336,53 @@ func migrateChinachu(ctx context.Context, args []string, stdout io.Writer) error
 		fmt.Fprintf(stdout, "Warning: %s\n", warning)
 	}
 	return nil
+}
+
+func validateMigratedRules(rules []json.RawMessage, schedule []legacy.ChannelSchedule) ([]string, error) {
+	knownChannels := make(map[string]struct{})
+	knownSIDs := make(map[int64]struct{})
+	for _, channel := range schedule {
+		for _, value := range []string{
+			channel.ID,
+			channel.Channel.Channel,
+			channel.Type + "_" + strconv.FormatInt(channel.SID, 10),
+		} {
+			if value != "_0" && value != "" {
+				knownChannels[value] = struct{}{}
+			}
+		}
+		if channel.SID != 0 {
+			knownSIDs[channel.SID] = struct{}{}
+		}
+	}
+
+	issues := []string{}
+	for index, raw := range rules {
+		var rule struct {
+			SID            int64    `json:"sid"`
+			Channels       []string `json:"channels"`
+			IgnoreChannels []string `json:"ignore_channels"`
+		}
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			return nil, fmt.Errorf("validate migrated rule %d: %w", index, err)
+		}
+		if rule.SID != 0 {
+			if _, ok := knownSIDs[rule.SID]; !ok {
+				issues = append(issues, fmt.Sprintf("rule #%d sid %d (not found in schedule)", index, rule.SID))
+			}
+		}
+		for field, values := range map[string][]string{
+			"channels":        rule.Channels,
+			"ignore_channels": rule.IgnoreChannels,
+		} {
+			for _, value := range values {
+				if _, ok := knownChannels[value]; !ok {
+					issues = append(issues, fmt.Sprintf("rule #%d %s %q (not found in schedule)", index, field, value))
+				}
+			}
+		}
+	}
+	return issues, nil
 }
 
 func copyDirectory(sourceRoot, destinationRoot string) error {

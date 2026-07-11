@@ -1559,6 +1559,8 @@ func (s *server) handleRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		normalizeRuleEnabled(rule)
+		createdAt, _ := json.Marshal(time.Now().UTC().Format(time.RFC3339Nano))
+		rule["createdAt"] = createdAt
 		if err := rulestore.Append(r.Context(), s.paths.Database, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
@@ -1595,6 +1597,9 @@ func (s *server) handleRule(w http.ResponseWriter, r *http.Request, num string) 
 			return
 		}
 		normalizeRuleEnabled(rule)
+		if createdAt, ok := rules[index]["createdAt"]; ok {
+			rule["createdAt"] = createdAt
+		}
 		if _, err := rulestore.Update(r.Context(), s.paths.Database, index, rule); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return

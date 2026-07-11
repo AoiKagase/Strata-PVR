@@ -1038,6 +1038,11 @@ summary:focus-visible,
   white-space: nowrap;
 }
 
+.rule-row .rule-validation-error {
+  color: var(--error-strong);
+  font-weight: 750;
+}
+
 .rule-row .row-actions {
   flex-wrap: nowrap;
   justify-content: flex-end;
@@ -2046,6 +2051,12 @@ summary:focus-visible,
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.rule-builder select[multiple] {
+  max-width: none;
+  min-height: 116px;
+  padding: 6px 10px;
 }
 
 input {

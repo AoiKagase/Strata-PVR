@@ -159,6 +159,9 @@ func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
 	if err != nil || len(rules) != 1 || !strings.Contains(string(rules[0]), "News") {
 		t.Fatalf("rules were not imported into SQLite: %s %v", rules, err)
 	}
+	if !strings.Contains(string(rules[0]), "createdAt") {
+		t.Fatalf("migrated rule did not receive createdAt: %s", rules[0])
+	}
 	db, err = database.Open(context.Background(), filepath.Join("data", "strata.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -221,6 +224,46 @@ func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
 	}
 	if !maps.Equal(report.SourceSHA256, archivedHashes) || !maps.Equal(report.SourceSize, archivedSizes) {
 		t.Fatalf("migration report does not match archive: hashes=%v sizes=%v", report.SourceSHA256, report.SourceSize)
+	}
+}
+
+func TestMigrateChinachuWarnsForRulesWithUnknownChannelsAndSIDs(t *testing.T) {
+	withMigrationTestDir(t)
+	writeMinimalMigrationInput(t)
+	if err := os.WriteFile(filepath.Join("migrate", "rules.json"), []byte(`[{"channels":["missing"],"ignore_channels":["also-missing"],"sid":999}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("migrate", "data", "schedule.json"), []byte(`[{"type":"GR","channel":"27","name":"svc","id":"known","sid":101,"programs":[]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := migrateChinachu(context.Background(), nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, warning := range []string{
+		`Warning: rule #0 sid 999 (not found in schedule)`,
+		`Warning: rule #0 channels "missing" (not found in schedule)`,
+		`Warning: rule #0 ignore_channels "also-missing" (not found in schedule)`,
+	} {
+		if !strings.Contains(out.String(), warning) {
+			t.Fatalf("migration output missing warning %q: %s", warning, out.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join("data", "strata.db")); err != nil {
+		t.Fatalf("migration did not install data: %v", err)
+	}
+	reports, err := filepath.Glob(filepath.Join("backup", "chinachu-*-report.json"))
+	if err != nil || len(reports) != 1 {
+		t.Fatalf("migration report = %v error=%v", reports, err)
+	}
+	var report struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(mustReadCLIFile(t, reports[0]), &report); err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Warnings) != 3 {
+		t.Fatalf("migration report warnings = %#v", report.Warnings)
 	}
 }
 
@@ -598,6 +641,10 @@ func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
 		`value="three-days"`,
 		`value="all"`,
 		`scheduleHiddenChannel`,
+		`<select id="searchChannelID">`,
+		`<select id="ruleCategories" multiple`,
+		`<select id="ruleChannels" multiple`,
+		`<select id="ruleIgnoreChannels" multiple`,
 	} {
 		if !strings.Contains(indexText, want) {
 			t.Fatalf("native WUI index missing %q", want)
@@ -611,6 +658,10 @@ func TestNativeWUIStaticAssetsKeepScheduleNavigationRequirements(t *testing.T) {
 		`saveHiddenChannels`,
 		`renderScheduleGuide`,
 		`text(byId("scheduleRecordingSummary"), "録画中 " + activeRecordingPrograms().length)`,
+		`renderChannelSelectOptions`,
+		`renderRuleFormOptions`,
+		`listFormValues`,
+		`ruleValidationIssues`,
 	} {
 		if !strings.Contains(appText, want) {
 			t.Fatalf("native WUI app missing %q", want)

@@ -1255,8 +1255,12 @@ func TestAPIRulesMutation(t *testing.T) {
 	if res.Code != http.StatusCreated {
 		t.Fatalf("post status = %d body=%s", res.Code, res.Body.String())
 	}
-	if got := res.Body.String(); got != `{"categories":["anime"],"isDisabled":true}` {
-		t.Fatalf("post body = %q", got)
+	var posted map[string]json.RawMessage
+	if err := json.Unmarshal(res.Body.Bytes(), &posted); err != nil {
+		t.Fatal(err)
+	}
+	if string(posted["categories"]) != `["anime"]` || string(posted["isDisabled"]) != "true" || len(posted["createdAt"]) == 0 {
+		t.Fatalf("post body = %q", res.Body.String())
 	}
 	var rules []map[string]json.RawMessage
 	if err := storage.ReadJSON(paths.Rules, &rules, "[]"); err != nil {

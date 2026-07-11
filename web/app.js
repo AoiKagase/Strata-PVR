@@ -1202,6 +1202,12 @@
 
   function ruleSummary(rule) {
     var parts = [];
+    if (rule.createdAt) {
+      var createdAt = formatTime(rule.createdAt);
+      if (createdAt) {
+        parts.push("追加 " + createdAt);
+      }
+    }
     if (rule.types && rule.types.length) {
       parts.push("types " + rule.types.join(","));
     }
@@ -1218,6 +1224,39 @@
       parts.push("ignores " + rule.ignore_titles.join(","));
     }
     return parts.join(" / ") || JSON.stringify(rule);
+  }
+
+  function ruleValidationIssues(rule) {
+    if (!state.schedule || !state.schedule.length) {
+      return [];
+    }
+    var issues = [];
+    var channels = state.schedule;
+    var matchesChannel = function (value) {
+      return channels.some(function (channel) {
+        var type = scheduleChannelType(channel);
+        var sid = channel && channel.sid !== undefined ? String(channel.sid) : "";
+        var physical = channel && typeof channel.channel === "string" ? channel.channel : "";
+        return value === scheduleChannelID(channel) || value === physical || (type && sid && value === type + "_" + sid);
+      });
+    };
+    [
+      { key: "channels", label: "channels", values: rule.channels },
+      { key: "ignore_channels", label: "ignore_channels", values: rule.ignore_channels }
+    ].forEach(function (field) {
+      var invalid = (Array.isArray(field.values) ? field.values : []).filter(function (value) {
+        return !matchesChannel(String(value));
+      });
+      if (invalid.length) {
+        issues.push("⚠ " + field.label + "未登録: " + invalid.join(", "));
+      }
+    });
+    if (rule.sid && !channels.some(function (channel) {
+      return channel && channel.sid !== undefined && String(channel.sid) === String(rule.sid);
+    })) {
+      issues.push("⚠ sid未登録: " + rule.sid);
+    }
+    return issues;
   }
 
   function actionButton(label, title, fn, className) {
@@ -3128,6 +3167,9 @@
     if (type) {
       type.value = (state.listFilters.search || {}).type || "";
     }
+    renderChannelSelectOptions(byId("searchChannelID"), [
+      (state.listFilters.search || {}).channelID || ""
+    ], "全チャンネル", false);
     var count = results.length;
     var pageCount = Math.max(1, Math.ceil(count / searchPageSize));
     state.searchPage = Math.max(1, Math.min(pageCount, Number(state.searchPage) || 1));
@@ -3874,6 +3916,7 @@
   }
 
   function renderRules() {
+    renderRuleFormOptions();
     var root = byId("ruleList");
     if (!root) {
       return;
@@ -3917,7 +3960,12 @@
       title.textContent = "#" + index + (rule.isDisabled ? " 無効" : " 有効");
 
       var meta = document.createElement("span");
-      meta.textContent = ruleSummary(rule);
+      var validationIssues = ruleValidationIssues(rule);
+      meta.textContent = [ruleSummary(rule)].concat(validationIssues).join(" / ");
+      if (validationIssues.length) {
+        meta.className = "rule-validation-error";
+        meta.title = "現在の番組表に存在しないチャンネルまたはSIDがあります";
+      }
 
       var row = document.createElement("div");
       row.className = "row-actions";
@@ -4474,6 +4522,18 @@
     }).filter(Boolean);
   }
 
+  function listFormValues(control) {
+    if (!control) {
+      return [];
+    }
+    if (control.multiple) {
+      return Array.prototype.map.call(control.selectedOptions, function (option) {
+        return option.value;
+      }).filter(Boolean);
+    }
+    return splitList(control.value);
+  }
+
   function readExtraRuleJSON(input) {
     if (!input || !input.value.trim()) {
       return {};
@@ -4500,6 +4560,13 @@
       control.checked = Boolean(value);
       return;
     }
+    if (control.multiple) {
+      var values = Array.isArray(value) ? value.map(String) : splitList(value);
+      Array.prototype.forEach.call(control.options, function (option) {
+        option.selected = values.indexOf(option.value) >= 0;
+      });
+      return;
+    }
     control.value = value === undefined || value === null ? "" : String(value);
   }
 
@@ -4511,6 +4578,92 @@
     setFormValue(id, value);
   }
 
+  function channelOptionEntries(extraValues) {
+    var entries = [];
+    var seen = {};
+    (state.schedule || []).forEach(function (channel) {
+      var id = scheduleChannelID(channel);
+      if (!id || seen[id]) {
+        return;
+      }
+      seen[id] = true;
+      entries.push({ id: id, name: scheduleChannelName(channel) || id });
+    });
+    (extraValues || []).forEach(function (id) {
+      id = String(id || "");
+      if (id && !seen[id]) {
+        seen[id] = true;
+        entries.push({ id: id, name: id + "（現在の番組表にありません）" });
+      }
+    });
+    return entries;
+  }
+
+  function renderChannelSelectOptions(select, extraValues, emptyLabel, multiple) {
+    if (!select) {
+      return;
+    }
+    var currentValues = multiple ? listFormValues(select) : [];
+    var values = (extraValues || []).concat(currentValues);
+    select.innerHTML = "";
+    if (!multiple) {
+      var empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = emptyLabel || "選択";
+      select.appendChild(empty);
+    }
+    channelOptionEntries(values).forEach(function (entry) {
+      var option = document.createElement("option");
+      option.value = entry.id;
+      option.textContent = entry.name;
+      option.title = entry.id;
+      option.selected = values.indexOf(entry.id) >= 0;
+      select.appendChild(option);
+    });
+  }
+
+  function categoryOptionEntries(extraValues) {
+    var entries = [];
+    var seen = {};
+    (state.schedule || []).forEach(function (channel) {
+      (channel.programs || []).forEach(function (program) {
+        var category = program && program.category ? String(program.category) : "";
+        if (category && !seen[category]) {
+          seen[category] = true;
+          entries.push(category);
+        }
+      });
+    });
+    (extraValues || []).forEach(function (category) {
+      category = String(category || "");
+      if (category && !seen[category]) {
+        seen[category] = true;
+        entries.push(category);
+      }
+    });
+    return entries.sort(function (a, b) { return a.localeCompare(b); });
+  }
+
+  function renderRuleFormOptions(extraCategories, extraChannels, extraIgnoreChannels) {
+    var categories = byId("ruleCategories");
+    var categoryValues = (extraCategories || []).concat(listFormValues(categories));
+    if (categories) {
+      categories.innerHTML = "";
+      categoryOptionEntries(categoryValues).forEach(function (category) {
+        var option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        option.selected = categoryValues.indexOf(category) >= 0;
+        categories.appendChild(option);
+      });
+    }
+    ["ruleChannels", "ruleIgnoreChannels"].forEach(function (id) {
+      var select = byId(id);
+      var extraValues = id === "ruleChannels" ? extraChannels : extraIgnoreChannels;
+      renderChannelSelectOptions(select, (extraValues || []).concat(listFormValues(select)), "", true);
+    });
+  }
+
   function clearRuleForm() {
     [
       "ruleTitle",
@@ -4518,7 +4671,6 @@
       "ruleDescription",
       "ruleIgnoreDescription",
       "ruleSid",
-      "ruleCategory",
       "ruleCategories",
       "ruleChannels",
       "ruleIgnoreChannels",
@@ -4571,7 +4723,8 @@
       ignore_descriptions: true,
       reserve_flags: true,
       ignore_flags: true,
-      recorded_format: true
+      recorded_format: true,
+      createdAt: true
     };
     var extra = {};
     Object.keys(rule || {}).forEach(function (key) {
@@ -4588,6 +4741,8 @@
 
   function fillRuleFormFromRule(rule, index) {
     rule = rule || {};
+    var categories = rule.categories && rule.categories.length ? rule.categories : (rule.category ? [rule.category] : []);
+    renderRuleFormOptions(categories, rule.channels, rule.ignore_channels);
     setListFormValue("ruleTitle", rule.reserve_titles);
     setListFormValue("ruleIgnoreTitle", rule.ignore_titles);
     setListFormValue("ruleDescription", rule.reserve_descriptions);
@@ -4601,8 +4756,7 @@
       setFormValue("ruleExtraJson", ruleExtraText(legacyRuleExtra(rule)));
     }
     setFormValue("ruleSid", rule.sid || "");
-    setFormValue("ruleCategory", rule.category || "");
-    setListFormValue("ruleCategories", rule.categories);
+    setListFormValue("ruleCategories", categories);
     setListFormValue("ruleChannels", rule.channels);
     setListFormValue("ruleIgnoreChannels", rule.ignore_channels);
     setListFormValue("ruleFlags", rule.reserve_flags);
@@ -4645,10 +4799,11 @@
       setFormValue("ruleType", "");
     }
     setFormValue("ruleSid", channelID && /^\d+$/.test(channelID) ? channelID : "");
-    setFormValue("ruleCategory", program.category || "");
     setFormValue("ruleCategories", "");
-    setFormValue("ruleChannels", channelID && !/^\d+$/.test(channelID) ? channelID : "");
-    setFormValue("ruleIgnoreChannels", "");
+    renderRuleFormOptions(program.category ? [program.category] : [], channelID && !/^\d+$/.test(channelID) ? [channelID] : [], []);
+    setFormValue("ruleCategories", program.category ? [program.category] : []);
+    setFormValue("ruleChannels", channelID && !/^\d+$/.test(channelID) ? [channelID] : []);
+    setFormValue("ruleIgnoreChannels", []);
     setFormValue("ruleFlags", "");
     setFormValue("ruleIgnoreFlags", "");
     setFormValue("ruleDurationMin", durationMinutes);
@@ -4676,7 +4831,6 @@
     var ignoreDescription = byId("ruleIgnoreDescription");
     var type = byId("ruleType");
     var sid = byId("ruleSid");
-    var category = byId("ruleCategory");
     var categories = byId("ruleCategories");
     var channels = byId("ruleChannels");
     var ignoreChannels = byId("ruleIgnoreChannels");
@@ -4725,27 +4879,24 @@
       }
       rule.sid = sidValue;
     }
-    if (category && category.value.trim()) {
-      rule.category = category.value.trim();
-    }
-    var categoryValues = categories ? splitList(categories.value) : [];
+    var categoryValues = listFormValues(categories);
     if (categoryValues.length) {
       rule.categories = categoryValues;
       delete rule.category;
     }
-    var channelValues = channels ? splitList(channels.value) : [];
+    var channelValues = listFormValues(channels);
     if (channelValues.length) {
       rule.channels = channelValues;
     }
-    var ignoreChannelValues = ignoreChannels ? splitList(ignoreChannels.value) : [];
+    var ignoreChannelValues = listFormValues(ignoreChannels);
     if (ignoreChannelValues.length) {
       rule.ignore_channels = ignoreChannelValues;
     }
-    var flagValues = flags ? splitList(flags.value) : [];
+    var flagValues = listFormValues(flags);
     if (flagValues.length) {
       rule.reserve_flags = flagValues;
     }
-    var ignoreFlagValues = ignoreFlags ? splitList(ignoreFlags.value) : [];
+    var ignoreFlagValues = listFormValues(ignoreFlags);
     if (ignoreFlagValues.length) {
       rule.ignore_flags = ignoreFlagValues;
     }
@@ -4785,7 +4936,7 @@
     if (disabled && disabled.checked) {
       rule.isDisabled = true;
     }
-    if (!Object.keys(rule).length || (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.sid && !rule.category && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour)) {
+    if (!Object.keys(rule).length || (!rule.reserve_titles && !rule.ignore_titles && !rule.reserve_descriptions && !rule.ignore_descriptions && !rule.types && !rule.sid && !rule.categories && !rule.channels && !rule.ignore_channels && !rule.reserve_flags && !rule.ignore_flags && !rule.duration && !rule.hour)) {
       showError(new Error("ルール条件が空です"));
       return;
     }
