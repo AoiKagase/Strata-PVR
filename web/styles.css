@@ -2474,6 +2474,10 @@ body.view-settings .settings-grid {
   margin: 0 0 12px;
 }
 
+.list-pagination-controls.pagination-bottom {
+  margin: 12px 0 0;
+}
+
 .compact-control {
   min-width: 120px;
 }

@@ -3176,17 +3176,18 @@
     var start = count ? (state.searchPage - 1) * searchPageSize + 1 : 0;
     var end = count ? Math.min(count, state.searchPage * searchPageSize) : 0;
     text(byId("searchListFilterSummary"), count ? start + "-" + end + " / " + count + "件" : "0件");
-    text(byId("searchPageSummary"), count ? state.searchPage + " / " + pageCount + "ページ" : "0ページ");
+    document.querySelectorAll("[data-search-page-summary]").forEach(function (summary) {
+      text(summary, count ? state.searchPage + " / " + pageCount + "ページ" : "0ページ");
+    });
     [
-      { id: "searchFirstPage", disabled: state.searchPage <= 1 || !count },
-      { id: "searchPrevPage", disabled: state.searchPage <= 1 || !count },
-      { id: "searchNextPage", disabled: state.searchPage >= pageCount || !count },
-      { id: "searchLastPage", disabled: state.searchPage >= pageCount || !count }
+      { action: "first", disabled: state.searchPage <= 1 || !count },
+      { action: "prev", disabled: state.searchPage <= 1 || !count },
+      { action: "next", disabled: state.searchPage >= pageCount || !count },
+      { action: "last", disabled: state.searchPage >= pageCount || !count }
     ].forEach(function (item) {
-      var button = byId(item.id);
-      if (button) {
+      document.querySelectorAll("[data-search-page-control='" + item.action + "']").forEach(function (button) {
         button.disabled = item.disabled;
-      }
+      });
     });
   }
 
@@ -3235,21 +3236,21 @@
     var maxPage = recordedPageCount(total);
     var start = total > 0 ? ((page - 1) * pageSize) + 1 : 0;
     var end = total > 0 ? Math.min(total, page * pageSize) : 0;
-    var pageSizeSelect = byId("recordedListPageSize");
-    if (pageSizeSelect) {
+    document.querySelectorAll("[data-recorded-page-size]").forEach(function (pageSizeSelect) {
       pageSizeSelect.value = String(pageSize);
-    }
-    text(byId("recordedListPageSummary"), total > 0 ? start + "-" + end + " / " + total + "件" : "0件");
+    });
+    document.querySelectorAll("[data-recorded-page-summary]").forEach(function (summary) {
+      text(summary, total > 0 ? start + "-" + end + " / " + total + "件" : "0件");
+    });
     [
-      { id: "recordedListFirstPage", disabled: page <= 1 || total === 0 },
-      { id: "recordedListPrevPage", disabled: page <= 1 || total === 0 },
-      { id: "recordedListNextPage", disabled: page >= maxPage || total === 0 },
-      { id: "recordedListLastPage", disabled: page >= maxPage || total === 0 }
+      { action: "first", disabled: page <= 1 || total === 0 },
+      { action: "prev", disabled: page <= 1 || total === 0 },
+      { action: "next", disabled: page >= maxPage || total === 0 },
+      { action: "last", disabled: page >= maxPage || total === 0 }
     ].forEach(function (item) {
-      var button = byId(item.id);
-      if (button) {
+      document.querySelectorAll("[data-recorded-page-control='" + item.action + "']").forEach(function (button) {
         button.disabled = item.disabled;
-      }
+      });
     });
   }
 
@@ -5456,24 +5457,22 @@
       });
     }
     [
-      { id: "searchFirstPage", page: function () { return 1; } },
-      { id: "searchPrevPage", page: function () { return state.searchPage - 1; } },
-      { id: "searchNextPage", page: function () { return state.searchPage + 1; } },
-      { id: "searchLastPage", page: function () { return Math.max(1, Math.ceil(searchResults().length / searchPageSize)); } }
+      { action: "first", page: function () { return 1; } },
+      { action: "prev", page: function () { return state.searchPage - 1; } },
+      { action: "next", page: function () { return state.searchPage + 1; } },
+      { action: "last", page: function () { return Math.max(1, Math.ceil(searchResults().length / searchPageSize)); } }
     ].forEach(function (item) {
-      var button = byId(item.id);
-      if (button) {
+      document.querySelectorAll("[data-search-page-control='" + item.action + "']").forEach(function (button) {
         button.addEventListener("click", function () {
           state.searchPage = item.page();
           renderSearch();
         });
-      }
+      });
     });
   }
 
   function bindRecordedPagination() {
-    var pageSize = byId("recordedListPageSize");
-    if (pageSize) {
+    document.querySelectorAll("[data-recorded-page-size]").forEach(function (pageSize) {
       pageSize.value = String(state.recordedPageSize);
       pageSize.addEventListener("change", function () {
         state.recordedPageSize = normalizeRecordedPageSize(pageSize.value);
@@ -5481,39 +5480,39 @@
         saveRecordedPageSize();
         render();
       });
-    }
-    [
-      { id: "recordedListFirstPage", icon: "chevrons-left", label: "最初のページ" },
-      { id: "recordedListPrevPage", icon: "chevron-left", label: "前のページ" },
-      { id: "recordedListNextPage", icon: "chevron-right", label: "次のページ" },
-      { id: "recordedListLastPage", icon: "chevrons-right", label: "最後のページ" }
-    ].forEach(function (control) {
-      setIconOnlyControl(byId(control.id), control.icon, control.label);
     });
     [
-      { id: "recordedListFirstPage", page: function () { return 1; } },
-      { id: "recordedListPrevPage", page: function () { return state.recordedPage - 1; } },
-      { id: "recordedListNextPage", page: function () { return state.recordedPage + 1; } },
+      { action: "first", icon: "chevrons-left", label: "最初のページ" },
+      { action: "prev", icon: "chevron-left", label: "前のページ" },
+      { action: "next", icon: "chevron-right", label: "次のページ" },
+      { action: "last", icon: "chevrons-right", label: "最後のページ" }
+    ].forEach(function (control) {
+      document.querySelectorAll("[data-recorded-page-control='" + control.action + "']").forEach(function (button) {
+        setIconOnlyControl(button, control.icon, control.label);
+      });
+    });
+    [
+      { action: "first", page: function () { return 1; } },
+      { action: "prev", page: function () { return state.recordedPage - 1; } },
+      { action: "next", page: function () { return state.recordedPage + 1; } },
       {
-        id: "recordedListLastPage",
+        action: "last",
         page: function () {
           var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
           return recordedPageCount(filteredRecorded.length);
         }
       }
     ].forEach(function (control) {
-      var button = byId(control.id);
-      if (!button) {
-        return;
-      }
-      button.addEventListener("click", function () {
-        var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
-        state.recordedPage = Math.max(1, Math.min(recordedPageCount(filteredRecorded.length), control.page()));
-        render();
-        var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-title-button");
-        if (firstRow && typeof firstRow.focus === "function") {
-          firstRow.focus({ preventScroll: true });
-        }
+      document.querySelectorAll("[data-recorded-page-control='" + control.action + "']").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
+          state.recordedPage = Math.max(1, Math.min(recordedPageCount(filteredRecorded.length), control.page()));
+          render();
+          var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-title-button");
+          if (firstRow && typeof firstRow.focus === "function") {
+            firstRow.focus({ preventScroll: true });
+          }
+        });
       });
     });
   }

@@ -515,6 +515,47 @@ func TestNativeDashboardListFilters(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardPaginationControlsRenderAtTopAndBottom(t *testing.T) {
+	index, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSource := string(index)
+	for _, marker := range []string{
+		`data-search-page-summary`,
+		`data-recorded-page-summary`,
+		`data-recorded-page-size`,
+	} {
+		if count := strings.Count(indexSource, marker); count != 2 {
+			t.Fatalf("index.html expected %q twice, got %d", marker, count)
+		}
+	}
+	for _, action := range []string{"first", "prev", "next", "last"} {
+		for _, kind := range []string{"search", "recorded"} {
+			marker := `data-` + kind + `-page-control="` + action + `"`
+			if count := strings.Count(indexSource, marker); count != 2 {
+				t.Fatalf("index.html expected %q twice, got %d", marker, count)
+			}
+		}
+	}
+	appSource := string(app)
+	for _, marker := range []string{
+		`[data-search-page-summary]`,
+		`[data-search-page-control='`,
+		`[data-recorded-page-summary]`,
+		`[data-recorded-page-control='`,
+		`[data-recorded-page-size]`,
+	} {
+		if !strings.Contains(appSource, marker) {
+			t.Fatalf("app.js missing shared pagination selector %q", marker)
+		}
+	}
+}
+
 func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

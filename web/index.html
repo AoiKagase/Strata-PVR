@@ -251,16 +251,25 @@
         <button id="searchFilterReset" class="filter-clear-button" type="button">クリア</button>
         <span id="searchListFilterSummary" class="list-filter-summary">0件</span>
       </div>
-      <div class="list-pagination-controls">
-        <span id="searchPageSummary" class="list-page-summary">番組検索</span>
+      <div class="list-pagination-controls" aria-label="番組検索ページング">
+        <span id="searchPageSummary" class="list-page-summary" data-search-page-summary>番組検索</span>
         <div class="pagination-buttons">
-          <button id="searchFirstPage" type="button" title="最初のページ">最初</button>
-          <button id="searchPrevPage" type="button" title="前のページ">前へ</button>
-          <button id="searchNextPage" type="button" title="次のページ">次へ</button>
-          <button id="searchLastPage" type="button" title="最後のページ">最後</button>
+          <button id="searchFirstPage" data-search-page-control="first" type="button" title="最初のページ">最初</button>
+          <button id="searchPrevPage" data-search-page-control="prev" type="button" title="前のページ">前へ</button>
+          <button id="searchNextPage" data-search-page-control="next" type="button" title="次のページ">次へ</button>
+          <button id="searchLastPage" data-search-page-control="last" type="button" title="最後のページ">最後</button>
         </div>
       </div>
       <div id="searchList" class="list empty">番組検索データがありません</div>
+      <div class="list-pagination-controls pagination-bottom" aria-label="番組検索ページング（下部）">
+        <span class="list-page-summary" data-search-page-summary>番組検索</span>
+        <div class="pagination-buttons">
+          <button data-search-page-control="first" type="button" title="最初のページ">最初</button>
+          <button data-search-page-control="prev" type="button" title="前のページ">前へ</button>
+          <button data-search-page-control="next" type="button" title="次のページ">次へ</button>
+          <button data-search-page-control="last" type="button" title="最後のページ">最後</button>
+        </div>
+      </div>
     </section>
 
     <section class="view" data-view="reserves" hidden>
@@ -334,22 +343,39 @@
       <div class="list-pagination-controls" aria-label="録画済みページング">
         <label class="control-field compact-control" for="recordedListPageSize">
           <span>表示件数</span>
-          <select id="recordedListPageSize">
+          <select id="recordedListPageSize" data-recorded-page-size>
             <option value="50">50件</option>
             <option value="100">100件</option>
             <option value="200">200件</option>
           </select>
         </label>
         <div class="pagination-buttons" role="group" aria-label="録画済みページ移動">
-          <button id="recordedListFirstPage" type="button">最初</button>
-          <button id="recordedListPrevPage" type="button">前へ</button>
-          <span id="recordedListPageSummary" class="list-page-summary" aria-live="polite">0件</span>
-          <button id="recordedListNextPage" type="button">次へ</button>
-          <button id="recordedListLastPage" type="button">最後</button>
+          <button id="recordedListFirstPage" data-recorded-page-control="first" type="button">最初</button>
+          <button id="recordedListPrevPage" data-recorded-page-control="prev" type="button">前へ</button>
+          <span id="recordedListPageSummary" class="list-page-summary" data-recorded-page-summary aria-live="polite">0件</span>
+          <button id="recordedListNextPage" data-recorded-page-control="next" type="button">次へ</button>
+          <button id="recordedListLastPage" data-recorded-page-control="last" type="button">最後</button>
         </div>
       </div>
       <div id="recordedCleanupStatus" class="cleanup-status" role="status" aria-live="polite" hidden></div>
       <div id="recordedListPage" class="list empty">録画済み番組はありません</div>
+      <div class="list-pagination-controls pagination-bottom" aria-label="録画済みページング（下部）">
+        <label class="control-field compact-control">
+          <span>表示件数</span>
+          <select data-recorded-page-size>
+            <option value="50">50件</option>
+            <option value="100">100件</option>
+            <option value="200">200件</option>
+          </select>
+        </label>
+        <div class="pagination-buttons" role="group" aria-label="録画済みページ移動（下部）">
+          <span class="list-page-summary" data-recorded-page-summary aria-live="polite">0件</span>
+          <button data-recorded-page-control="first" type="button">最初</button>
+          <button data-recorded-page-control="prev" type="button">前へ</button>
+          <button data-recorded-page-control="next" type="button">次へ</button>
+          <button data-recorded-page-control="last" type="button">最後</button>
+        </div>
+      </div>
     </section>
 
     <section class="view" data-view="rules" hidden>
