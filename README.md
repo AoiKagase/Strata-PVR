@@ -167,7 +167,8 @@ one-shot サービスとして運用できます。詳しくは
 - `data/strata.db`: 番組表、予約、録画状態、録画履歴の正本
 - 録画ファイル: 設定した録画ディレクトリ
 - `data/.cache/previews/`: 録画済みプレビューのキャッシュ
-- `log/`: 互換形式のログ
+- `log/`: 1 行 1 レコードの構造化ログ（`timestamp|level=...|event=...|key=value`）。時刻はOSのローカルタイムゾーンを使用します。
+  既存の本文は `message` フィールドに保持されるため、Web UI ではそのまま確認できます。
 - `backup/`: Chinachu からの移行時に保存される旧データとレポート
 
 SQLite は WAL モードを使用するため、稼働中に `strata.db` だけをコピーする

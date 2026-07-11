@@ -518,8 +518,18 @@ func TestRunWithSourceLogsLegacyConflictPrefix(t *testing.T) {
 	if !strings.Contains(string(logData), "!CONFLICT:") {
 		t.Fatalf("scheduler log missing legacy conflict prefix: %s", string(logData))
 	}
-	if strings.Contains(string(logData), "+00:00") || strings.Contains(string(logData), "+09:00") {
-		t.Fatalf("scheduler log used RFC3339 timezone instead of legacy isoDateTime: %s", string(logData))
+	logText := string(logData)
+	conflictStart := strings.Index(logText, "!CONFLICT:")
+	if conflictStart < 0 {
+		t.Fatalf("scheduler log missing conflict payload: %s", logText)
+	}
+	conflictEnd := strings.IndexByte(logText[conflictStart:], '\n')
+	if conflictEnd < 0 {
+		conflictEnd = len(logText) - conflictStart
+	}
+	conflictLog := logText[conflictStart : conflictStart+conflictEnd]
+	if strings.Contains(conflictLog, "+00:00") || strings.Contains(conflictLog, "+09:00") {
+		t.Fatalf("scheduler log used RFC3339 timezone instead of legacy isoDateTime: %s", logText)
 	}
 }
 

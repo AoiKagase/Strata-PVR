@@ -460,14 +460,23 @@ func (s *server) withAccessLog(next http.Handler) http.Handler {
 		if userAgent == "" {
 			userAgent = "-"
 		}
-		_ = logging.AppendLine(
-			filepath.Join(s.logDir(), "wui"),
+		legacyAccessMessage := fmt.Sprintf(
 			"%d %s:%s %s %q",
 			recorder.status,
 			r.Method,
 			r.URL.RequestURI(),
 			s.remoteAddress(r),
 			userAgent,
+		)
+		_ = logging.Info(
+			filepath.Join(s.logDir(), "wui"),
+			"http.request",
+			logging.Field{Key: "status", Value: recorder.status},
+			logging.Field{Key: "method", Value: r.Method},
+			logging.Field{Key: "path", Value: r.URL.RequestURI()},
+			logging.Field{Key: "remote", Value: s.remoteAddress(r)},
+			logging.Field{Key: "user_agent", Value: userAgent},
+			logging.Field{Key: "message", Value: legacyAccessMessage},
 		)
 	})
 }
