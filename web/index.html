@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Strata PVR WUI</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">メインコンテンツへ移動</a>
   <svg class="icon-sprite" aria-hidden="true" focusable="false">
     <symbol id="icon-calendar" viewBox="0 0 24 24">
       <path d="M8 2v4"></path><path d="M16 2v4"></path><path d="M3 10h18"></path><rect x="3" y="4" width="18" height="18" rx="2"></rect>
@@ -78,7 +79,7 @@
     <div id="statusBadge" class="status-badge" aria-live="polite">読み込み中</div>
   </header>
 
-  <nav class="main-nav" aria-label="WUI sections">
+  <nav class="main-nav" aria-label="メインナビゲーション">
     <button id="scheduleMenuButton" class="schedule-menu-button icon-button" type="button" title="メニュー" aria-label="メニュー" aria-expanded="false" aria-controls="mainNavDrawer"><svg class="icon"><use href="#icon-list"></use></svg><span class="screen-reader-only">メニュー</span></button>
     <div id="mainNavDrawer" class="main-nav-drawer">
       <div class="main-nav-links">
@@ -97,15 +98,15 @@
         <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
+    <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
+      <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
+      <span id="scheduleRecordingSummary">録画中 0</span>
+      <span id="scheduleReserveSummary">予約 0</span>
+      <span id="scheduleConflictSummary" class="schedule-conflict-summary">競合 0</span>
+      <button id="scheduleRefreshButton" class="icon-button" type="button" title="再読込" aria-label="再読込"><svg class="icon"><use href="#icon-refresh-cw"></use></svg><span class="screen-reader-only">再読込</span></button>
+    </div>
     <button id="scheduleFilterButton" class="schedule-filter-button icon-button" type="button" title="番組表フィルタ" aria-label="番組表フィルタ" aria-expanded="false" aria-controls="scheduleNavControls"><svg class="icon"><use href="#icon-filter"></use></svg><span class="screen-reader-only">番組表フィルタ</span></button>
     <div id="scheduleNavControls" class="schedule-nav-controls" aria-label="番組表フィルタ">
-      <div id="scheduleStatusSummary" class="schedule-status-summary" aria-live="polite">
-        <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
-        <span id="scheduleRecordingSummary">録画中 0</span>
-        <span id="scheduleReserveSummary">予約 0</span>
-        <span id="scheduleConflictSummary" class="schedule-conflict-summary">競合 0</span>
-        <button id="scheduleRefreshButton" class="icon-button" type="button" title="再読込" aria-label="再読込"><svg class="icon"><use href="#icon-refresh-cw"></use></svg><span class="screen-reader-only">再読込</span></button>
-      </div>
       <label class="icon-field-label" for="scheduleType" title="種別"><svg class="icon"><use href="#icon-filter"></use></svg><span class="screen-reader-only">種別</span></label>
       <select id="scheduleType">
         <option value="">すべて</option>
@@ -134,7 +135,7 @@
     </div>
   </nav>
 
-  <main class="workspace">
+  <main id="mainContent" class="workspace">
     <section class="view active" data-view="dashboard">
       <div class="view-head">
         <div>
@@ -142,7 +143,7 @@
           <p>現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。</p>
         </div>
         <div class="panel-actions">
-          <button id="refreshButton" type="button" title="Refresh">更新</button>
+          <button id="refreshButton" type="button" title="再読込">更新</button>
         </div>
       </div>
       <section class="content-grid dashboard-grid">
@@ -174,7 +175,7 @@
           <h2>番組表</h2>
           <p>時間軸・チャンネル軸で番組表を確認します。</p>
         </div>
-        <div class="schedule-controls" aria-label="Schedule controls">
+        <div class="schedule-controls" aria-label="番組表操作">
           <label class="control-field" for="scheduleWindow">
             <span>範囲</span>
             <select id="scheduleWindow">
@@ -454,14 +455,14 @@
             <h3>ストレージ使用率</h3>
             <p id="storageChartSummary">読み込み中</p>
           </div>
-          <div id="storagePieChart" class="pie-chart" role="img" aria-label="ストレージ使用率"></div>
+          <div id="storagePieChart" class="pie-chart" role="img" aria-label="ストレージ使用率" aria-describedby="storageChartSummary"></div>
         </section>
         <section class="panel metric-panel wide-panel">
           <div class="panel-head">
             <h3>CPU / メモリ使用率</h3>
             <p id="resourceChartSummary">直近6時間</p>
           </div>
-          <div id="resourceLineChart" class="line-chart" role="img" aria-label="CPUとメモリの直近6時間使用率"></div>
+          <div id="resourceLineChart" class="line-chart" role="img" aria-label="CPUとメモリの直近6時間使用率" aria-describedby="resourceChartSummary"></div>
         </section>
       </div>
     </section>
@@ -572,7 +573,11 @@
       <button class="small-button" type="button" id="playerDialogClose">閉じる</button>
     </div>
     <div class="player-shell">
-      <video id="playerVideo" class="embedded-player" autoplay playsinline tabindex="0" aria-label="視聴プレイヤー"></video>
+      <video id="playerVideo" class="embedded-player" autoplay playsinline preload="metadata" tabindex="0" aria-label="視聴プレイヤー" aria-describedby="playerStatusMessage"></video>
+      <div id="playerStatus" class="player-status" role="status" aria-live="polite" hidden>
+        <span id="playerStatusMessage" class="player-status-message"></span>
+        <button id="playerRetryButton" class="small-button" type="button">再試行</button>
+      </div>
       <div class="player-controls" id="playerControls">
         <button class="player-control-button icon-button" type="button" id="playerPlayButton" aria-label="再生"><svg class="icon"><use href="#icon-play"></use></svg><span class="screen-reader-only">再生</span></button>
         <input id="playerSeek" class="player-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="再生位置">

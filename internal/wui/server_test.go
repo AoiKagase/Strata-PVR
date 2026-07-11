@@ -690,7 +690,8 @@ func TestNativeDashboardStorageSummaryShowsRecordedTarget(t *testing.T) {
 	for _, want := range []string{
 		`["対象", storage.path || "録画保存先"]`,
 		`var storagePath = state.storage && state.storage.path ? state.storage.path : "";`,
-		`(storagePath ? "対象 " + storagePath + " / " : "録画保存先 / ")`,
+		`storagePath ? "対象 " + storagePath : "録画保存先"`,
+		`"使用中 " + formatPercent(usedPercent)`,
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("web/app.js missing %q", want)

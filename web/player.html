@@ -2,14 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>視聴</title>
   <style>
     :root {
       color-scheme: dark;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111418;
-      color: #f5f7fb;
+      --player-bg: oklch(12% 0.018 210);
+      --player-panel: oklch(17% 0.022 210);
+      --player-ink: oklch(96% 0.012 190);
+      --player-ink-soft: oklch(85% 0.018 190);
+      --player-line: oklch(96% 0.012 190 / 0.14);
+      --player-video-bg: oklch(0% 0 0);
+      --player-hover: oklch(23% 0.025 210);
+      --player-focus: oklch(80% 0.08 190);
+      background: var(--player-bg);
+      color: var(--player-ink);
     }
 
     * {
@@ -18,10 +26,12 @@
 
     body {
       min-height: 100vh;
+      min-height: 100dvh;
       margin: 0;
       display: grid;
       grid-template-rows: auto 1fr;
-      background: #111418;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background: var(--player-bg);
     }
 
     header {
@@ -29,12 +39,14 @@
       align-items: center;
       min-height: 48px;
       padding: 10px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-      background: #171b21;
+      min-width: 0;
+      border-bottom: 1px solid var(--player-line);
+      background: var(--player-panel);
     }
 
     h1 {
       margin: 0;
+      min-width: 0;
       overflow: hidden;
       font-size: 15px;
       font-weight: 600;
@@ -53,15 +65,60 @@
     video {
       width: 100%;
       height: 100%;
-      max-height: calc(100vh - 49px);
-      background: #000;
+      max-height: calc(100svh - 49px);
+      max-height: calc(100dvh - 49px);
+      background: var(--player-video-bg);
       object-fit: contain;
     }
 
     .message {
+      display: grid;
+      justify-items: center;
+      gap: 12px;
       margin: 24px;
-      color: #d6dce7;
+      color: var(--player-ink-soft);
       font-size: 14px;
+      text-align: center;
+    }
+
+    .message p {
+      margin: 0;
+    }
+
+    .message button {
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--player-line);
+      border-radius: 6px;
+      background: var(--player-panel);
+      color: var(--player-ink);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .message button:hover,
+    .message button:focus-visible {
+      background: var(--player-hover);
+    }
+
+    .message button:focus-visible {
+      outline: 2px solid var(--player-focus);
+      outline-offset: 2px;
+    }
+
+    .message button[hidden] {
+      display: none;
+    }
+
+    @media (max-width: 520px) {
+      header {
+        padding-inline: 12px;
+      }
+
+      .message {
+        margin: 20px 16px;
+      }
     }
   </style>
 </head>
@@ -71,7 +128,10 @@
   </header>
   <main>
     <video id="externalPlayer" controls autoplay playsinline></video>
-    <p class="message" id="message" hidden>再生 URL が指定されていません。</p>
+    <div class="message" id="message" role="status" aria-live="polite" hidden>
+      <p id="messageText">再生 URL が指定されていません。</p>
+      <button id="retryButton" type="button" hidden>再試行</button>
+    </div>
   </main>
   <script>
     (function () {
@@ -81,22 +141,49 @@
       var titleNode = document.getElementById("title");
       var video = document.getElementById("externalPlayer");
       var message = document.getElementById("message");
+      var messageText = document.getElementById("messageText");
+      var retryButton = document.getElementById("retryButton");
+      var resolvedSrc = "";
       document.title = title;
       titleNode.textContent = title;
-      if (!src) {
+
+      function showMessage(text, canRetry) {
         video.hidden = true;
+        messageText.textContent = text;
         message.hidden = false;
-        return;
+        retryButton.hidden = !canRetry;
       }
-      video.src = new URL(src, window.location.href).toString();
+
+      function loadVideo() {
+        if (!src) {
+          showMessage("再生 URL が指定されていません。", false);
+          return;
+        }
+        try {
+          video.src = new URL(src, window.location.href).toString();
+          resolvedSrc = video.src;
+          video.hidden = false;
+          message.hidden = true;
+          retryButton.hidden = true;
+          video.load();
+          video.play().catch(function () {
+            // The browser may require a manual click before playback starts.
+          });
+        } catch (error) {
+          showMessage("再生 URL を読み取れません。リンクを作り直して再試行してください。", true);
+        }
+      }
+
+      retryButton.addEventListener("click", loadVideo);
+      video.addEventListener("error", function () {
+        showMessage("再生に失敗しました。録画状態と WUI ログを確認して再試行してください。", true);
+      });
       window.addEventListener("pagehide", function () {
-        if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(src)) {
-          fetch(src, { method: "DELETE", keepalive: true }).catch(function () {});
+        if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
+          fetch(resolvedSrc || src, { method: "DELETE", keepalive: true }).catch(function () {});
         }
       });
-      video.play().catch(function () {
-        // The browser may require a manual click before playback starts.
-      });
+      loadVideo();
     }());
   </script>
 </body>

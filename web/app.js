@@ -33,6 +33,11 @@
   var pendingConfirmResolve = null;
   var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
+  var refreshQueued = false;
+  var refreshVersion = 0;
+  var operationalRefreshInFlight = false;
+  var metricsRefreshInFlight = false;
+  var apiRequestTimeoutMs = 15000;
   var strataConfigFormDirty = false;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
   var state = {
@@ -284,9 +289,29 @@
     }, 0);
   }
 
+  function isHiddenDialogControl(control) {
+    if (!control || control.hidden || control.getAttribute("aria-hidden") === "true") {
+      return true;
+    }
+    if (control.closest("[hidden]")) {
+      return true;
+    }
+    var closedDetails = control.closest("details:not([open])");
+    if (closedDetails && control.parentElement !== closedDetails) {
+      return true;
+    }
+    if (typeof window.getComputedStyle === "function") {
+      var style = window.getComputedStyle(control);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function dialogFocusableControls(dialog) {
     return Array.prototype.slice.call(dialog.querySelectorAll(focusableControlSelector)).filter(function (control) {
-      return !control.disabled && control.getAttribute("aria-hidden") !== "true" && typeof control.focus === "function";
+      return !control.disabled && !isHiddenDialogControl(control) && typeof control.focus === "function";
     });
   }
 
@@ -321,56 +346,120 @@
     return request(path, "GET");
   }
 
+  function requestError(path, response) {
+    if (response.status === 401) {
+      return new Error("認証が必要です。ログイン状態を確認してください");
+    }
+    if (response.status === 403) {
+      return new Error("この操作を実行する権限がありません");
+    }
+    if (response.status === 404) {
+      return new Error("対象が見つかりません。録画状態が変わった可能性があります");
+    }
+    if (response.status === 409) {
+      return new Error("対象の番組はスクランブルなどの理由で利用できません");
+    }
+    if (response.status === 410) {
+      return new Error("録画ファイルが利用できません。録画が終了してから再試行してください");
+    }
+    if (response.status === 429) {
+      return new Error("リクエストが多すぎます。少し待ってから再試行してください");
+    }
+    if (response.status >= 500) {
+      return new Error("サーバーで処理に失敗しました。WUIログを確認してください");
+    }
+    return new Error(path + " の処理に失敗しました（HTTP " + response.status + "）");
+  }
+
+  function networkError(error) {
+    if (error && error.name === "AbortError") {
+      return new Error("サーバーからの応答がありません。接続を確認して再試行してください");
+    }
+    if (error && error.name === "TypeError") {
+      return new Error("サーバーに接続できません。ネットワーク接続を確認して再試行してください");
+    }
+    return error;
+  }
+
+  function fetchWithTimeout(url, options) {
+    options = options || {};
+    if (typeof window.AbortController !== "function") {
+      return fetch(url, options);
+    }
+    var controller = new window.AbortController();
+    var timer = window.setTimeout(function () {
+      controller.abort();
+    }, apiRequestTimeoutMs);
+    options.signal = controller.signal;
+    return fetch(url, options).then(function (response) {
+      window.clearTimeout(timer);
+      return response;
+    }, function (error) {
+      window.clearTimeout(timer);
+      throw error;
+    });
+  }
+
+  function parseJSONResponse(response, path) {
+    return response.text().then(function (body) {
+      if (!body) {
+        return {};
+      }
+      try {
+        return JSON.parse(body);
+      } catch (error) {
+        throw new Error(path + " の応答を読み取れませんでした。WUIログを確認してください");
+      }
+    });
+  }
+
   function request(path, method) {
-    return fetch("/api/" + path, {
+    return fetchWithTimeout("/api/" + path, {
       credentials: "same-origin",
       method: method || "GET"
     }).then(function (response) {
       if (!response.ok) {
-        throw new Error(path + " returned " + response.status);
+        throw requestError(path, response);
       }
-      return response.text().then(function (body) {
-        var result = body ? JSON.parse(body) : {};
+      return parseJSONResponse(response, path).then(function (result) {
         publishMutation(path, method || "GET");
         return result;
       });
-    });
+    }).catch(networkError);
   }
 
   function sendJSON(path, method, value) {
-    return fetch("/api/" + path, {
+    return fetchWithTimeout("/api/" + path, {
       body: JSON.stringify(value),
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       method: method
     }).then(function (response) {
       if (!response.ok) {
-        throw new Error(path + " returned " + response.status);
+        throw requestError(path, response);
       }
-      return response.text().then(function (body) {
-        var result = body ? JSON.parse(body) : {};
+      return parseJSONResponse(response, path).then(function (result) {
         publishMutation(path, method);
         return result;
       });
-    });
+    }).catch(networkError);
   }
 
 	function sendConfigJSON(raw) {
-		return fetch("/api/config", {
+		return fetchWithTimeout("/api/config", {
 			body: raw,
 			credentials: "same-origin",
 			headers: { "Content-Type": "application/json" },
       method: "PUT"
     }).then(function (response) {
       if (!response.ok) {
-        throw new Error("config.json returned " + response.status);
+        throw requestError("config.json", response);
       }
-      return response.text().then(function (body) {
-        var result = body ? JSON.parse(body) : {};
+      return parseJSONResponse(response, "config.json").then(function (result) {
         publishRealtime("notify-config");
         return result;
       });
-    });
+    }).catch(networkError);
   }
 
   function notifyEventForPath(path, method) {
@@ -463,17 +552,17 @@
   }
 
   function apiText(path) {
-    return fetch("/api/" + path, {
+    return fetchWithTimeout("/api/" + path, {
       credentials: "same-origin"
     }).then(function (response) {
       if (response.status === 204) {
         return "";
       }
       if (!response.ok) {
-        throw new Error(path + " returned " + response.status);
+        throw requestError(path, response);
       }
       return response.text();
-    });
+    }).catch(networkError);
   }
 
   function formatTime(value) {
@@ -995,7 +1084,7 @@
   }
 
   function isMobileScheduleLayout() {
-    return window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
+    return window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
   }
 
   function setScheduleMenuOpen(open) {
@@ -1069,6 +1158,19 @@
       return;
     }
     state.currentView = found ? name : "dashboard";
+    if (state.hasLoaded) {
+      if (state.currentView === "status") {
+        renderStatus();
+        startMetricsRefresh();
+      } else if (state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves") {
+        renderOperationalData();
+      } else if (state.currentView === "logs") {
+        refreshLogs();
+      }
+    }
+    if (state.currentView !== "status") {
+      stopMetricsRefresh();
+    }
     if (state.currentView !== "schedule") {
       closeScheduleMenu();
       closeScheduleFilter();
@@ -1314,7 +1416,7 @@
       if (!confirmed) {
         return;
       }
-      setBusy("Working");
+      setBusy("処理中");
       return request(path, method).then(refresh).catch(showError);
     });
   }
@@ -1671,6 +1773,44 @@
     }
   }
 
+  function setPlayerStatus(message, kind) {
+    var status = byId("playerStatus");
+    var messageNode = byId("playerStatusMessage");
+    var retry = byId("playerRetryButton");
+    if (!status || !messageNode) {
+      return;
+    }
+    messageNode.textContent = message || "";
+    status.hidden = !message;
+    status.className = "player-status" + (message ? " " + (kind || "error") : "");
+    if (retry) {
+      retry.hidden = !message || kind === "info";
+    }
+  }
+
+  function playerMediaErrorMessage(video) {
+    var code = video && video.error ? video.error.code : 0;
+    if (code === 3) {
+      return "映像をデコードできませんでした。FFmpegまたは録画データを確認してください。";
+    }
+    if (code === 4) {
+      return "この映像を再生できませんでした。録画が開始直後の場合は、数秒後に再試行してください。";
+    }
+    return "再生に失敗しました。録画状態とWUIログを確認して、再試行してください。";
+  }
+
+  function retryPlayerSource() {
+    if (!playerSourceBuilder) {
+      return;
+    }
+    var query = cloneQuery(playerBaseQuery || {});
+    try {
+      setPlayerSource(playerSourceBuilder(Object.keys(query).length ? query : null), query);
+    } catch (error) {
+      setPlayerStatus("再生URLを作成できませんでした。録画状態を確認して再試行してください");
+    }
+  }
+
   function setPlayerSource(url, query) {
     var video = byId("playerVideo");
     var openLink = byId("playerOpenLink");
@@ -1681,6 +1821,11 @@
     if (!video) {
       return;
     }
+    if (!url) {
+      setPlayerStatus("再生URLを作成できませんでした。録画状態を確認して再試行してください");
+      return;
+    }
+    setPlayerStatus("");
     stopHLSPlayback(playerCurrentURL);
     video.pause();
     video.removeAttribute("src");
@@ -1690,7 +1835,10 @@
     playerBaseQuery = cloneQuery(query || {});
     playerKnownDuration = playerConfiguredDuration();
     updatePlayerControls();
-    video.play().catch(function () {
+    video.play().catch(function (error) {
+      if (!error || error.name !== "NotAllowedError") {
+        setPlayerStatus("再生を開始できませんでした。録画が開始直後の場合は、数秒後に再試行してください");
+      }
       // Browsers may block autoplay; controls remain available for manual start.
     }).finally(updatePlayerControls);
   }
@@ -1775,6 +1923,10 @@
     }
     ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "volumechange", "ended", "waiting", "playing"].forEach(function (name) {
       video.addEventListener(name, updatePlayerControls);
+    });
+    video.addEventListener("error", function () {
+      setPlayerStatus(playerMediaErrorMessage(video));
+      updatePlayerControls();
     });
   }
 
@@ -1873,15 +2025,19 @@
     updatePlayerAudioControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
     setPlayerSource(url, options.query || null);
+    if (options.status) {
+      setPlayerStatus(options.status, "info");
+    }
     video.focus();
   }
 
-  function openAdjustablePlayer(meta, buildURL, query, seekable, duration) {
+  function openAdjustablePlayer(meta, buildURL, query, seekable, duration, status) {
     openPlayerDialog(meta, buildURL(query), {
       query: query,
       seekable: seekable,
       duration: duration,
-      sourceBuilder: buildURL
+      sourceBuilder: buildURL,
+      status: status
     });
   }
 
@@ -1989,7 +2145,7 @@
           var label = onAir ? "録画開始" : "予約";
           var title = onAir ? "この放送中の番組を手動予約して録画開始を待つ" : "この番組を予約";
           row.appendChild(actionButton(label, title, function () {
-            setBusy("Working");
+            setBusy("処理中");
             request("program/" + encodeURIComponent(program.id), "PUT").then(refresh).then(function () {
               if (onAir && !operatorAlive()) {
                 showError(new Error("オペレータが停止中です。録画を開始するには strata-pvr run operator を起動してください"));
@@ -2017,7 +2173,7 @@
         row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {
           openAdjustablePlayer(program.title || program.id || "録画中", function (query) {
             return recordingWatchURL(program, "mp4", query);
-          }, null, false);
+          }, null, false, 0, "録画中の保存データを再生しています。Mirakurunのチューナーは使用しません。録画の進行で一時停止した場合は、数秒後に再試行してください。");
         }));
       } else if (name === "preview-recording" && program.isRecording) {
         row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
@@ -2827,11 +2983,76 @@
     scroll.setAttribute("role", "region");
     scroll.setAttribute("aria-label", "番組表");
     scroll.tabIndex = 0;
+    var virtualLanes = [];
+    var virtualRenderFrame = 0;
+    var virtualWindowStart = -1;
+    var virtualWindowEnd = -1;
+
+    function renderVisibleScheduleLanes() {
+      var headerHeight = 76;
+      var overscan = Math.max(720, Math.round(scroll.clientHeight * 0.75));
+      var visibleTop = Math.max(0, scroll.scrollTop - headerHeight);
+      var visibleBottom = visibleTop + Math.max(scroll.clientHeight, 360);
+      var nextWindowStart = Math.max(0, visibleTop - overscan);
+      var nextWindowEnd = visibleBottom + overscan;
+      if (nextWindowStart === virtualWindowStart && nextWindowEnd === virtualWindowEnd) {
+        return;
+      }
+      virtualWindowStart = nextWindowStart;
+      virtualWindowEnd = nextWindowEnd;
+      virtualLanes.forEach(function (record) {
+        var lane = record.lane;
+        var programs = record.group.programs;
+        var low = 0;
+        var high = programs.length;
+        while (low < high) {
+          var middle = Math.floor((low + high) / 2);
+          var middleTop = Math.max(0, Math.round(((programs[middle].start - firstStart) / 60000) * minuteHeight));
+          if (middleTop < nextWindowStart) {
+            low = middle + 1;
+          } else {
+            high = middle;
+          }
+        }
+        lane.innerHTML = "";
+        for (var index = Math.max(0, low - 1); index < programs.length; index += 1) {
+          var program = programs[index];
+          var top = Math.max(0, Math.round(((program.start - firstStart) / 60000) * minuteHeight));
+          var bottom = top + Math.max(1, Math.round(((programEnd(program) - program.start) / 60000) * minuteHeight));
+          if (top > nextWindowEnd) {
+            break;
+          }
+          if (bottom >= nextWindowStart) {
+            lane.appendChild(renderScheduleCard(program, firstStart, minuteHeight));
+          }
+        }
+        var now = Date.now();
+        if (now >= firstStart && now <= lastEnd && now >= firstStart + (nextWindowStart / minuteHeight) * 60000 && now <= firstStart + (nextWindowEnd / minuteHeight) * 60000) {
+          var line = document.createElement("div");
+          line.className = "schedule-now-line";
+          line.style.top = Math.round(((now - firstStart) / 60000) * minuteHeight) + "px";
+          lane.appendChild(line);
+        }
+      });
+    }
+
+    function queueVisibleScheduleLanes() {
+      if (virtualRenderFrame) {
+        return;
+      }
+      var render = function () {
+        virtualRenderFrame = 0;
+        renderVisibleScheduleLanes();
+      };
+      virtualRenderFrame = window.requestAnimationFrame ? window.requestAnimationFrame(render) : window.setTimeout(render, 0);
+    }
+
     scroll.addEventListener("scroll", function () {
       state.scheduleGuideScroll = {
         left: scroll.scrollLeft,
         top: scroll.scrollTop
       };
+      queueVisibleScheduleLanes();
     });
     scroll.addEventListener("wheel", function (event) {
       if (!event.ctrlKey) {
@@ -2889,16 +3110,7 @@
       var lane = document.createElement("div");
       lane.className = "schedule-channel-lane";
       lane.style.height = guideHeight + "px";
-      group.programs.forEach(function (program) {
-        lane.appendChild(renderScheduleCard(program, firstStart, minuteHeight));
-      });
-      var now = Date.now();
-      if (now >= firstStart && now <= lastEnd) {
-        var line = document.createElement("div");
-        line.className = "schedule-now-line";
-        line.style.top = Math.round(((now - firstStart) / 60000) * minuteHeight) + "px";
-        lane.appendChild(line);
-      }
+      virtualLanes.push({ lane: lane, group: group });
       grid.appendChild(lane);
     });
     scroll.appendChild(grid);
@@ -2906,6 +3118,7 @@
     window.setTimeout(function () {
       scroll.scrollLeft = state.scheduleGuideScroll.left || 0;
       scroll.scrollTop = state.scheduleGuideScroll.top || 0;
+      renderVisibleScheduleLanes();
     }, 0);
   }
 
@@ -3372,34 +3585,88 @@
     byId("addStrataUserButton").hidden = !enabled;
   }
 
+  function clearConfigFieldErrors() {
+    var form = byId("strataConfigForm");
+    if (!form) {
+      return;
+    }
+    form.querySelectorAll("[aria-invalid='true']").forEach(function (control) {
+      control.removeAttribute("aria-invalid");
+      control.removeAttribute("aria-describedby");
+    });
+    form.querySelectorAll(".field-error").forEach(function (error) {
+      error.remove();
+    });
+  }
+
+  function clearConfigFieldError(id) {
+    var control = byId(id);
+    var error = byId(id + "Error");
+    if (control) {
+      control.removeAttribute("aria-invalid");
+      control.removeAttribute("aria-describedby");
+    }
+    if (error) {
+      error.remove();
+    }
+  }
+
+  function setConfigFieldError(id, message) {
+    var control = byId(id);
+    if (!control) {
+      return;
+    }
+    var errorID = id + "Error";
+    var error = byId(errorID);
+    if (!error) {
+      error = document.createElement("span");
+      error.id = errorID;
+      error.className = "field-error";
+      control.parentNode.appendChild(error);
+    }
+    error.textContent = message;
+    control.setAttribute("aria-invalid", "true");
+    control.setAttribute("aria-describedby", errorID);
+  }
+
   function requiredString(id, label) {
     var value = controlString(id);
     if (!value) {
-      showError(new Error(label + "を入力してください"));
+      var message = label + "を入力してください";
+      setConfigFieldError(id, message);
+      showError(new Error(message));
       return null;
     }
+    clearConfigFieldError(id);
     return value;
   }
 
   function requiredInteger(id, label, minimum, maximum) {
     var value = Number(controlString(id));
     if (!Number.isInteger(value) || value < minimum || value > maximum) {
-      showError(new Error(label + "は" + minimum + "から" + maximum + "の整数にしてください"));
+      var message = label + "は" + minimum + "から" + maximum + "の整数にしてください";
+      setConfigFieldError(id, message);
+      showError(new Error(message));
       return null;
     }
+    clearConfigFieldError(id);
     return value;
   }
 
   function strataServiceList(id, label) {
     var values = splitList(controlString(id)).map(Number);
     if (values.some(function (value) { return !Number.isInteger(value) || value <= 0; })) {
-      showError(new Error(label + "はカンマ区切りの正の整数にしてください"));
+      var message = label + "はカンマ区切りの正の整数にしてください";
+      setConfigFieldError(id, message);
+      showError(new Error(message));
       return null;
     }
+    clearConfigFieldError(id);
     return values;
   }
 
   function readStrataConfigForm() {
+    clearConfigFieldErrors();
     var mirakurunURL = requiredString("strataMirakurunURL", "Mirakurun URL");
     var listenAddress = requiredString("strataListenAddress", "待受アドレス");
     var port = requiredInteger("strataWebPort", "ポート", 1, 65535);
@@ -3492,7 +3759,7 @@
     renderConfigForm();
   }
 
-  function renderStatus() {
+  function renderStatus(includeMetrics) {
     var root = byId("resourceList");
     if (!root) {
       return;
@@ -3525,7 +3792,9 @@
       root.appendChild(value);
     });
     renderStorage();
-    renderMetrics();
+    if (includeMetrics !== false) {
+      renderMetrics();
+    }
   }
 
   function renderStorage() {
@@ -3589,7 +3858,12 @@
       '<span><i class="legend-total"></i>総量 ', formatBytes(total), '</span>',
       '</div>'
     ].join("");
-    text(byId("storageChartSummary"), (storagePath ? "対象 " + storagePath + " / " : "録画保存先 / ") + "総量 " + formatBytes(total) + " / 空き " + formatPercent(freePercent));
+    text(byId("storageChartSummary"), [
+      storagePath ? "対象 " + storagePath : "録画保存先",
+      "使用中 " + formatPercent(usedPercent),
+      "録画 " + formatBytes(recorded),
+      "空き " + formatPercent(freePercent)
+    ].join(" / "));
   }
 
   function renderResourceLineChart() {
@@ -3600,7 +3874,7 @@
     var samples = state.metrics && Array.isArray(state.metrics.samples) ? state.metrics.samples : [];
     if (samples.length < 2) {
       root.innerHTML = '<div class="chart-empty">履歴を収集中</div>';
-      text(byId("resourceChartSummary"), "直近6時間");
+      text(byId("resourceChartSummary"), "直近6時間 / 履歴を収集中");
       return;
     }
     var now = Date.now();
@@ -3616,6 +3890,7 @@
     });
     if (points.length < 2) {
       root.innerHTML = '<div class="chart-empty">履歴を収集中</div>';
+      text(byId("resourceChartSummary"), "直近6時間 / 履歴を収集中");
       return;
     }
     var width = 640;
@@ -3632,6 +3907,7 @@
     var cpuPath = linePath(points, "cpu", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
     var memoryPath = linePath(points, "memory", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
     var latest = points[points.length - 1];
+    text(byId("resourceChartSummary"), "直近6時間 / CPU " + formatPercent(latest.cpu) + " / メモリ " + formatPercent(latest.memory));
     root.innerHTML = [
       '<svg viewBox="0 0 ', width, ' ', height, '" class="metric-svg" aria-hidden="true">',
       '<line x1="', padLeft, '" y1="', padTop, '" x2="', padLeft, '" y2="', height - padBottom, '" class="chart-axis"></line>',
@@ -4117,8 +4393,37 @@
     renderSchedule();
     renderRules();
     renderSettings();
-    renderStatus();
+    renderStatus(state.currentView === "status");
     renderRuleFormState();
+  }
+
+  function renderOperationalData() {
+    state.programStateIndex = {
+      reserves: programByID(state.reserves),
+      recording: programByID(state.recording)
+    };
+    updateOperationalStatus();
+
+    if (state.currentView === "dashboard") {
+      renderList("recordingList", state.recording, "録画中の番組はありません", 8, ["watch-recording-mp4", "preview-recording", "stop"], { preview: true, previewResource: "recording" });
+      renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+      renderOnAirList();
+      return;
+    }
+    if (state.currentView === "schedule") {
+      renderSchedule();
+      return;
+    }
+    if (state.currentView === "reserves") {
+      var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
+      updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
+      updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
+      renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+      return;
+    }
+    if (state.currentView === "status") {
+      renderStatus(false);
+    }
   }
 
   function setBusy(message) {
@@ -4237,6 +4542,11 @@
   }
 
   function refresh() {
+    if (state.isLoading) {
+      refreshQueued = true;
+      return Promise.resolve();
+    }
+    var version = ++refreshVersion;
     state.isLoading = true;
     state.lastError = null;
     setBusy("読み込み中");
@@ -4252,10 +4562,13 @@
       api("storage").catch(function () {
         return null;
       }),
-      api("metrics").catch(function () {
+      state.currentView === "status" ? api("metrics").catch(function () {
         return null;
-      })
+      }) : Promise.resolve(state.metrics)
     ]).then(function (result) {
+      if (version !== refreshVersion) {
+        return;
+      }
       state.status = result[0] || {};
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
@@ -4266,50 +4579,100 @@
       state.storage = result[7] || null;
       state.metrics = result[8] || null;
       state.hasLoaded = true;
-      state.isLoading = false;
       state.lastError = null;
-      setRefreshLoading(false);
       render();
+      if (state.currentView === "status") {
+        startMetricsRefresh(false);
+      }
     }).catch(function (error) {
-      state.isLoading = false;
       renderInitialLoadError(error);
       showError(error);
+    }).finally(function () {
+      state.isLoading = false;
+      setRefreshLoading(false);
+      if (refreshQueued) {
+        refreshQueued = false;
+        refresh();
+      }
     });
   }
 
   function refreshOperationalData() {
+    if (document.visibilityState === "hidden" || state.isLoading || operationalRefreshInFlight) {
+      return;
+    }
+    var version = refreshVersion;
+    operationalRefreshInFlight = true;
     Promise.all([
       api("status"),
       api("reserves"),
       api("recording"),
       api("storage").catch(function () {
         return state.storage;
-      }),
-      api("metrics").catch(function () {
-        return state.metrics;
       })
     ]).then(function (result) {
+      if (version !== refreshVersion) {
+        return;
+      }
       state.status = result[0] || {};
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
       state.storage = result[3] || null;
-      state.metrics = result[4] || null;
       state.lastError = null;
-      render();
-    }).catch(showError);
-  }
-
-  function refreshMetrics() {
-    api("metrics").then(function (result) {
-      state.metrics = result || null;
-      renderMetrics();
-      updateOperationalStatus();
-    }).catch(function () {
-      renderMetrics();
+      if (document.visibilityState !== "hidden") {
+        renderOperationalData();
+      }
+    }).catch(showError).finally(function () {
+      operationalRefreshInFlight = false;
     });
   }
 
+  function refreshMetrics() {
+    if (document.visibilityState === "hidden" || state.currentView !== "status" || state.isLoading || metricsRefreshInFlight) {
+      return;
+    }
+    var version = refreshVersion;
+    metricsRefreshInFlight = true;
+    api("metrics").then(function (result) {
+      if (version !== refreshVersion) {
+        return;
+      }
+      state.metrics = result || null;
+      if (state.currentView === "status") {
+        renderMetrics();
+      }
+      updateOperationalStatus();
+    }).catch(function () {
+      if (document.visibilityState !== "hidden" && state.currentView === "status") {
+        renderMetrics();
+      }
+    }).finally(function () {
+      metricsRefreshInFlight = false;
+    });
+  }
+
+  function startMetricsRefresh(refreshNow) {
+    if (metricsRefreshTimer || state.currentView !== "status") {
+      return;
+    }
+    if (refreshNow !== false) {
+      refreshMetrics();
+    }
+    metricsRefreshTimer = window.setInterval(refreshMetrics, 30000);
+  }
+
+  function stopMetricsRefresh() {
+    if (!metricsRefreshTimer) {
+      return;
+    }
+    window.clearInterval(metricsRefreshTimer);
+    metricsRefreshTimer = null;
+  }
+
   function refreshLogs() {
+    if (document.visibilityState === "hidden" || (state.hasLoaded && state.currentView !== "logs")) {
+      return;
+    }
     setBusy("ログ読み込み中");
     Promise.all([
       apiText("log/scheduler"),
@@ -4478,9 +4841,6 @@
     if (recordedCleanupButton) {
       recordedCleanupButton.addEventListener("click", cleanupRecorded);
     }
-    if (!metricsRefreshTimer) {
-      metricsRefreshTimer = window.setInterval(refreshMetrics, 30000);
-    }
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     bindRecordedPagination();
@@ -4536,6 +4896,10 @@
     var playerDialogClose = byId("playerDialogClose");
     if (playerDialogClose) {
       playerDialogClose.addEventListener("click", closePlayerDialog);
+    }
+    var playerRetryButton = byId("playerRetryButton");
+    if (playerRetryButton) {
+      playerRetryButton.addEventListener("click", retryPlayerSource);
     }
     bindPlayerVideoEvents();
     var playerVideo = byId("playerVideo");
@@ -4852,6 +5216,19 @@
     refresh();
     setInterval(refreshOperationalData, 30000);
     setInterval(refreshLogs, 60000);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState !== "visible") {
+        stopMetricsRefresh();
+        return;
+      }
+      refreshOperationalData();
+      if (state.currentView === "status") {
+        startMetricsRefresh();
+      }
+      if (state.currentView === "logs") {
+        refreshLogs();
+      }
+    });
     refreshLogs();
   });
 }());
