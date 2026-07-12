@@ -2156,6 +2156,8 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegFileStream(t, "WEBVTT\n\n", &gotArgs)
 	defer restore()
+	restoreDecoder := installFakeFFmpegDecoders(t, " S..... arbc ARIB caption decoder")
+	defer restoreDecoder()
 	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/subtitles.vtt?ss=12&t=30", nil)
 	res := httptest.NewRecorder()
@@ -2168,7 +2170,7 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 libaribcaption -sub_type text -fix_sub_duration",
+		"-c:2 arbc -sub_type text -fix_sub_duration",
 		"-ss 12 -f mpegts -i " + recordedPath,
 		"-t 30",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
@@ -2776,6 +2778,15 @@ func installFakeFFmpegFileStream(t *testing.T, output string, gotArgs *[]string)
 	return func() { runFFmpegFileStream = old }
 }
 
+func installFakeFFmpegDecoders(t *testing.T, output string) func() {
+	t.Helper()
+	old := runFFmpegDecoders
+	runFFmpegDecoders = func() ([]byte, error) {
+		return []byte(output), nil
+	}
+	return func() { runFFmpegDecoders = old }
+}
+
 func TestGrowingFileReaderFollowsAppends(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "recording.m2ts")
@@ -3100,6 +3111,8 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "WEBVTT\n\n", &gotInput, &gotArgs)
 	defer restore()
+	restoreDecoder := installFakeFFmpegDecoders(t, " S..... arbc ARIB caption decoder")
+	defer restoreDecoder()
 	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/subtitles.vtt", nil)
 	res := httptest.NewRecorder()
@@ -3118,7 +3131,7 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 libaribcaption -sub_type text -fix_sub_duration",
+		"-c:2 arbc -sub_type text -fix_sub_duration",
 		"-f mpegts -i pipe:0",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
 	} {

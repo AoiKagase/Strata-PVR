@@ -76,6 +76,10 @@ var runFFmpegFileStream = func(ctx context.Context, args ...string) (io.ReadClos
 	return startFFmpegStream(cmd)
 }
 
+var runFFmpegDecoders = func() ([]byte, error) {
+	return exec.Command("ffmpeg", "-hide_banner", "-decoders").Output()
+}
+
 func startFFmpegStream(cmd *exec.Cmd) (io.ReadCloser, func() error, error) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -2127,7 +2131,13 @@ func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, 
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	args := subtitleFFmpegFileArgs(r, filePath)
+	decoder, err := aribCaptionDecoder()
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "ARIB caption decoder unavailable: %v", err)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	args := subtitleFFmpegFileArgs(r, filePath, decoder)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
@@ -3056,7 +3066,13 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	defer body.Close()
-	args := subtitleFFmpegStreamArgs()
+	decoder, err := aribCaptionDecoder()
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "ARIB caption decoder unavailable: %v", err)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	args := subtitleFFmpegStreamArgs(decoder)
 	output, wait, err := runFFmpegStream(r.Context(), body, args...)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
@@ -3131,8 +3147,8 @@ func watchFFmpegFileArgs(r *http.Request, format string, filePath string) []stri
 	return watchFFmpegArgsForInput(r, format, false, filePath, true)
 }
 
-func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
-	args := []string{"-v", "error", "-c:2", "libaribcaption", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000"}
+func subtitleFFmpegFileArgs(r *http.Request, filePath, decoder string) []string {
+	args := []string{"-v", "error", "-c:2", decoder, "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000"}
 	if start := legacyWatchStart(r.URL.Query().Get("ss")); start != "0" {
 		args = append(args, "-ss", start)
 	}
@@ -3143,9 +3159,22 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
 	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
-func subtitleFFmpegStreamArgs() []string {
-	args := []string{"-v", "error", "-c:2", "libaribcaption", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0"}
+func subtitleFFmpegStreamArgs(decoder string) []string {
+	args := []string{"-v", "error", "-c:2", decoder, "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0"}
 	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+}
+
+func aribCaptionDecoder() (string, error) {
+	data, err := runFFmpegDecoders()
+	if err != nil {
+		return "", err
+	}
+	for _, name := range []string{"libaribcaption", "libaribb24", "arbc"} {
+		if bytes.Contains(data, []byte(" "+name+" ")) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no ARIB caption decoder found in ffmpeg")
 }
 
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
