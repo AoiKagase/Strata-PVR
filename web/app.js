@@ -46,6 +46,7 @@
     recording: [],
     recorded: [],
     schedule: [],
+    broadcasting: null,
     rules: [],
     config: {},
     storage: null,
@@ -3037,6 +3038,44 @@
     return groups;
   }
 
+  function broadcastingProgramGroups() {
+    if (!Array.isArray(state.broadcasting)) {
+      return visibleChannelProgramGroups();
+    }
+    var groups = channelProgramGroups();
+    var byID = {};
+    groups.forEach(function (group) {
+      byID[group.id] = group;
+      group.programs = [];
+    });
+    (state.broadcasting || []).forEach(function (program, index) {
+      if (!program || !program.start) {
+        return;
+      }
+      var id = programChannelID(program);
+      if (!id) {
+        return;
+      }
+      var group = byID[id];
+      if (!group) {
+        group = {
+          id: id,
+          name: channelName(program) || id,
+          order: groups.length + index,
+          type: programChannelType(program),
+          logo: false,
+          programs: []
+        };
+        byID[id] = group;
+        groups.push(group);
+      }
+      group.programs.push(cloneProgram(program));
+    });
+    return groups.filter(function (group) {
+      return group.programs.length > 0;
+    });
+  }
+
   function renderList(id, items, emptyText, limit, actions, options) {
     var root = byId(id);
     if (!root) {
@@ -3259,7 +3298,9 @@
     if (!root) {
       return;
     }
-    var groups = visibleChannelProgramGroups().sort(function (a, b) {
+    var groups = broadcastingProgramGroups().filter(function (group) {
+      return !channelGroupHidden(group);
+    }).sort(function (a, b) {
       return compareScheduleChannelGroups(a, b);
     });
     root.innerHTML = "";
@@ -5213,7 +5254,10 @@
       api("reserves"),
       api("recording"),
       api("recorded"),
-      api("schedule")
+      api("schedule"),
+      api("schedule/broadcasting").catch(function () {
+        return null;
+      })
     ]).then(function (result) {
       if (version !== refreshVersion) {
         return;
@@ -5223,6 +5267,7 @@
       state.recording = result[2] || [];
       state.recorded = result[3] || [];
       state.schedule = result[4] || [];
+      state.broadcasting = Array.isArray(result[5]) ? result[5] : null;
       state.hasLoaded = true;
       state.lastError = null;
       render();
@@ -5260,6 +5305,9 @@
       api("status"),
       api("reserves"),
       api("recording"),
+      api("schedule/broadcasting").catch(function () {
+        return state.broadcasting;
+      }),
       api("storage").catch(function () {
         return state.storage;
       })
@@ -5270,7 +5318,8 @@
       state.status = result[0] || {};
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
-      state.storage = result[3] || null;
+      state.broadcasting = Array.isArray(result[3]) ? result[3] : state.broadcasting;
+      state.storage = result[4] || null;
       state.storageLoaded = true;
       state.lastError = null;
       if (document.visibilityState !== "hidden") {
