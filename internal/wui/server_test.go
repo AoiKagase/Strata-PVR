@@ -2800,8 +2800,10 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	var gotInput string
 	var gotArgs []string
 	ffmpegStarted := make(chan struct{})
+	allowInputRead := make(chan struct{})
 	runFFmpegStream = func(_ context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
 		close(ffmpegStarted)
+		<-allowInputRead
 		buf := make([]byte, 4)
 		if _, err := io.ReadFull(input, buf); err != nil {
 			return nil, nil, err
@@ -2827,6 +2829,7 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	if err := os.WriteFile(recordedPath, []byte("livefollow"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	close(allowInputRead)
 	select {
 	case <-done:
 	case <-time.After(time.Second):

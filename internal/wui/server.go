@@ -701,6 +701,10 @@ func staticRangeExceedsSize(header string, size int64) bool {
 func staticContentType(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
+	case ".js":
+		return "application/javascript"
+	case ".cur":
+		return "text/plain; charset=utf-8"
 	case ".m2ts":
 		return "video/MP2T"
 	case ".xspf":

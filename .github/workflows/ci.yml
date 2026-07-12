@@ -12,6 +12,7 @@ permissions:
 
 env:
   GO_VERSION: "1.25.x"
+  TZ: Asia/Tokyo
 
 jobs:
   test:
