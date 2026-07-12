@@ -3,7 +3,10 @@ package domain
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
 	"sort"
+	"strconv"
 )
 
 type Channel struct {
@@ -102,13 +105,26 @@ type Program struct {
 
 func (p *Program) UnmarshalJSON(data []byte) error {
 	type programAlias Program
-	var alias programAlias
-	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
-	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
+	}
+	secondsRaw := raw["seconds"]
+	delete(raw, "seconds")
+	knownData, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	var alias programAlias
+	if err := json.Unmarshal(knownData, &alias); err != nil {
+		return err
+	}
+	if secondsRaw != nil {
+		seconds, err := parseProgramSeconds(secondsRaw, alias.Start, alias.End)
+		if err != nil {
+			return err
+		}
+		alias.Seconds = seconds
 	}
 	for _, key := range programJSONKeys() {
 		delete(raw, key)
@@ -116,6 +132,28 @@ func (p *Program) UnmarshalJSON(data []byte) error {
 	*p = Program(alias)
 	p.Raw = raw
 	return nil
+}
+
+func parseProgramSeconds(raw json.RawMessage, start, end int64) (int64, error) {
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err != nil {
+		return 0, fmt.Errorf("seconds must be a number: %w", err)
+	}
+	text := number.String()
+	if seconds, err := strconv.ParseInt(text, 10, 64); err == nil {
+		return seconds, nil
+	}
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return 0, fmt.Errorf("invalid seconds %q", text)
+	}
+	if value != math.Trunc(value) && end >= start {
+		return (end - start) / 1000, nil
+	}
+	if value > float64(math.MaxInt64) {
+		return 0, fmt.Errorf("seconds %q overflows int64", text)
+	}
+	return int64(value), nil
 }
 
 func (p Program) MarshalJSON() ([]byte, error) {
