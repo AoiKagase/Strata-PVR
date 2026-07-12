@@ -18,6 +18,8 @@ strata-pvr.exe
 /DESIGN.md
 /PRODUCT.md
 /QODER.md
+/TASKS.md
+/rules.sample.json
 
 # Runtime migration backups
 /backup/
