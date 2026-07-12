@@ -3151,7 +3151,7 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath, decoder string) []string 
 	args := append([]string{"-v", "error"}, subtitleFFmpegDecoderArgs(decoder)...)
 	args = append(args, "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000")
 	if start := legacyWatchStart(r.URL.Query().Get("ss")); start != "0" {
-		args = append(args, "-ss", start)
+		args = append(args, "-ss", start, "-itsoffset", "-"+start)
 	}
 	args = append(args, "-f", "mpegts", "-i", filePath)
 	if duration := r.URL.Query().Get("t"); duration != "" {

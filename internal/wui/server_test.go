@@ -2171,7 +2171,7 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
 		"-c:s libaribcaption -sub_type ass -fix_sub_duration",
-		"-ss 12 -f mpegts -i " + recordedPath,
+		"-ss 12 -itsoffset -12 -f mpegts -i " + recordedPath,
 		"-t 30",
 		"-map 0:s:0? -vn -an -c:s webvtt -f webvtt pipe:1",
 	} {
