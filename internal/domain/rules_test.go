@@ -2,8 +2,6 @@ package domain
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -34,12 +32,13 @@ func TestProgramMatchesRuleOvernightHour(t *testing.T) {
 }
 
 func TestSampleRulesLoad(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "rules.sample.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	const sampleRules = `[
+  {"types":["GR"],"categories":["anime"],"ignore_channels":["26","27"],"hour":{"start":23,"end":4},"duration":{"min":600,"max":10801},"ignore_titles":["非公認戦隊アキバレンジャー","戦国コレクション","ＡＫＢ００４８"],"ignore_flags":["再"]},
+  {"reserve_titles":["笑点"]},
+  {"types":["CS"],"channels":["CS16"],"categories":["anime"],"sid":333,"duration":{"min":600,"max":10801}}
+]`
 	var rules []Rule
-	if err := json.Unmarshal(b, &rules); err != nil {
+	if err := json.Unmarshal([]byte(sampleRules), &rules); err != nil {
 		t.Fatal(err)
 	}
 	if len(rules) != 3 {

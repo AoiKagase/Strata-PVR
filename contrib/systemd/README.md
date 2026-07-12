@@ -4,15 +4,15 @@ These units assume Strata PVR is installed in `/opt/strata-pvr` and the binary
 is `/opt/strata-pvr/strata-pvr`.
 
 `strata-pvr run <component>` uses the current working directory for
-`config.json`, `rules.json`, `data/`, `log/`, and `web/`, so keep
-`WorkingDirectory` pointed at the directory that contains those files.
+`data/config.json`, `data/strata.db`, `data/`, and `log/`, so keep
+`WorkingDirectory` pointed at the Strata installation directory.
 
 ## Install
 
 ```sh
 sudo install -d -m 0755 /opt/strata-pvr
 sudo install -m 0755 strata-pvr /opt/strata-pvr/strata-pvr
-sudo cp -a web config.sample.json rules.sample.json /opt/strata-pvr/
+sudo sh -c 'cd /opt/strata-pvr && ./strata-pvr init'
 
 sudo install -m 0644 contrib/systemd/strata-pvr-operator.service /etc/systemd/system/
 sudo install -m 0644 contrib/systemd/strata-pvr-wui.service /etc/systemd/system/
@@ -37,7 +37,7 @@ If you install somewhere other than `/opt/strata-pvr`, edit `WorkingDirectory`
 and `ExecStart` in each unit.
 
 The services run without a systemd `User=` by default. This preserves the
-runtime behavior where Strata PVR reads `config.json` and then applies `uid` and
+runtime behavior where Strata PVR reads `data/config.json` and then applies `uid` and
 `gid` from the config where supported. If you want systemd to manage the user
 instead, add `User=` and `Group=` to the service files and make sure the working
 directory, `data/`, `log/`, and recorded directory are writable by that user.
@@ -65,16 +65,15 @@ Strata PVR also writes legacy-compatible logs under `/opt/strata-pvr/log/`.
 
 - 作業ディレクトリ: `/opt/strata-pvr`
 - 実行ファイル: `/opt/strata-pvr/strata-pvr`
-- 設定ファイル: `/opt/strata-pvr/config.json`
-- ルールファイル: `/opt/strata-pvr/rules.json`
+- 設定ファイル: `/opt/strata-pvr/data/config.json`
+- SQLiteデータベース: `/opt/strata-pvr/data/strata.db`
 - 状態ファイル: `/opt/strata-pvr/data/`
 - ログファイル: `/opt/strata-pvr/log/`
 - Web UI 静的ファイル: `/opt/strata-pvr/web/`
 
-`strata-pvr run <component>` はカレントディレクトリを基準に
-`config.json`、`rules.json`、`data/`、`log/`、`web/` を扱います。そのため
-各 unit の `WorkingDirectory` は、これらのファイルを置くディレクトリに
-合わせてください。
+`strata-pvr run <component>` はカレントディレクトリの `data/` と `log/` を
+扱います。そのため各 unit の `WorkingDirectory` は、Strata の
+インストールディレクトリに合わせてください。
 
 ## 1. バイナリをビルドする
 
@@ -95,24 +94,17 @@ GOOS=linux GOARCH=amd64 go build -o strata-pvr ./cmd/strata-pvr
 
 ## 2. ファイルを配置する
 
-`/opt/strata-pvr` にバイナリ、Web UI、サンプル設定を配置します。
+`/opt/strata-pvr` にバイナリを配置し、`init` で設定とSQLiteデータベースを
+初期化します。
 
 ```sh
 sudo install -d -m 0755 /opt/strata-pvr
 sudo install -m 0755 strata-pvr /opt/strata-pvr/strata-pvr
-sudo cp -a web config.sample.json rules.sample.json /opt/strata-pvr/
+sudo sh -c 'cd /opt/strata-pvr && ./strata-pvr init'
 ```
 
-既存の `config.json` や `rules.json` を使う場合は、このタイミングで
-`/opt/strata-pvr/` にコピーしてください。
-
-```sh
-sudo cp config.json rules.json /opt/strata-pvr/
-```
-
-初回起動時に `config.json` または `rules.json` が存在しない場合は、
-`run <component>` が `config.sample.json` と `rules.sample.json` から
-自動作成します。
+既存のChinachu環境から移行する場合は、リポジトリのREADMEに従って
+`migrate/` を用意し、`strata-pvr migrate` を実行してください。
 
 ## 3. systemd unit をインストールする
 
@@ -192,7 +184,7 @@ sudo tail -f /opt/strata-pvr/log/scheduler
 ## 7. 実行ユーザーを変更する場合
 
 同梱の unit は systemd の `User=` / `Group=` を指定していません。これは
-Strata PVR が `config.json` の `uid` / `gid` を読み込んで、対応する処理で
+Strata PVR が `data/config.json` の `uid` / `gid` を読み込んで、対応する処理で
 権限を落とす挙動を保つためです。
 
 systemd 側で実行ユーザーを固定したい場合は、各 service に `User=` と
@@ -210,7 +202,7 @@ Group=strata-pvr
 - `/opt/strata-pvr`
 - `/opt/strata-pvr/data`
 - `/opt/strata-pvr/log`
-- `config.json` の録画保存先ディレクトリ
+- `data/config.json` の録画保存先ディレクトリ
 
 ## 8. 停止・再起動
 
