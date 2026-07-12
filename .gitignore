@@ -5,6 +5,15 @@
 .tokensave/
 strata-pvr
 strata-pvr.exe
+
+# Local agent settings, installed skills, hooks, and diagnostics
+/.claude/
+/.gemini/
+/.impeccable/
+
+# Runtime migration backups
+/backup/
+
 /data
 /log
 /recorded
