@@ -2170,7 +2170,7 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 arbc -sub_type text -fix_sub_duration",
+		"-c:2 arbc -fix_sub_duration",
 		"-ss 12 -f mpegts -i " + recordedPath,
 		"-t 30",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
@@ -2181,6 +2181,20 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	}
 	if strings.Contains(joined, "-sn") {
 		t.Fatalf("subtitle ffmpeg args should not disable subtitle streams: %s", joined)
+	}
+	if strings.Contains(joined, "-sub_type") {
+		t.Fatalf("arbc ffmpeg args should not use libaribcaption-only options: %s", joined)
+	}
+}
+
+func TestSubtitleFFmpegDecoderArgsMatchDecoderCapabilities(t *testing.T) {
+	if got := strings.Join(subtitleFFmpegDecoderArgs("libaribcaption"), " "); got != "-c:2 libaribcaption -sub_type text" {
+		t.Fatalf("libaribcaption args = %q", got)
+	}
+	for _, decoder := range []string{"libaribb24", "arbc"} {
+		if got := strings.Join(subtitleFFmpegDecoderArgs(decoder), " "); got != "-c:2 "+decoder {
+			t.Fatalf("%s args = %q", decoder, got)
+		}
 	}
 }
 
@@ -3131,7 +3145,7 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 arbc -sub_type text -fix_sub_duration",
+		"-c:2 arbc -fix_sub_duration",
 		"-f mpegts -i pipe:0",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
 	} {
