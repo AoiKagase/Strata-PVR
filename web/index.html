@@ -665,7 +665,7 @@
       <button class="small-button" type="button" id="playerDialogClose">閉じる</button>
     </div>
     <div class="player-shell">
-      <video id="playerVideo" class="embedded-player" autoplay playsinline preload="metadata" tabindex="0" aria-label="視聴プレイヤー" aria-describedby="playerStatusMessage"></video>
+      <video id="playerVideo" class="embedded-player" autoplay playsinline preload="metadata" tabindex="0" aria-label="視聴プレイヤー" aria-describedby="playerStatusMessage"><track id="playerSubtitleTrack" kind="subtitles" srclang="ja" label="日本語"></video>
       <div id="playerStatus" class="player-status" role="status" aria-live="polite" hidden>
         <span id="playerStatusMessage" class="player-status-message"></span>
         <button id="playerRetryButton" class="small-button" type="button">再試行</button>
@@ -695,6 +695,13 @@
               <select id="playerAudio">
                 <option value="">主音声</option>
                 <option value="secondary">副音声</option>
+              </select>
+            </label>
+            <label class="player-setting-field" for="playerSubtitle">
+              <span>字幕</span>
+              <select id="playerSubtitle" disabled>
+                <option value="">表示しない</option>
+                <option value="ja">日本語</option>
               </select>
             </label>
           </div>

@@ -2143,6 +2143,44 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("tsdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var gotArgs []string
+	restore := installFakeFFmpegFileStream(t, "WEBVTT\n\n", &gotArgs)
+	defer restore()
+	handler := newTestHandler(t, paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/subtitles.vtt?ss=12&t=30", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "WEBVTT\n\n" {
+		t.Fatalf("subtitle status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "text/vtt; charset=utf-8" {
+		t.Fatalf("subtitle content-type = %q", got)
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{
+		"-ss 12 -f mpegts -i " + recordedPath,
+		"-t 30",
+		"-map 0:s:0? -vn -an -c:s webvtt -f webvtt pipe:1",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("subtitle ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "-sn") {
+		t.Fatalf("subtitle ffmpeg args should not disable subtitle streams: %s", joined)
+	}
+}
+
 func TestAPIRecordedWatchMP4CanSelectSecondaryAudio(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -3639,9 +3677,9 @@ func TestStaticServingUsesEmbeddedAssetsWithoutExternalDirectory(t *testing.T) {
 		contains    string
 	}{
 		{path: "/", contentType: "text/html; charset=utf-8", contains: "<!doctype html"},
-		{path: "/index.html", contentType: "text/html; charset=utf-8", contains: "<!doctype html"},
+		{path: "/index.html", contentType: "text/html; charset=utf-8", contains: "playerSubtitleTrack"},
 		{path: "/styles.css", contentType: "text/css; charset=utf-8", contains: "--"},
-		{path: "/app.js", contentType: "application/javascript", contains: "fetch("},
+		{path: "/app.js", contentType: "application/javascript", contains: "playerSubtitleSourceBuilder"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, test.path, nil)
 		res := httptest.NewRecorder()

@@ -853,6 +853,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleProgramWatch(w, r, programstore.Recording, parts[1], apiType, true)
+	case len(parts) == 3 && parts[0] == "recording" && parts[2] == "subtitles":
+		if !requireAPIType(w, r, apiType, "vtt") {
+			return
+		}
+		s.handleProgramSubtitles(w, r, programstore.Recording, parts[1])
 	case len(parts) >= 2 && parts[0] == "recording":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -883,6 +888,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleProgramWatch(w, r, programstore.Recorded, parts[1], apiType, false)
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "subtitles":
+		if !requireAPIType(w, r, apiType, "vtt") {
+			return
+		}
+		s.handleProgramSubtitles(w, r, programstore.Recorded, parts[1])
 	case len(parts) == 4 && parts[0] == "recorded" && parts[2] == "hls":
 		if !requireAPIType(w, r, apiType, "m3u8", "ts") {
 			return
@@ -2068,6 +2078,66 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 	}
 }
 
+func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, collection, id string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	programs, err := s.readPrograms(r.Context(), collection)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	index := findProgram(programs, id)
+	if index == -1 {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	program := programs[index]
+	if collection == programstore.Recording && !programHasPID(program) {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	if programIsScrambling(program) {
+		legacyHTTPError(w, r, http.StatusConflict)
+		return
+	}
+	if program.Recorded == "" {
+		legacyHTTPError(w, r, http.StatusGone)
+		return
+	}
+	filePath := filepath.FromSlash(program.Recorded)
+	if _, err := os.Stat(filePath); err != nil {
+		if os.IsNotExist(err) {
+			legacyHTTPError(w, r, http.StatusGone)
+			return
+		}
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	args := subtitleFFmpegFileArgs(r, filePath)
+	output, wait, err := runFFmpegFileStream(r.Context(), args...)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	defer output.Close()
+	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, output)
+	if err := wait(); err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
+	}
+}
+
 func watchNeedsTranscode(r *http.Request) bool {
 	q := r.URL.Query()
 	for _, key := range []string{"t", "s", "f", "c:v", "c:a", "b:v", "b:a", "ar", "r"} {
@@ -3006,6 +3076,18 @@ func watchFFmpegFileArgs(r *http.Request, format string, filePath string) []stri
 	return watchFFmpegArgsForInput(r, format, false, filePath, true)
 }
 
+func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
+	args := []string{"-v", "error", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000"}
+	if start := legacyWatchStart(r.URL.Query().Get("ss")); start != "0" {
+		args = append(args, "-ss", start)
+	}
+	args = append(args, "-f", "mpegts", "-i", filePath)
+	if duration := r.URL.Query().Get("t"); duration != "" {
+		args = append(args, "-t", duration)
+	}
+	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+}
+
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
 	q := r.URL.Query()
 	videoCodec := q.Get("c:v")
@@ -3656,7 +3738,7 @@ func trimStreamExtension(path string) string {
 }
 
 func isStreamExtension(ext string) bool {
-	return ext == "xspf" || ext == "m2ts" || ext == "mp4" || ext == "m3u8" || ext == "ts"
+	return ext == "xspf" || ext == "m2ts" || ext == "mp4" || ext == "m3u8" || ext == "ts" || ext == "vtt"
 }
 
 func hasUnsupportedAPIExtension(path string) bool {

@@ -22,6 +22,7 @@
   var playerDialogReturnFocus = null;
   var confirmDialogReturnFocus = null;
   var playerSourceBuilder = null;
+  var playerSubtitleSourceBuilder = null;
   var playerBaseQuery = null;
   var playerSeekable = false;
   var playerSeeking = false;
@@ -1892,6 +1893,23 @@
     return url + "?" + new URLSearchParams(query).toString();
   }
 
+  function programSubtitlesURL(collection, program, query) {
+    var url = "/api/" + collection + "/" + encodeURIComponent(program.id) + "/subtitles.vtt";
+    query = query || {};
+    var params = new URLSearchParams();
+    ["ss", "t"].forEach(function (key) {
+      if (query[key]) {
+        params.set(key, query[key]);
+      }
+    });
+    var encoded = params.toString();
+    return encoded ? url + "?" + encoded : url;
+  }
+
+  function recordedSubtitlesURL(program, query) {
+    return programSubtitlesURL("recorded", program, query);
+  }
+
   function recordedXSPFURL(program) {
     var prefix = window.location.origin + "/api/recorded/" + encodeURIComponent(program.id) + "/";
     return recordedWatchURL(program, "xspf", { prefix: prefix, ext: "m2ts" });
@@ -1938,6 +1956,10 @@
       return url;
     }
     return url + "?" + new URLSearchParams(query).toString();
+  }
+
+  function recordingSubtitlesURL(program, query) {
+    return programSubtitlesURL("recording", program, query);
   }
 
   function channelURL(channelID, resource, ext, query) {
@@ -2212,6 +2234,7 @@
     playerCurrentURL = url;
     playerBaseQuery = cloneQuery(query || {});
     playerKnownDuration = playerConfiguredDuration();
+    updatePlayerSubtitleTrack(playerBaseQuery);
     updatePlayerControls();
     video.play().catch(function (error) {
       if (!error || error.name !== "NotAllowedError") {
@@ -2308,6 +2331,48 @@
     });
   }
 
+  function updatePlayerSubtitleControl(enabled) {
+    var select = byId("playerSubtitle");
+    var track = byId("playerSubtitleTrack");
+    if (select) {
+      select.disabled = !enabled;
+      if (!enabled) {
+        select.value = "";
+      }
+    }
+    if (track && !enabled) {
+      track.track.mode = "disabled";
+      track.removeAttribute("src");
+    }
+  }
+
+  function updatePlayerSubtitleTrack(query) {
+    var select = byId("playerSubtitle");
+    var track = byId("playerSubtitleTrack");
+    if (!select || !track || !playerSubtitleSourceBuilder || select.value !== "ja") {
+      if (track) {
+        track.track.mode = "disabled";
+        track.removeAttribute("src");
+      }
+      return;
+    }
+    var url = playerSubtitleSourceBuilder(cloneQuery(query || {}));
+    if (!url) {
+      track.track.mode = "disabled";
+      track.removeAttribute("src");
+      return;
+    }
+    if (track.getAttribute("src") !== url) {
+      track.track.mode = "disabled";
+      track.setAttribute("src", url);
+    }
+    track.track.mode = "showing";
+  }
+
+  function changePlayerSubtitle() {
+    updatePlayerSubtitleTrack(playerBaseQuery || {});
+  }
+
   function updatePlayerQualityControl(query, enabled) {
     var select = byId("playerQuality");
     if (!select) {
@@ -2391,6 +2456,7 @@
     playerDialogReturnFocus = rememberFocus();
     text(byId("playerDialogMeta"), meta || "");
     playerSourceBuilder = typeof options.sourceBuilder === "function" ? options.sourceBuilder : null;
+    playerSubtitleSourceBuilder = typeof options.subtitleBuilder === "function" ? options.subtitleBuilder : null;
     playerSeekable = Boolean(options.seekable);
     playerTimelineStart = playerSeekable ? finitePositiveSeconds(options.query && options.query.ss) : 0;
     playerTimelineDuration = playerSeekable ? finitePositiveSeconds(options.query && options.query.t) : 0;
@@ -2399,6 +2465,7 @@
       playerTimelineDuration = playerFallbackDuration;
     }
     playerKnownDuration = playerFallbackDuration;
+    updatePlayerSubtitleControl(Boolean(playerSubtitleSourceBuilder));
     updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     updatePlayerAudioControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
@@ -2409,13 +2476,14 @@
     video.focus();
   }
 
-  function openAdjustablePlayer(meta, buildURL, query, seekable, duration, status) {
+  function openAdjustablePlayer(meta, buildURL, query, seekable, duration, status, subtitleBuilder) {
     openPlayerDialog(meta, buildURL(query), {
       query: query,
       seekable: seekable,
       duration: duration,
       sourceBuilder: buildURL,
-      status: status
+      status: status,
+      subtitleBuilder: subtitleBuilder
     });
   }
 
@@ -2442,6 +2510,7 @@
     video.removeAttribute("src");
     video.load();
     playerSourceBuilder = null;
+    playerSubtitleSourceBuilder = null;
     playerBaseQuery = null;
     playerSeekable = false;
     playerSeeking = false;
@@ -2449,6 +2518,7 @@
     playerTimelineDuration = 0;
     playerFallbackDuration = 0;
     playerKnownDuration = 0;
+    updatePlayerSubtitleControl(false);
     updatePlayerQualityControl(null, false);
     updatePlayerAudioControl(null, false);
     updatePlayerControls();
@@ -2551,7 +2621,9 @@
         row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {
           openAdjustablePlayer(program.title || program.id || "録画中", function (query) {
             return recordingWatchURL(program, "mp4", query);
-          }, null, false, 0, "録画中の保存データを再生しています。Mirakurunのチューナーは使用しません。録画の進行で一時停止した場合は、数秒後に再試行してください。");
+          }, null, false, 0, "録画中の保存データを再生しています。Mirakurunのチューナーは使用しません。録画の進行で一時停止した場合は、数秒後に再試行してください。", function (query) {
+            return recordingSubtitlesURL(program, query);
+          });
         }));
       } else if (name === "preview-recording" && program.isRecording) {
         row.appendChild(actionButton("静止画", "録画中の静止画を開く", function () {
@@ -2562,7 +2634,9 @@
           var initialQuery = presetQuery("540p");
           openAdjustablePlayer(program.title || program.id || "録画済み", function (query) {
             return recordedPlaybackURL(program, query);
-          }, initialQuery, true, programDurationSeconds(program));
+          }, initialQuery, true, programDurationSeconds(program), "", function (query) {
+            return recordedSubtitlesURL(program, query);
+          });
         }));
       } else if (name === "download") {
         row.appendChild(actionButton("ダウンロード", "録画ファイルを実体ファイル名で保存", function () {
@@ -2603,7 +2677,9 @@
         var initialQuery = presetQuery("540p");
         openAdjustablePlayer(program.title || program.id || "録画済み", function (query) {
           return recordedPlaybackURL(program, query);
-        }, initialQuery, true, programDurationSeconds(program));
+        }, initialQuery, true, programDurationSeconds(program), "", function (query) {
+          return recordedSubtitlesURL(program, query);
+        });
       }, className);
     }
     if (name === "download") {
@@ -5725,6 +5801,10 @@
       playerAudio.addEventListener("change", function () {
         changePlayerAudio(playerAudio.value);
       });
+    }
+    var playerSubtitle = byId("playerSubtitle");
+    if (playerSubtitle) {
+      playerSubtitle.addEventListener("change", changePlayerSubtitle);
     }
     var playerFullscreenButton = byId("playerFullscreenButton");
     if (playerFullscreenButton) {
