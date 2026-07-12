@@ -140,8 +140,60 @@ type priorityStreamer struct {
 	priority int
 }
 
+type concurrentStreamer struct {
+	started chan int64
+	release <-chan struct{}
+}
+
+func (s *concurrentStreamer) ProgramStream(_ context.Context, id int64, _ bool) (io.ReadCloser, error) {
+	reader, writer := io.Pipe()
+	s.started <- id
+	go func() {
+		<-s.release
+		_, _ = writer.Write([]byte("ts"))
+		_ = writer.Close()
+	}()
+	return reader, nil
+}
+
 func (f *priorityStreamer) SetPriority(priority int) {
 	f.priority = priority
+}
+
+func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	})
+	reserves := []legacy.Program{
+		{ID: "a", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR"}},
+		{ID: "b", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR"}},
+	}
+	if err := reservationstore.Write(context.Background(), paths.Database, reserves); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	streamer := &concurrentStreamer{started: make(chan int64, 2), release: release}
+	var recordings sync.WaitGroup
+	if err := startPendingRecordings(context.Background(), paths.runtime(), &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}, streamer, now, &recordings); err != nil {
+		t.Fatal(err)
+	}
+	for range reserves {
+		select {
+		case <-streamer.started:
+		case <-time.After(time.Second):
+			t.Fatal("overlapping recording did not start")
+		}
+	}
+	close(release)
+	recordings.Wait()
 }
 
 func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T) {

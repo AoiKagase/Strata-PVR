@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,11 @@ import (
 const recordStartMargin = 15 * time.Second
 
 var getDiskUsage = system.GetDiskUsage
+
+// recordingStateMu serializes short SQLite mutations made by concurrently
+// running recordings. Streams themselves remain independent; only their
+// state transitions need exclusive database access.
+var recordingStateMu sync.Mutex
 
 type StreamSource interface {
 	ProgramStream(context.Context, int64, bool) (io.ReadCloser, error)
@@ -76,8 +82,10 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	var recordings sync.WaitGroup
+	defer recordings.Wait()
 	for {
-		if _, err := RunOnce(ctx, paths, cfg, client, time.Now()); err != nil {
+		if err := startPendingRecordings(ctx, paths, cfg, client, time.Now(), &recordings); err != nil {
 			return err
 		}
 		select {
@@ -86,6 +94,86 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// startPendingRecordings starts each due reservation in its own goroutine.
+// RunOnce remains synchronous for callers that need to wait for completion,
+// while the long-running operator must continue checking reservations while
+// previous recordings are still receiving their streams.
+func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time, recordings *sync.WaitGroup) error {
+	reserves, err := reservationstore.Read(ctx, paths.Database)
+	if err != nil {
+		return err
+	}
+	recording, err := programstore.Read(ctx, paths.Database, programstore.Recording)
+	if err != nil {
+		return err
+	}
+	recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
+	if err != nil {
+		return err
+	}
+	if _, err = handleLowStorage(ctx, paths, cfg, recording, recorded); err != nil {
+		return err
+	}
+	pending := make([]legacy.Program, 0)
+	for _, reserve := range reserves {
+		if !shouldStart(reserve, recording, now) {
+			continue
+		}
+		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
+			return err
+		}
+		recording = append(recording, reserve)
+		if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, reserve); err != nil {
+			return err
+		}
+		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
+			return err
+		}
+		if err := logging.AppendLine(paths.Log, "START: %s [%s] %s", reserve.ID, reserve.Channel.Name, reserve.Title); err != nil {
+			return err
+		}
+		pending = append(pending, reserve)
+	}
+	for _, reserve := range pending {
+		recordings.Add(1)
+		go func(program legacy.Program) {
+			defer recordings.Done()
+			finishRecording(ctx, paths, cfg, source, program)
+		}(reserve)
+	}
+	return nil
+}
+
+func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, program legacy.Program) {
+	completed, err := recordProgramWithLog(ctx, paths.Database, paths.Log, cfg, source, program)
+	if err != nil {
+		recordingStateMu.Lock()
+		_ = programstore.Remove(context.WithoutCancel(ctx), paths.Database, programstore.Recording, program.ID)
+		_ = logCollectionWrite(paths, programstore.Recording)
+		recordingStateMu.Unlock()
+		_ = logging.AppendLine(paths.Log, "ERROR: recording %s: %v", program.ID, err)
+		return
+	}
+	recordingStateMu.Lock()
+	err = programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed)
+	recordingStateMu.Unlock()
+	if err != nil {
+		_ = logging.AppendLine(paths.Log, "ERROR: complete recording %s: %v", program.ID, err)
+		return
+	}
+	_ = logCollectionWrite(paths, programstore.Recording)
+	_ = logCollectionWrite(paths, programstore.Recorded)
+	if completed.IsManualReserved {
+		if _, err := reservationstore.Delete(context.WithoutCancel(ctx), paths.Database, completed.ID); err != nil {
+			_ = logging.AppendLine(paths.Log, "ERROR: remove manual reserve %s: %v", completed.ID, err)
+			return
+		}
+		_ = logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database)
+	}
+	_ = logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title)
+	_ = logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed))
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
@@ -310,6 +398,8 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 }
 
 func updateRecordingProgram(ctx context.Context, databasePath string, program legacy.Program) error {
+	recordingStateMu.Lock()
+	defer recordingStateMu.Unlock()
 	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
 	if err != nil {
 		return err
