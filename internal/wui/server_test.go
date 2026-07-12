@@ -598,6 +598,55 @@ func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T
 	}
 }
 
+func TestNativeDashboardAccessibilityHardening(t *testing.T) {
+	index, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles, err := os.ReadFile(filepath.Join("..", "..", "web", "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		`id="liveAnnouncement"`,
+		`role="status"`,
+		`aria-live="polite"`,
+	} {
+		if !strings.Contains(string(index), want) {
+			t.Fatalf("web/index.html missing accessibility marker %q", want)
+		}
+	}
+	for _, want := range []string{
+		`var announcementTimer = null;`,
+		`lastOperationalAnnouncement`,
+		`var operationalAnnouncement = [`,
+		`announce(operationalAnnouncement);`,
+	} {
+		if !strings.Contains(string(app), want) {
+			t.Fatalf("web/app.js missing accessibility hardening marker %q", want)
+		}
+	}
+	for _, want := range []string{
+		`--focus-ring: oklch(40% 0.12 165);`,
+		`.icon-button`,
+		`min-width: 44px;`,
+		`grid-template-columns: 1fr 44px;`,
+		`grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) 44px;`,
+		`@media (pointer: coarse)`,
+		`.schedule-nav-controls button.icon-button`,
+		`.schedule-zoom-controls button`,
+	} {
+		if !strings.Contains(string(styles), want) {
+			t.Fatalf("web/styles.css missing accessibility hardening marker %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardMutationRoutesAreExtensionless(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

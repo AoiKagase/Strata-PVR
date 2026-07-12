@@ -67,7 +67,7 @@
   --chart-free: oklch(90% 0.025 205);
   --chart-memory: oklch(58% 0.16 75);
   --ink-secondary: oklch(43% 0.025 230);
-  --focus-ring: oklch(48% 0.13 165 / 0.45);
+  --focus-ring: oklch(40% 0.12 165);
   --schedule-scroll-surface: oklch(84% 0.025 230);
   --player-menu-line: var(--player-line);
   --player-menu-surface: var(--player-panel-strong);
@@ -193,6 +193,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0;
+  min-width: 44px;
 }
 
 .icon-field-label {
@@ -1807,8 +1808,8 @@ summary:focus-visible,
 
 .player-control-button.icon-button,
 .player-control-link.icon-button {
-  min-width: 40px;
-  width: 40px;
+  min-width: 44px;
+  width: 44px;
   padding: 0;
 }
 
@@ -2346,7 +2347,7 @@ body.view-settings .settings-grid {
 
 .config-user-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) 36px;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) 44px;
   gap: 8px;
   align-items: end;
 }
@@ -2364,8 +2365,10 @@ body.view-settings .settings-grid {
 }
 
 .config-user-row .icon-button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   font-size: 20px;
 }
@@ -2378,7 +2381,7 @@ body.view-settings .settings-grid {
 
 @media (max-width: 620px) {
   .config-user-row {
-    grid-template-columns: 1fr 36px;
+    grid-template-columns: 1fr 44px;
   }
 
   .config-user-row label:first-child {
@@ -2494,7 +2497,8 @@ body.view-settings .settings-grid {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  width: 44px;
+  min-width: 44px;
   min-height: 32px;
   padding: 0;
 }
@@ -3113,6 +3117,12 @@ body.view-schedule .schedule-zoom-controls {
   textarea,
   .main-nav a {
     min-height: 44px;
+  }
+
+  .schedule-nav-controls button.icon-button,
+  .schedule-zoom-controls button {
+    width: 44px;
+    min-width: 44px;
   }
 }
 

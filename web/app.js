@@ -37,6 +37,7 @@
   var refreshVersion = 0;
   var operationalRefreshInFlight = false;
   var metricsRefreshInFlight = false;
+  var announcementTimer = null;
   var apiRequestTimeoutMs = 15000;
   var strataConfigFormDirty = false;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
@@ -78,7 +79,8 @@
     viewDataErrors: {},
     hasLoaded: false,
     isLoading: false,
-    lastError: null
+    lastError: null,
+    lastOperationalAnnouncement: ""
   };
   function byId(id) {
     return document.getElementById(id);
@@ -234,9 +236,13 @@
   function announce(message) {
     var liveRegion = byId("liveAnnouncement");
     if (liveRegion) {
+      if (announcementTimer !== null) {
+        window.clearTimeout(announcementTimer);
+      }
       liveRegion.textContent = "";
-      window.setTimeout(function () {
+      announcementTimer = window.setTimeout(function () {
         liveRegion.textContent = message || "";
+        announcementTimer = null;
       }, 0);
     }
   }
@@ -1547,7 +1553,19 @@
   function updateOperationalStatus() {
     var alive = operatorAlive();
     var statusText = state.lastError ? state.lastError.message : (alive ? "オペレータ稼働中" : "オペレータ停止中");
+    var recordingCount = activeRecordingPrograms().length;
+    var reserveCount = state.reserves.length;
     var conflicts = reserveConflictCount();
+    var operationalAnnouncement = [
+      statusText,
+      "録画中 " + recordingCount,
+      "予約 " + reserveCount,
+      "競合 " + conflicts
+    ].join(" / ");
+    if (state.lastOperationalAnnouncement !== operationalAnnouncement) {
+      state.lastOperationalAnnouncement = operationalAnnouncement;
+      announce(operationalAnnouncement);
+    }
     var badge = byId("statusBadge");
     if (badge) {
       badge.textContent = statusText;
@@ -1558,8 +1576,8 @@
       scheduleOperator.textContent = statusText;
       scheduleOperator.className = "schedule-status-pill" + (state.lastError ? " error" : (alive ? " ok" : ""));
     }
-    text(byId("scheduleRecordingSummary"), "録画中 " + activeRecordingPrograms().length);
-    text(byId("scheduleReserveSummary"), "予約 " + state.reserves.length);
+    text(byId("scheduleRecordingSummary"), "録画中 " + recordingCount);
+    text(byId("scheduleReserveSummary"), "予約 " + reserveCount);
     text(byId("scheduleConflictSummary"), "競合 " + conflicts);
     toggleClass(byId("scheduleConflictSummary"), "has-conflicts", conflicts > 0);
   }
@@ -5233,7 +5251,6 @@
 
   function showError(error) {
     state.lastError = error;
-    announce(error && error.message);
     var badge = byId("statusBadge");
     if (badge) {
       badge.textContent = error.message;
