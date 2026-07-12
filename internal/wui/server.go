@@ -3132,7 +3132,7 @@ func watchFFmpegFileArgs(r *http.Request, format string, filePath string) []stri
 }
 
 func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
-	args := []string{"-v", "error", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000"}
+	args := []string{"-v", "error", "-c:2", "libaribcaption", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000"}
 	if start := legacyWatchStart(r.URL.Query().Get("ss")); start != "0" {
 		args = append(args, "-ss", start)
 	}
@@ -3140,12 +3140,12 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
 	if duration := r.URL.Query().Get("t"); duration != "" {
 		args = append(args, "-t", duration)
 	}
-	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
 func subtitleFFmpegStreamArgs() []string {
-	args := []string{"-v", "error", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0"}
-	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+	args := []string{"-v", "error", "-c:2", "libaribcaption", "-sub_type", "text", "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0"}
+	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
