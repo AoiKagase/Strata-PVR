@@ -3157,17 +3157,17 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath, decoder string) []string 
 	if duration := r.URL.Query().Get("t"); duration != "" {
 		args = append(args, "-t", duration)
 	}
-	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
 func subtitleFFmpegStreamArgs(decoder string) []string {
 	args := append([]string{"-v", "error"}, subtitleFFmpegDecoderArgs(decoder)...)
 	args = append(args, "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0")
-	return append(args, "-map", "0:d:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
 func subtitleFFmpegDecoderArgs(decoder string) []string {
-	args := []string{"-c:2", decoder}
+	args := []string{"-c:s", decoder}
 	if decoder == "libaribcaption" {
 		args = append(args, "-sub_type", "text")
 	}
