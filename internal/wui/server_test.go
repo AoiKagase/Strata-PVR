@@ -2703,6 +2703,38 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 	}
 }
 
+func TestAPIRecordingPreviewKeepsLastSuccessfulImageWhenRefreshFails(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recording.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("transport-stream-data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: -1}}, false); err != nil {
+		t.Fatal(err)
+	}
+	old := runFFmpegPreview
+	defer func() { runFFmpegPreview = old }()
+	runFFmpegPreview = func(context.Context, io.Reader, ...string) ([]byte, error) {
+		return []byte("last-good-preview"), nil
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+	request := func() *httptest.ResponseRecorder {
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview", nil))
+		return res
+	}
+	if res := request(); res.Code != http.StatusOK || res.Body.String() != "last-good-preview" {
+		t.Fatalf("initial recording preview status=%d body=%q", res.Code, res.Body.String())
+	}
+	runFFmpegPreview = func(context.Context, io.Reader, ...string) ([]byte, error) {
+		return nil, nil
+	}
+	if res := request(); res.Code != http.StatusOK || res.Body.String() != "last-good-preview" {
+		t.Fatalf("fallback recording preview status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIProgramPreviewLegacyErrors(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

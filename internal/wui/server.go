@@ -181,7 +181,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(),
 		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
 		hls: newHLSSessionManager(paths),
 	}
@@ -204,20 +204,21 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 }
 
 type server struct {
-	paths        Paths
-	cfg          *config.Config
-	db           *sql.DB
-	assets       fs.FS
-	assetLog     string
-	assetErr     error
-	metrics      *metricHistory
-	recordedSize *recordedSizeCache
-	metricsOnce  sync.Once
-	configMu     sync.Mutex
-	authMu       sync.Mutex
-	authCache    map[[sha256.Size]byte]time.Time
-	authWorkers  chan struct{}
-	hls          *hlsSessionManager
+	paths             Paths
+	cfg               *config.Config
+	db                *sql.DB
+	assets            fs.FS
+	assetLog          string
+	assetErr          error
+	metrics           *metricHistory
+	recordedSize      *recordedSizeCache
+	recordingPreviews *recordingPreviewCache
+	metricsOnce       sync.Once
+	configMu          sync.Mutex
+	authMu            sync.Mutex
+	authCache         map[[sha256.Size]byte]time.Time
+	authWorkers       chan struct{}
+	hls               *hlsSessionManager
 }
 
 type metricHistory struct {
@@ -232,6 +233,33 @@ type recordedSizeCache struct {
 	initialized bool
 	total       int64
 	files       map[string]int64
+}
+
+// recordingPreviewCache keeps the last image that FFmpeg successfully
+// produced for an active recording.  A recording file is being appended to,
+// so a later preview request can occasionally fail while its tail is between
+// decodable transport-stream packets.  In that case the previous frame is a
+// better response than making the WUI remove its thumbnail.
+type recordingPreviewCache struct {
+	mu      sync.Mutex
+	entries map[string][]byte
+}
+
+func newRecordingPreviewCache() *recordingPreviewCache {
+	return &recordingPreviewCache{entries: make(map[string][]byte)}
+}
+
+func (c *recordingPreviewCache) get(key string) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	output, ok := c.entries[key]
+	return output, ok
+}
+
+func (c *recordingPreviewCache) put(key string, output []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key] = output
 }
 
 func newRecordedSizeCache() *recordedSizeCache {
@@ -2580,10 +2608,22 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, co
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	output, err := s.runProgramPreview(ctx, recording, filePath, width, height, codec, r)
+	if err == nil && len(output) == 0 {
+		err = errors.New("previewer returned an empty image")
+	}
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "[previewer] %v", err)
+		if recording {
+			if previous, ok := s.recordingPreviews.get(cacheKey); ok {
+				s.writePreviewResponse(w, apiType, codec, previous)
+				return
+			}
+		}
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
+	}
+	if recording {
+		s.recordingPreviews.put(cacheKey, output)
 	}
 	if !recording && s.paths.Database != "" {
 		if err := s.storePreviewCache(r.Context(), cacheKey, id, filePath, info, codec, output); err != nil {
