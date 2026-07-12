@@ -37,6 +37,7 @@
   var refreshVersion = 0;
   var operationalRefreshInFlight = false;
   var metricsRefreshInFlight = false;
+  var realtimeSourceID = "wui-" + Date.now() + "-" + Math.random().toString(36).slice(2);
   var announcementTimer = null;
   var apiRequestTimeoutMs = 15000;
   var strataConfigFormDirty = false;
@@ -530,7 +531,7 @@
     if (!eventName) {
       return;
     }
-    var message = { event: eventName, at: Date.now() };
+    var message = { event: eventName, at: Date.now(), source: realtimeSourceID };
     if (typeof window.BroadcastChannel === "function") {
       try {
         var channel = new window.BroadcastChannel("strata-pvr");
@@ -561,7 +562,7 @@
       "notify-storage": true
     };
     function handle(message) {
-      if (!message || !refreshEvents[message.event]) {
+      if (!message || message.source === realtimeSourceID || !refreshEvents[message.event]) {
         return;
       }
       refresh();
