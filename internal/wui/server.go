@@ -3169,7 +3169,7 @@ func subtitleFFmpegStreamArgs(decoder string) []string {
 func subtitleFFmpegDecoderArgs(decoder string) []string {
 	args := []string{"-c:s", decoder}
 	if decoder == "libaribcaption" {
-		args = append(args, "-sub_type", "text")
+		args = append(args, "-sub_type", "ass")
 	}
 	return args
 }
