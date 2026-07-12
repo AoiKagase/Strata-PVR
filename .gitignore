@@ -6,10 +6,18 @@
 strata-pvr
 strata-pvr.exe
 
-# Local agent settings, installed skills, hooks, and diagnostics
-/.claude/
-/.gemini/
-/.impeccable/
+# Local/non-public dotfiles and directories. Keep .git* files/directories,
+# including .github/.
+.*
+!.git*
+
+# Local/non-public project instructions and notes
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/DESIGN.md
+/PRODUCT.md
+/QODER.md
 
 # Runtime migration backups
 /backup/
