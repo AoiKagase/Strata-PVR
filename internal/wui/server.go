@@ -3162,8 +3162,8 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath, decoder string) []string 
 
 func subtitleFFmpegStreamArgs(decoder string) []string {
 	args := append([]string{"-v", "error"}, subtitleFFmpegDecoderArgs(decoder)...)
-	args = append(args, "-fix_sub_duration", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0")
-	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0")
+	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-flush_packets", "1", "-f", "webvtt", "pipe:1")
 }
 
 func subtitleFFmpegDecoderArgs(decoder string) []string {

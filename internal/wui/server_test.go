@@ -3150,9 +3150,9 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:s libaribcaption -sub_type ass -fix_sub_duration",
+		"-c:s libaribcaption -sub_type ass",
 		"-f mpegts -i pipe:0",
-		"-map 0:s:0? -vn -an -c:s webvtt -f webvtt pipe:1",
+		"-map 0:s:0? -vn -an -c:s webvtt -flush_packets 1 -f webvtt pipe:1",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("subtitle ffmpeg args missing %q: %s", want, joined)
