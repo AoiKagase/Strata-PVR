@@ -913,6 +913,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleChannelLogo(w, r, parts[1], apiType)
+	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "subtitles":
+		if !requireAPIType(w, r, apiType, "vtt") {
+			return
+		}
+		s.handleChannelSubtitles(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
 			return
@@ -3017,6 +3022,56 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 	}
 }
 
+func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	channel, ok := s.findChannel(id)
+	if !ok {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	client.UserAgent = mirakurun.StrataUserAgent("wui")
+	body, err := client.ServiceStream(r.Context(), serviceID, true)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	defer body.Close()
+	args := subtitleFFmpegStreamArgs()
+	output, wait, err := runFFmpegStream(r.Context(), body, args...)
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	defer output.Close()
+	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, output)
+	if err := wait(); err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
+	}
+}
+
 func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool) {
 	s.streamFFmpegWithStatus(w, r, input, format, live, http.StatusOK)
 }
@@ -3085,6 +3140,11 @@ func subtitleFFmpegFileArgs(r *http.Request, filePath string) []string {
 	if duration := r.URL.Query().Get("t"); duration != "" {
 		args = append(args, "-t", duration)
 	}
+	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+}
+
+func subtitleFFmpegStreamArgs() []string {
+	args := []string{"-v", "error", "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000", "-f", "mpegts", "-i", "pipe:0"}
 	return append(args, "-map", "0:s:0?", "-vn", "-an", "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
@@ -3678,7 +3738,7 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"GET", "HEAD", "DELETE"}, true
 	case len(parts) == 2 && parts[0] == "program":
 		return []string{"GET", "PUT"}, true
-	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "watch"):
+	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "subtitles" || parts[2] == "watch"):
 		return []string{"GET"}, true
 	default:
 		return nil, false

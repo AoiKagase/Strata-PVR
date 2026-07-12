@@ -3077,6 +3077,55 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 }
 
+func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	schedule := []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: chid, Name: "Service"}}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	requests := []string{}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.RequestURI())
+		if r.URL.Path == "/api/services/123/stream" {
+			_, _ = w.Write([]byte("livets"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mirakurunServer.Close()
+	var gotInput string
+	var gotArgs []string
+	restore := installFakeFFmpegStream(t, "WEBVTT\n\n", &gotInput, &gotArgs)
+	defer restore()
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/subtitles.vtt", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "WEBVTT\n\n" {
+		t.Fatalf("subtitle status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "text/vtt; charset=utf-8" {
+		t.Fatalf("subtitle content-type = %q", got)
+	}
+	if len(requests) != 1 || requests[0] != "/api/services/123/stream?decode=1" {
+		t.Fatalf("mirakurun requests = %#v", requests)
+	}
+	if gotInput != "livets" {
+		t.Fatalf("ffmpeg input = %q", gotInput)
+	}
+	joined := strings.Join(gotArgs, " ")
+	for _, want := range []string{
+		"-f mpegts -i pipe:0",
+		"-map 0:s:0? -vn -an -c:s webvtt -f webvtt pipe:1",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("subtitle ffmpeg args missing %q: %s", want, joined)
+		}
+	}
+}
+
 func TestAPIChannelWatchMP4KeepsLegacyLiveBitrateArgs(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

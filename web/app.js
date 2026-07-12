@@ -1962,6 +1962,10 @@
     return programSubtitlesURL("recording", program, query);
   }
 
+  function channelSubtitlesURL(channelID) {
+    return channelURL(channelID, "subtitles", "vtt");
+  }
+
   function channelURL(channelID, resource, ext, query) {
     var url = "/api/channel/" + encodeURIComponent(channelID) + "/" + resource;
     if (ext) {
@@ -2656,7 +2660,9 @@
           row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
             openAdjustablePlayer(program.title || channelID || "チャンネル", function (query) {
               return channelURL(channelID, "watch", "mp4", query);
-            }, null, false);
+            }, null, false, 0, "", function () {
+              return channelSubtitlesURL(channelID);
+            });
           }));
         }
       } else if (name === "create-rule-from-program") {
@@ -3020,7 +3026,9 @@
       actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
         openAdjustablePlayer(group.name || group.id || "チャンネル", function (query) {
           return channelURL(group.id, "watch", "mp4", query);
-        }, null, false);
+        }, null, false, 0, "", function () {
+          return channelSubtitlesURL(group.id);
+        });
       }, "small-button"));
     }
 
@@ -3774,7 +3782,9 @@
     row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
       openAdjustablePlayer(label || channelID || "チャンネル", function (query) {
         return channelURL(channelID, "watch", "mp4", query);
-      }, null, false);
+      }, null, false, 0, "", function () {
+        return channelSubtitlesURL(channelID);
+      });
     }));
     return row;
   }
