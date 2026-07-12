@@ -2678,12 +2678,12 @@ body.view-settings .settings-grid {
   }
 
   .rule-row {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 1fr;
     align-items: start;
   }
 
   .rule-row .row-actions {
-    grid-column: 2;
+    grid-column: 1;
     flex-wrap: wrap;
     justify-content: flex-start;
   }
@@ -2854,6 +2854,15 @@ body.view-settings .settings-grid {
   .row-actions .small-button,
   .action-menu-summary {
     min-height: 44px;
+  }
+
+  .program-title-button {
+    min-height: 44px;
+  }
+
+  .recorded-actions .recorded-action-download,
+  .recorded-actions .recorded-action-xspf {
+    display: none;
   }
 
   .player-control-button,

@@ -2608,12 +2608,12 @@
     if (name === "download") {
       return actionButton("ダウンロード", "録画ファイルを実体ファイル名で保存", function () {
         openURL("/api/recorded/" + encodeURIComponent(program.id) + "/file.m2ts");
-      }, className);
+      }, ((className || "") + " recorded-action-download").trim());
     }
     if (name === "xspf") {
       return actionButton("XSPF", "録画済み番組のプレイリストを開く", function () {
         openURL(recordedXSPFURL(program));
-      }, className);
+      }, ((className || "") + " recorded-action-xspf").trim());
     }
     if (name === "delete-recorded") {
       return actionButton("削除", "録画済み項目とファイルを削除", function () {
