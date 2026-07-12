@@ -1106,6 +1106,8 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 		filepath.Join("..", "..", "web", "app.js"): {
 			`programStateIndex`,
 			`function decorateProgramState(program)`,
+			`var isRecorded = isRecordedProgram(program);`,
+			`if (reserve && !isRecorded)`,
 			`program.isRecording`,
 			`program.isReserved`,
 			`renderProgramStateBadges(body, program, options)`,

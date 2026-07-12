@@ -109,6 +109,13 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	if err != nil {
 		return err
 	}
+	if stopped, err := abortSkippedRecordings(ctx, paths.Database, reserves, recording); err != nil {
+		return err
+	} else if stopped > 0 {
+		if err := logging.AppendLine(paths.Log, "ABORT: skipped recordings=%d", stopped); err != nil {
+			return err
+		}
+	}
 	recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
 	if err != nil {
 		return err
@@ -146,6 +153,32 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	return nil
 }
 
+// abortSkippedRecordings applies a later skip action to a recording that has
+// already started. The recording goroutine polls its Abort flag and closes its
+// stream without waiting for the program to end.
+func abortSkippedRecordings(ctx context.Context, databasePath string, reserves, recording []legacy.Program) (int, error) {
+	skipped := make(map[string]bool, len(reserves))
+	for _, reserve := range reserves {
+		if reserve.IsSkip {
+			skipped[reserve.ID] = true
+		}
+	}
+	updated := 0
+	recordingStateMu.Lock()
+	defer recordingStateMu.Unlock()
+	for _, active := range recording {
+		if active.IsManualReserved || active.Abort || !skipped[active.ID] {
+			continue
+		}
+		active.Abort = true
+		if err := programstore.Upsert(ctx, databasePath, programstore.Recording, active); err != nil {
+			return updated, err
+		}
+		updated++
+	}
+	return updated, nil
+}
+
 func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, program legacy.Program) {
 	completed, err := recordProgramWithLog(ctx, paths.Database, paths.Log, cfg, source, program)
 	if err != nil {
@@ -165,13 +198,11 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 	}
 	_ = logCollectionWrite(paths, programstore.Recording)
 	_ = logCollectionWrite(paths, programstore.Recorded)
-	if completed.IsManualReserved {
-		if _, err := reservationstore.Delete(context.WithoutCancel(ctx), paths.Database, completed.ID); err != nil {
-			_ = logging.AppendLine(paths.Log, "ERROR: remove manual reserve %s: %v", completed.ID, err)
-			return
-		}
-		_ = logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database)
+	if _, err := reservationstore.Delete(context.WithoutCancel(ctx), paths.Database, completed.ID); err != nil {
+		_ = logging.AppendLine(paths.Log, "ERROR: remove completed reserve %s: %v", completed.ID, err)
+		return
 	}
+	_ = logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database)
 	_ = logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title)
 	_ = logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed))
 }
@@ -269,14 +300,12 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := logCollectionWrite(paths, programstore.Recorded); err != nil {
 			return result, err
 		}
-		if completed.IsManualReserved {
-			reserves = removeProgram(reserves, reserve.ID)
-			if _, err := reservationstore.Delete(ctx, paths.Database, reserve.ID); err != nil {
-				return result, err
-			}
-			if err := logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database); err != nil {
-				return result, err
-			}
+		reserves = removeProgram(reserves, reserve.ID)
+		if _, err := reservationstore.Delete(context.WithoutCancel(ctx), paths.Database, reserve.ID); err != nil {
+			return result, err
+		}
+		if err := logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database); err != nil {
+			return result, err
 		}
 		if err := logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title); err != nil {
 			return result, err
@@ -398,8 +427,6 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 }
 
 func updateRecordingProgram(ctx context.Context, databasePath string, program legacy.Program) error {
-	recordingStateMu.Lock()
-	defer recordingStateMu.Unlock()
 	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
 	if err != nil {
 		return err

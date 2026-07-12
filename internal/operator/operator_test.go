@@ -196,6 +196,36 @@ func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {
 	recordings.Wait()
 }
 
+func TestAbortSkippedRecordingsStopsOnlySkippedAutoReserves(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+	})
+	reserves := []legacy.Program{{ID: "skip", IsSkip: true}, {ID: "keep"}, {ID: "manual", IsSkip: true, IsManualReserved: true}}
+	recording := []legacy.Program{{ID: "skip"}, {ID: "keep"}, {ID: "manual", IsManualReserved: true}}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := abortSkippedRecordings(context.Background(), paths.Database, reserves, recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated != 1 {
+		t.Fatalf("updated = %d", updated)
+	}
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if !recording[0].Abort || recording[1].Abort || recording[2].Abort {
+		t.Fatalf("recording abort states = %#v", recording)
+	}
+}
+
 func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths{
@@ -313,8 +343,8 @@ func TestRunOnceRecordsDueProgram(t *testing.T) {
 	if err := readOperatorTestReserves(paths, &reserves); err != nil {
 		t.Fatal(err)
 	}
-	if len(reserves) != 1 || reserves[0].ID != program.ID {
-		t.Fatalf("auto reserve should remain like legacy operator: %#v", reserves)
+	if len(reserves) != 0 {
+		t.Fatalf("completed auto reserve should be removed: %#v", reserves)
 	}
 	var recording []legacy.Program
 	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
@@ -669,7 +699,7 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 		if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err == nil && len(recording) == 1 && recording[0].Recorded != "" {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 	if len(recording) != 1 || recording[0].Recorded == "" {
 		t.Fatalf("recording entry was not active before cancel: %#v", recording)

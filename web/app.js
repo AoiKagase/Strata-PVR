@@ -893,6 +893,7 @@
     var recording = state.programStateIndex.recording || {};
     var reserve = reserves[program.id] || null;
     var active = recording[program.id] || null;
+    var isRecorded = isRecordedProgram(program);
     if (!reserve && !active) {
       return program;
     }
@@ -900,7 +901,7 @@
     Object.keys(program).forEach(function (key) {
       decorated[key] = program[key];
     });
-    if (reserve) {
+    if (reserve && !isRecorded) {
       decorated.isReserved = true;
       decorated.isManualReserved = Boolean(reserve.isManualReserved);
       decorated.isSkip = Boolean(reserve.isSkip);
