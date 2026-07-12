@@ -2335,6 +2335,18 @@
     });
   }
 
+  function bindPlayerSubtitleEvents() {
+    var track = byId("playerSubtitleTrack");
+    if (!track) {
+      return;
+    }
+    track.addEventListener("error", function () {
+      if (track.getAttribute("src")) {
+        setPlayerStatus("字幕を読み込めませんでした。FFmpegにlibaribcaptionまたはlibaribb24を含むビルドが必要です。");
+      }
+    });
+  }
+
   function updatePlayerSubtitleControl(enabled) {
     var select = byId("playerSubtitle");
     var track = byId("playerSubtitleTrack");
@@ -5767,6 +5779,7 @@
       playerRetryButton.addEventListener("click", retryPlayerSource);
     }
     bindPlayerVideoEvents();
+    bindPlayerSubtitleEvents();
     var playerVideo = byId("playerVideo");
     if (playerVideo) {
       playerVideo.addEventListener("click", togglePlayerPlayback);

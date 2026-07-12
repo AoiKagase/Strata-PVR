@@ -2156,7 +2156,7 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegFileStream(t, "WEBVTT\n\n", &gotArgs)
 	defer restore()
-	restoreDecoder := installFakeFFmpegDecoders(t, " S..... arbc ARIB caption decoder")
+	restoreDecoder := installFakeFFmpegDecoders(t, " S..... libaribcaption ARIB caption decoder")
 	defer restoreDecoder()
 	handler := newTestHandler(t, paths, &config.Config{})
 	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/subtitles.vtt?ss=12&t=30", nil)
@@ -2170,7 +2170,7 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 arbc -fix_sub_duration",
+		"-c:2 libaribcaption -sub_type text -fix_sub_duration",
 		"-ss 12 -f mpegts -i " + recordedPath,
 		"-t 30",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
@@ -2182,9 +2182,6 @@ func TestAPIRecordedSubtitlesVTTUsesFFmpeg(t *testing.T) {
 	if strings.Contains(joined, "-sn") {
 		t.Fatalf("subtitle ffmpeg args should not disable subtitle streams: %s", joined)
 	}
-	if strings.Contains(joined, "-sub_type") {
-		t.Fatalf("arbc ffmpeg args should not use libaribcaption-only options: %s", joined)
-	}
 }
 
 func TestSubtitleFFmpegDecoderArgsMatchDecoderCapabilities(t *testing.T) {
@@ -2195,6 +2192,14 @@ func TestSubtitleFFmpegDecoderArgsMatchDecoderCapabilities(t *testing.T) {
 		if got := strings.Join(subtitleFFmpegDecoderArgs(decoder), " "); got != "-c:2 "+decoder {
 			t.Fatalf("%s args = %q", decoder, got)
 		}
+	}
+}
+
+func TestARIBCaptionDecoderRejectsLegacyARBC(t *testing.T) {
+	restore := installFakeFFmpegDecoders(t, " S..... arbc ARIB caption decoder")
+	defer restore()
+	if _, err := aribCaptionDecoder(); err == nil || !strings.Contains(err.Error(), "libaribcaption") {
+		t.Fatalf("arbc decoder error = %v", err)
 	}
 }
 
@@ -3125,7 +3130,7 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	var gotArgs []string
 	restore := installFakeFFmpegStream(t, "WEBVTT\n\n", &gotInput, &gotArgs)
 	defer restore()
-	restoreDecoder := installFakeFFmpegDecoders(t, " S..... arbc ARIB caption decoder")
+	restoreDecoder := installFakeFFmpegDecoders(t, " S..... libaribcaption ARIB caption decoder")
 	defer restoreDecoder()
 	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/subtitles.vtt", nil)
@@ -3145,7 +3150,7 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"-c:2 arbc -fix_sub_duration",
+		"-c:2 libaribcaption -sub_type text -fix_sub_duration",
 		"-f mpegts -i pipe:0",
 		"-map 0:d:0? -vn -an -c:s webvtt -f webvtt pipe:1",
 	} {

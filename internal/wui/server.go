@@ -3179,12 +3179,15 @@ func aribCaptionDecoder() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, name := range []string{"libaribcaption", "libaribb24", "arbc"} {
+	for _, name := range []string{"libaribcaption", "libaribb24"} {
 		if bytes.Contains(data, []byte(" "+name+" ")) {
 			return name, nil
 		}
 	}
-	return "", fmt.Errorf("no ARIB caption decoder found in ffmpeg")
+	if bytes.Contains(data, []byte(" arbc ")) {
+		return "", fmt.Errorf("ffmpeg arbc cannot decode generic MPEG-TS data streams; install an ffmpeg build with libaribcaption or libaribb24")
+	}
+	return "", fmt.Errorf("no compatible ARIB caption decoder found in ffmpeg")
 }
 
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
