@@ -42,6 +42,7 @@ import (
 	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
 	"strata-pvr/internal/system"
+	"strata-pvr/internal/version"
 	webassets "strata-pvr/web"
 )
 
@@ -3186,7 +3187,15 @@ func (s *server) status() map[string]any {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	now := time.Now()
+	build := version.Current()
 	return map[string]any{
+		"application": map[string]any{
+			"name":      "Strata PVR",
+			"version":   build.Number,
+			"commit":    build.Commit,
+			"buildDate": build.Date,
+			"modified":  build.Modified,
+		},
 		"connectedCount": 0,
 		"feature": map[string]any{
 			"previewer":         true,

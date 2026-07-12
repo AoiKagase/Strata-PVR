@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25.x"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
+
+      - name: Run tests
+        run: go test ./...
+
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            artifact: strata-pvr-linux-amd64
+          - goos: windows
+            goarch: amd64
+            artifact: strata-pvr-windows-amd64.exe
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Calculate version
+        id: version
+        shell: bash
+        run: |
+          count=$(git rev-list --count HEAD)
+          commit=$(git rev-parse --short=12 HEAD)
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.1.0-dev.${count}+${commit}"
+          fi
+          date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+          echo "date=${date}" >> "${GITHUB_OUTPUT}"
+          echo "Building Strata PVR ${version} (${commit})"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-X strata-pvr/internal/version.Number=${{ steps.version.outputs.version }} -X strata-pvr/internal/version.Commit=${{ steps.version.outputs.commit }} -X strata-pvr/internal/version.Date=${{ steps.version.outputs.date }}" \
+            -o "dist/${{ matrix.artifact }}" ./cmd/strata-pvr
+
+      - name: Write build summary
+        run: |
+          {
+            echo "### Build"
+            echo
+            echo '- Version: `${{ steps.version.outputs.version }}`'
+            echo '- Commit: `${{ steps.version.outputs.commit }}`'
+            echo '- Target: `${{ matrix.goos }}/${{ matrix.goarch }}`'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload binary
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+          if-no-files-found: error

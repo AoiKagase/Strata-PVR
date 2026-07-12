@@ -49,7 +49,7 @@ MP4 再生、プレビュー、変換配信を利用する場合のみ `ffmpeg` 
 
 ```sh
 go test ./...
-go build -o strata-pvr ./cmd/strata-pvr
+sh ./scripts/build.sh
 ```
 
 Windows で `go` が PATH にない場合は、Go のインストール先を直接指定でき
@@ -57,8 +57,11 @@ Windows で `go` が PATH にない場合は、Go のインストール先を直
 
 ```powershell
 & "C:\Program Files\Go\bin\go.exe" test ./...
-& "C:\Program Files\Go\bin\go.exe" build -o strata-pvr.exe ./cmd/strata-pvr
+& .\scripts\build.ps1
 ```
+
+ビルド時のバージョンは `0.1.0-dev.<コミット数>+<短縮SHA>` の形式で自動生成
+されます。WUI の「ステータス」画面と `/api/status` で確認できます。
 
 ## 初回セットアップ
 

@@ -4350,10 +4350,13 @@
       return;
     }
     var status = state.status || {};
+    var application = status.application || {};
     var system = status.system || {};
     var memory = system.memory || {};
     var operator = status.operator || {};
     var rows = [
+      ["バージョン", application.version || "不明"],
+      ["コミット", application.commit || "不明"],
       ["WUI", "稼働中" + (system.pid ? " / PID " + system.pid : "")],
       ["オペレータ", (operator.alive ? "稼働中" : "停止中") + (operator.pid ? " / PID " + operator.pid : "")],
       ["CPUコア", system.core],

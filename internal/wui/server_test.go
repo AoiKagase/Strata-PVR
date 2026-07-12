@@ -3318,13 +3318,17 @@ func TestAPIStatusReadsPIDFiles(t *testing.T) {
 		t.Fatalf("status=%d body=%q", res.Code, res.Body.String())
 	}
 	var status struct {
-		Operator  map[string]any `json:"operator"`
-		Scheduler map[string]any `json:"scheduler"`
-		WUI       map[string]any `json:"wui"`
-		Feature   map[string]any `json:"feature"`
+		Application map[string]any `json:"application"`
+		Operator    map[string]any `json:"operator"`
+		Scheduler   map[string]any `json:"scheduler"`
+		WUI         map[string]any `json:"wui"`
+		Feature     map[string]any `json:"feature"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
+	}
+	if status.Application["name"] != "Strata PVR" || status.Application["version"] == "" || status.Application["commit"] == "" {
+		t.Fatalf("unexpected application version: %#v", status.Application)
 	}
 	if status.Operator["pid"].(float64) != float64(currentPID) || status.Operator["alive"] != true {
 		t.Fatalf("unexpected operator status: %#v", status.Operator)
