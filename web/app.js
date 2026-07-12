@@ -2335,8 +2335,8 @@
     });
   }
 
-  function bindPlayerSubtitleEvents() {
-    var track = byId("playerSubtitleTrack");
+  function bindPlayerSubtitleEvents(track) {
+    track = track || byId("playerSubtitleTrack");
     if (!track) {
       return;
     }
@@ -2380,6 +2380,11 @@
     }
     if (track.getAttribute("src") !== url) {
       track.track.mode = "disabled";
+      track.removeAttribute("src");
+      var replacement = track.cloneNode(false);
+      track.parentNode.replaceChild(replacement, track);
+      track = replacement;
+      bindPlayerSubtitleEvents(track);
       track.setAttribute("src", url);
     }
     track.track.mode = "showing";
