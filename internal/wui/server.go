@@ -183,7 +183,8 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(),
 		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
-		hls: newHLSSessionManager(paths),
+		schedulerGate: newSchedulerGate(),
+		hls:           newHLSSessionManager(paths),
 	}
 	server.cleanupPreviewCache(context.Background())
 	mux.HandleFunc("/api/", server.handleAPI)
@@ -216,10 +217,52 @@ type server struct {
 	metricsOnce       sync.Once
 	configMu          sync.Mutex
 	schedulerMu       sync.Mutex
+	schedulerGate     chan struct{}
 	authMu            sync.Mutex
 	authCache         map[[sha256.Size]byte]time.Time
 	authWorkers       chan struct{}
 	hls               *hlsSessionManager
+}
+
+func newSchedulerGate() chan struct{} {
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	return gate
+}
+
+func (s *server) schedulerChannel() chan struct{} {
+	s.schedulerMu.Lock()
+	defer s.schedulerMu.Unlock()
+	if s.schedulerGate == nil {
+		s.schedulerGate = newSchedulerGate()
+	}
+	return s.schedulerGate
+}
+
+func (s *server) acquireScheduler(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.schedulerChannel():
+		if err := ctx.Err(); err != nil {
+			s.releaseScheduler()
+			return err
+		}
+		return nil
+	}
+}
+
+func (s *server) tryAcquireScheduler() bool {
+	select {
+	case <-s.schedulerChannel():
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *server) releaseScheduler() {
+	s.schedulerChannel() <- struct{}{}
 }
 
 type metricHistory struct {
@@ -1407,11 +1450,10 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 		return
 	}
 	if r.Method == http.MethodPut {
-		s.schedulerMu.Lock()
-		defer s.schedulerMu.Unlock()
-		if err := r.Context().Err(); err != nil {
+		if err := s.acquireScheduler(r.Context()); err != nil {
 			return
 		}
+		defer s.releaseScheduler()
 		if err := s.runScheduler(r.Context(), false); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
@@ -1457,12 +1499,12 @@ func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.schedulerMu.TryLock() {
+	if !s.tryAcquireScheduler() {
 		writeCompactJSON(w, http.StatusAccepted, map[string]any{})
 		return
 	}
 	go func() {
-		defer s.schedulerMu.Unlock()
+		defer s.releaseScheduler()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		_ = s.runScheduler(ctx, false)

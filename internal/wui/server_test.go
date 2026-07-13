@@ -3703,6 +3703,53 @@ func TestAPISchedulerPutCancellationDoesNotStartScheduler(t *testing.T) {
 	}
 }
 
+func TestAPISchedulerPutCancellationReturnsWhileForceIsActive(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	paths.Scheduler = func(_ context.Context, _ bool) error {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return nil
+	}
+	handler := newHandler(paths.runtime(), &config.Config{}, false)
+	forceDone := make(chan struct{})
+	go func() {
+		defer close(forceDone)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not start")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	putDone := make(chan struct{})
+	go func() {
+		defer close(putDone)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler", nil).WithContext(ctx))
+	}()
+	cancel()
+	select {
+	case <-putDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("canceled scheduler PUT remained blocked behind force")
+	}
+	close(release)
+	select {
+	case <-forceDone:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not finish")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("scheduler callback calls = %d, want 1", got)
+	}
+}
+
 func TestAPISchedulerPutErrorReleasesSchedulerGate(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
