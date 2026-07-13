@@ -120,6 +120,40 @@ func UpsertProgram(ctx context.Context, db *sql.DB, collection string, program P
 	return nil
 }
 
+// UpdateProgramDocument atomically applies update to the latest JSON document
+// for a program. The callback runs inside the transaction so callers can merge
+// recorder-owned fields without replacing changes made by another component.
+func UpdateProgramDocument(ctx context.Context, db *sql.DB, collection, programID string, update func(json.RawMessage) (json.RawMessage, error)) (bool, error) {
+	if !validProgramCollection(collection) || programID == "" || update == nil {
+		return false, fmt.Errorf("update %s: invalid program", collection)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("update %s program %q: %w", collection, programID, err)
+	}
+	defer tx.Rollback()
+	var document string
+	if err := tx.QueryRowContext(ctx, `SELECT document_json FROM program_collections WHERE collection = ? AND program_id = ?`, collection, programID).Scan(&document); err == sql.ErrNoRows {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("update %s program %q: %w", collection, programID, err)
+	}
+	updated, err := update(json.RawMessage(document))
+	if err != nil {
+		return false, fmt.Errorf("update %s program %q: %w", collection, programID, err)
+	}
+	if !json.Valid(updated) {
+		return false, fmt.Errorf("update %s program %q: invalid document", collection, programID)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE program_collections SET document_json = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE collection = ? AND program_id = ?`, string(updated), collection, programID); err != nil {
+		return false, fmt.Errorf("update %s program %q: %w", collection, programID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("update %s program %q: %w", collection, programID, err)
+	}
+	return true, nil
+}
+
 func DeleteProgram(ctx context.Context, db *sql.DB, collection, programID string) error {
 	if !validProgramCollection(collection) || programID == "" {
 		return fmt.Errorf("delete %s: invalid program", collection)

@@ -1282,7 +1282,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 					return err
 				}
 			}
-			if err := programstore.Upsert(context.Background(), p.database, programstore.Recording, target); err != nil {
+			if err := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, true); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, "stop:")

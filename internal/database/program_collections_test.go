@@ -130,3 +130,47 @@ func TestCompleteProgramPreservesUnrelatedPrograms(t *testing.T) {
 		t.Fatalf("recorded=%s", recorded)
 	}
 }
+
+func TestUpdateProgramDocumentUsesLatestDocumentAsUpdateInput(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := ReplaceProgramCollection(ctx, db, "recording", []ProgramDocument{{
+		ProgramID: "active",
+		Document:  json.RawMessage(`{"id":"active","abort":true,"external":{"keep":true}}`),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := UpdateProgramDocument(ctx, db, "recording", "active", func(document json.RawMessage) (json.RawMessage, error) {
+		var current map[string]any
+		if err := json.Unmarshal(document, &current); err != nil {
+			return nil, err
+		}
+		current["recorded"] = "active.m2ts"
+		return json.Marshal(current)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated {
+		t.Fatal("existing program was not updated")
+	}
+	document, found, err := ReadProgramByID(ctx, db, "recording", "active")
+	if err != nil || !found {
+		t.Fatalf("updated document found=%v err=%v", found, err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(document, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["abort"] != true || got["recorded"] != "active.m2ts" {
+		t.Fatalf("updated document lost current fields: %#v", got)
+	}
+	if _, ok := got["external"]; !ok {
+		t.Fatalf("updated document lost external field: %#v", got)
+	}
+}

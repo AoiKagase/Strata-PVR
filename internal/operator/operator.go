@@ -196,8 +196,7 @@ func abortSkippedRecordings(ctx context.Context, databasePath string, reserves [
 		if !found || active.IsManualReserved || active.Abort {
 			continue
 		}
-		active.Abort = true
-		if err := programstore.Upsert(ctx, databasePath, programstore.Recording, active); err != nil {
+		if err := programstore.SetAbort(ctx, databasePath, programstore.Recording, reserve.ID, true); err != nil {
 			return updated, err
 		}
 		updated++
@@ -234,6 +233,20 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
+	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		return err
+	}
+	for _, program := range recording {
+		if program.Recorded == "" {
+			continue
+		}
+		for _, path := range []string{filepath.FromSlash(program.Recorded), filepath.FromSlash(program.Recorded) + ".part"} {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
 	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, []legacy.Program{}); err != nil {
 		return err
 	}
@@ -337,7 +350,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		recording = removeProgram(recording, reserve.ID)
 		delete(recordingIDSet, reserve.ID)
 		if err != nil {
-			if writeErr := programstore.Remove(ctx, paths.Database, programstore.Recording, reserve.ID); writeErr != nil {
+			if writeErr := programstore.Remove(context.WithoutCancel(ctx), paths.Database, programstore.Recording, reserve.ID); writeErr != nil {
 				err = errors.Join(err, writeErr)
 			}
 			result.Failed++
@@ -444,12 +457,22 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 			return program, err
 		}
 	}
-	out, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	partPath := finalPath + ".part"
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(partPath)
+		}
+	}()
+	out, err := os.OpenFile(partPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return program, err
 	}
-	if _, err := io.Copy(out, stream); err != nil && !aborted.Load() && recordCtx.Err() == nil {
+	if _, err := io.Copy(out, stream); err != nil && !aborted.Load() {
 		out.Close()
+		if recordCtx.Err() != nil {
+			return program, recordCtx.Err()
+		}
 		return program, err
 	}
 	if err := out.Sync(); err != nil {
@@ -459,8 +482,33 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err := out.Close(); err != nil {
 		return program, err
 	}
+	if !aborted.Load() && recordCtx.Err() != nil {
+		return program, recordCtx.Err()
+	}
+	if err := replaceRecordingOutput(partPath, finalPath); err != nil {
+		return program, err
+	}
+	renamed = true
 	program.PID = 0
 	return program, nil
+}
+
+func replaceRecordingOutput(partPath, finalPath string) error {
+	if err := os.Rename(partPath, finalPath); err == nil {
+		return nil
+	} else {
+		renameErr := err
+		if err := os.Remove(finalPath); err != nil {
+			if os.IsNotExist(err) {
+				return renameErr
+			}
+			return errors.Join(renameErr, err)
+		}
+		if err := os.Rename(partPath, finalPath); err != nil {
+			return errors.Join(renameErr, err)
+		}
+		return nil
+	}
 }
 
 func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
@@ -481,22 +529,21 @@ func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 }
 
 func updateRecordingProgram(ctx context.Context, databasePath string, program legacy.Program) error {
-	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
-	if err != nil {
-		return err
-	}
-	changed := false
-	for i := range recording {
-		if recording[i].ID == program.ID {
-			recording[i] = program
-			changed = true
-			break
+	return programstore.Update(ctx, databasePath, programstore.Recording, program.ID, func(current legacy.Program) (legacy.Program, error) {
+		current.Recorded = program.Recorded
+		current.PID = program.PID
+		if len(program.Raw) > 0 {
+			if current.Raw == nil {
+				current.Raw = make(map[string]json.RawMessage)
+			}
+			for _, key := range []string{"priority", "tuner", "command"} {
+				if value, ok := program.Raw[key]; ok {
+					current.Raw[key] = value
+				}
+			}
 		}
-	}
-	if !changed {
-		return nil
-	}
-	return programstore.Upsert(ctx, databasePath, programstore.Recording, program)
+		return current, nil
+	})
 }
 
 func setProgramRawJSON(program *legacy.Program, key string, value any) {
@@ -585,7 +632,7 @@ func handleLowStorage(ctx context.Context, paths Paths, cfg *config.Config, reco
 			if !recording[i].Abort {
 				recording[i].Abort = true
 				changed = true
-				if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, recording[i]); err != nil {
+				if err := programstore.SetAbort(ctx, paths.Database, programstore.Recording, recording[i].ID, true); err != nil {
 					return recorded, err
 				}
 			}

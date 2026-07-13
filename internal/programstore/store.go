@@ -90,6 +90,33 @@ func Upsert(ctx context.Context, databasePath, collection string, program legacy
 	return database.UpsertProgram(ctx, db, collection, document)
 }
 
+func Update(ctx context.Context, databasePath, collection, programID string, update func(legacy.Program) (legacy.Program, error)) error {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	defer release()
+	_, err = database.UpdateProgramDocument(ctx, db, collection, programID, func(document json.RawMessage) (json.RawMessage, error) {
+		var current legacy.Program
+		if err := json.Unmarshal(document, &current); err != nil {
+			return nil, err
+		}
+		updated, err := update(current)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(updated)
+	})
+	return err
+}
+
+func SetAbort(ctx context.Context, databasePath, collection, programID string, abort bool) error {
+	return Update(ctx, databasePath, collection, programID, func(program legacy.Program) (legacy.Program, error) {
+		program.Abort = abort
+		return program, nil
+	})
+}
+
 func Remove(ctx context.Context, databasePath, collection, programID string) error {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {

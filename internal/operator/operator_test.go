@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -290,6 +291,46 @@ func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T
 	}
 	if !strings.Contains(string(logData), "MKDIR: "+recordedDir) {
 		t.Fatalf("operator log missing MKDIR line: %s", string(logData))
+	}
+}
+
+func TestInitializeRuntimeStateRemovesStaleActiveRecordingFiles(t *testing.T) {
+	dir := t.TempDir()
+	finalPath := filepath.Join(dir, "recorded", "stale.m2ts")
+	partPath := finalPath + ".part"
+	paths := testPaths{
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{finalPath, partPath} {
+		if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{
+		ID:       "stale",
+		Recorded: filepath.ToSlash(finalPath),
+	}}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := initializeRuntimeStateTest(t, paths, &config.Config{RecordedDir: filepath.Join(dir, "recorded")}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{finalPath, partPath} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("stale active recording file %s still exists: %v", path, err)
+		}
+	}
+	var recording []legacy.Program
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 0 {
+		t.Fatalf("recording state was not cleared: %#v", recording)
 	}
 }
 
@@ -690,7 +731,7 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 }
 
-func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
+func TestRunOnceCancellingContextLeavesReservationAndNoRecordedOutput(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
 	paths := testPaths{
@@ -764,10 +805,10 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	cancel()
 	select {
 	case outcome := <-done:
-		if outcome.err != nil {
-			t.Fatal(outcome.err)
+		if !errors.Is(outcome.err, context.Canceled) {
+			t.Fatalf("RunOnce cancellation error = %v", outcome.err)
 		}
-		if outcome.result.Started != 1 || outcome.result.Completed != 1 || outcome.result.Failed != 0 {
+		if outcome.result.Started != 1 || outcome.result.Completed != 0 || outcome.result.Failed != 1 {
 			t.Fatalf("unexpected result: %#v", outcome.result)
 		}
 	case <-time.After(3 * time.Second):
@@ -783,33 +824,132 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorded) != 1 || recorded[0].Recorded == "" {
-		t.Fatalf("recorded entry missing after cancel: %#v", recorded)
+	if len(recorded) != 0 {
+		t.Fatalf("cancelled recording was promoted to recorded: %#v", recorded)
 	}
-	logData, err := os.ReadFile(paths.Log)
+	var remainingReserves []legacy.Program
+	if err := readOperatorTestReserves(paths, &remainingReserves); err != nil {
+		t.Fatal(err)
+	}
+	if len(remainingReserves) != 1 || remainingReserves[0].ID != program.ID {
+		t.Fatalf("reservation was not retained after cancel: %#v", remainingReserves)
+	}
+	finalPath := filepath.Join(filepath.Join(dir, "recorded"), "21i3v9.m2ts")
+	for _, path := range []string{finalPath, finalPath + ".part"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("cancelled recording output %s still exists: %v", path, err)
+		}
+	}
+}
+
+func TestRunOnceRetryReplacesStaleOutputInsteadOfAppending(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	program := legacy.Program{ID: "retry", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli()}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	finalPath := filepath.Join(cfg.RecordedDir, "retry.m2ts")
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(finalPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runOnceTest(t, context.Background(), paths, cfg, &fakeStreamer{body: "new"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{
-		"FIN: 21i3v9",
-		"FIN: #21i3v9 ",
-	} {
-		if !strings.Contains(string(logData), want) {
-			t.Fatalf("operator log missing %q after cancel: %s", want, string(logData))
-		}
+	if result.Completed != 1 {
+		t.Fatalf("unexpected result: %#v", result)
 	}
-	assertLogSubsequence(t, logData,
-		"PREPARE: #21i3v9 ",
-		paths.writeLog(programstore.Recording),
-		"START: 21i3v9",
-		"RECORD: #21i3v9 ",
-		"STREAM: ",
-		paths.writeLog(programstore.Recording),
-		paths.writeLog(programstore.Recording),
-		paths.writeLog(programstore.Recorded),
-		"FIN: 21i3v9",
-		"FIN: #21i3v9 ",
-	)
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("retry output = %q, want %q", data, "new")
+	}
+	if _, err := os.Stat(finalPath + ".part"); !os.IsNotExist(err) {
+		t.Fatalf("temporary retry output still exists: %v", err)
+	}
+}
+
+func TestReplaceRecordingOutputReplacesExistingFinalPath(t *testing.T) {
+	dir := t.TempDir()
+	finalPath := filepath.Join(dir, "recorded.m2ts")
+	partPath := finalPath + ".part"
+	if err := os.WriteFile(finalPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(partPath, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceRecordingOutput(partPath, finalPath); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("replaced output = %q, want %q", data, "new")
+	}
+	if _, err := os.Stat(partPath); !os.IsNotExist(err) {
+		t.Fatalf("part output still exists: %v", err)
+	}
+}
+
+func TestUpdateRecordingProgramPreservesLatestAbortAndExternalFields(t *testing.T) {
+	dir := t.TempDir()
+	databasePath := filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	current := legacy.Program{
+		ID:    "active",
+		Title: "Current",
+		Abort: true,
+		Raw: map[string]json.RawMessage{
+			"external": json.RawMessage(`{"value":"keep"}`),
+		},
+	}
+	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, current); err != nil {
+		t.Fatal(err)
+	}
+	update := legacy.Program{
+		ID:       current.ID,
+		Recorded: filepath.ToSlash(filepath.Join(dir, "recorded", "active.m2ts")),
+		PID:      -1,
+		Raw: map[string]json.RawMessage{
+			"priority": json.RawMessage(`2`),
+		},
+	}
+	if err := updateRecordingProgram(context.Background(), databasePath, update); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := programstore.ReadByID(context.Background(), databasePath, programstore.Recording, current.ID)
+	if err != nil || !found {
+		t.Fatalf("updated recording found=%v err=%v", found, err)
+	}
+	if !got.Abort {
+		t.Fatalf("latest abort flag was lost: %#v", got)
+	}
+	if string(got.Raw["external"]) != `{"value":"keep"}` {
+		t.Fatalf("latest external field was lost: %s", got.Raw["external"])
+	}
+	if got.Recorded != update.Recorded || got.PID != update.PID || string(got.Raw["priority"]) != "2" {
+		t.Fatalf("recorder metadata was not applied: %#v", got)
+	}
 }
 
 func TestPIDFileLifecycle(t *testing.T) {
