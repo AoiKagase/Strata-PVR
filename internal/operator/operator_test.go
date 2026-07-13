@@ -689,18 +689,14 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	paths = seedOperatorTestDatabase(t, paths)
 	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
 	streamer := &abortableStreamer{}
-	done := make(chan error, 1)
+	type runOutcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan runOutcome, 1)
 	go func() {
 		result, err := runOnceTest(t, context.Background(), paths, cfg, streamer, now)
-		if err != nil {
-			done <- err
-			return
-		}
-		if result.Started != 1 || result.Completed != 1 || result.Failed != 0 {
-			done <- os.ErrInvalid
-			return
-		}
-		done <- nil
+		done <- runOutcome{result: result, err: err}
 	}()
 
 	for deadline := time.Now().Add(2 * time.Second); streamer.stream == nil && time.Now().Before(deadline); {
@@ -715,9 +711,12 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
+	case outcome := <-done:
+		if !errors.Is(outcome.err, context.Canceled) {
+			t.Fatalf("abort error = %v", outcome.err)
+		}
+		if outcome.result.Started != 1 || outcome.result.Completed != 0 || outcome.result.Failed != 1 {
+			t.Fatalf("unexpected abort result: %#v", outcome.result)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("recording did not stop after abort flag")
@@ -726,8 +725,15 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	if err := readOperatorTestPrograms(paths, programstore.Recorded, &recorded); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorded) != 1 || recorded[0].Recorded == "" {
-		t.Fatalf("recorded entry missing after abort: %#v", recorded)
+	if len(recorded) != 0 {
+		t.Fatalf("aborted recording was promoted: %#v", recorded)
+	}
+	var reserves []legacy.Program
+	if err := readOperatorTestReserves(paths, &reserves); err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].ID != program.ID {
+		t.Fatalf("reservation was removed after abort: %#v", reserves)
 	}
 }
 

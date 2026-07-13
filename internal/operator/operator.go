@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"strata-pvr/internal/config"
@@ -418,7 +417,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	defer stream.Close()
 	stopContextClose := closeStreamOnContext(recordCtx, stream)
 	defer stopContextClose()
-	aborted, stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, program.ID, cancel, stream)
+	stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, program.ID, cancel, stream)
 	defer stopAbortMonitor()
 
 	format := cfg.RecordedFormat
@@ -468,7 +467,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err != nil {
 		return program, err
 	}
-	if _, err := io.Copy(out, stream); err != nil && !aborted.Load() {
+	if _, err := io.Copy(out, stream); err != nil {
 		out.Close()
 		if recordCtx.Err() != nil {
 			return program, recordCtx.Err()
@@ -482,7 +481,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err := out.Close(); err != nil {
 		return program, err
 	}
-	if !aborted.Load() && recordCtx.Err() != nil {
+	if recordCtx.Err() != nil {
 		return program, recordCtx.Err()
 	}
 	if err := replaceRecordingOutput(partPath, finalPath); err != nil {
@@ -560,8 +559,7 @@ func programPriority(cfg *config.Config, program legacy.Program) int {
 	return 2
 }
 
-func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel context.CancelFunc, stream io.Closer) (*atomic.Bool, func()) {
-	var aborted atomic.Bool
+func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel context.CancelFunc, stream io.Closer) func() {
 	done := make(chan struct{})
 	stopped := make(chan struct{})
 	go func() {
@@ -579,14 +577,13 @@ func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel 
 				if err != nil || !found || !program.Abort {
 					continue
 				}
-				aborted.Store(true)
 				cancel()
 				_ = stream.Close()
 				return
 			}
 		}
 	}()
-	return &aborted, func() {
+	return func() {
 		close(done)
 		<-stopped
 	}
