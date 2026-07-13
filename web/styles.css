@@ -2931,11 +2931,12 @@ body.view-settings .settings-grid {
 
   .recorded-actions {
     width: 100%;
+    flex-wrap: nowrap;
   }
 
   .row-danger-actions {
-    flex-basis: 100%;
-    margin-left: 0;
+    flex-basis: auto;
+    margin-left: auto;
   }
 
   body.view-status .settings-list {

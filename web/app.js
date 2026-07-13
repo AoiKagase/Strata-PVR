@@ -466,7 +466,9 @@
         publishMutation(path, method || "GET");
         return result;
       });
-    }).catch(networkError);
+    }).catch(function (error) {
+      throw networkError(error);
+    });
   }
 
   function sendJSON(path, method, value) {
@@ -483,7 +485,9 @@
         publishMutation(path, method);
         return result;
       });
-    }).catch(networkError);
+    }).catch(function (error) {
+      throw networkError(error);
+    });
   }
 
 	function sendConfigJSON(raw) {
@@ -500,7 +504,9 @@
         publishRealtime("notify-config");
         return result;
       });
-    }).catch(networkError);
+    }).catch(function (error) {
+      throw networkError(error);
+    });
   }
 
   function notifyEventForPath(path, method) {
@@ -603,7 +609,9 @@
         throw requestError(path, response);
       }
       return response.text();
-    }).catch(networkError);
+    }).catch(function (error) {
+      throw networkError(error);
+    });
   }
 
   function formatTime(value) {
@@ -1429,6 +1437,8 @@
       renderRules();
     } else if (view === "settings") {
       renderSettings();
+    } else if (view === "status") {
+      renderStatus(false);
     }
     var requestPromise = api(path).then(function (result) {
       if (path === "rules") {
@@ -3814,8 +3824,9 @@
           state.scheduleGuideScrollToCurrentTime = false;
         }
       }
+      state.scheduleGuideScroll.top = scrollTop;
       scroll.scrollLeft = state.scheduleGuideScroll.left || 0;
-      scroll.scrollTop = scrollTop;
+      scroll.scrollTop = state.scheduleGuideScroll.top || 0;
       renderVisibleScheduleLanes();
     }, 0);
   }
@@ -4542,7 +4553,26 @@
     if (!root) {
       return;
     }
+    if (state.viewDataErrors.status) {
+      root.innerHTML = "";
+      root.className = "list empty error recoverable-empty";
+      var copy = document.createElement("p");
+      copy.textContent = "ストレージ情報を取得できませんでした";
+      var actions = document.createElement("div");
+      actions.className = "empty-actions";
+      actions.appendChild(actionButton("再試行", "ストレージ情報を再読み込み", function () {
+        loadViewData("status", true);
+      }));
+      root.appendChild(copy);
+      root.appendChild(actions);
+      return;
+    }
+    if (!state.storageLoaded) {
+      setListPlaceholder("storageList", "読み込み中", "settings-list empty");
+      return;
+    }
     var storage = state.storage || {};
+    root.className = "settings-list";
     var rows = [
       ["対象", storage.path || "録画保存先"],
       ["録画ファイル", formatBytes(storage.recorded)],
@@ -4647,7 +4677,12 @@
     var cpuPath = linePath(points, "cpu", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
     var memoryPath = linePath(points, "memory", minTime, maxTime, width, height, padLeft, padRight, padTop, padBottom);
     var latest = points[points.length - 1];
-    text(byId("resourceChartSummary"), "直近6時間 / CPU " + formatPercent(latest.cpu) + " / メモリ " + formatPercent(latest.memory));
+    var resourceSummary = [
+      "直近6時間",
+      "CPU " + formatPercent(latest.cpu),
+      "メモリ " + formatPercent(latest.memory),
+      points.length + "点"
+    ].join(" / ");
     root.innerHTML = [
       '<svg viewBox="0 0 ', width, ' ', height, '" class="metric-svg" aria-hidden="true">',
       '<line x1="', padLeft, '" y1="', padTop, '" x2="', padLeft, '" y2="', height - padBottom, '" class="chart-axis"></line>',
@@ -4666,7 +4701,7 @@
       '<span><i class="legend-memory"></i>メモリ ', formatPercent(latest.memory), '</span>',
       '</div>'
     ].join("");
-    text(byId("resourceChartSummary"), "直近6時間 / " + samples.length + "点");
+    text(byId("resourceChartSummary"), resourceSummary);
   }
 
   function numberValue() {
@@ -5462,8 +5497,10 @@
       api("schedule/broadcasting").catch(function () {
         return state.broadcasting;
       }),
-      api("storage").catch(function () {
-        return state.storage;
+      api("storage").then(function (storage) {
+        return { value: storage, error: null };
+      }, function (error) {
+        return { value: state.storage, error: error };
       })
     ]).then(function (result) {
       if (version !== refreshVersion) {
@@ -5473,8 +5510,10 @@
       state.reserves = result[1] || [];
       state.recording = result[2] || [];
       state.broadcasting = Array.isArray(result[3]) ? result[3] : state.broadcasting;
-      state.storage = result[4] || null;
-      state.storageLoaded = true;
+      var storageResult = result[4] || {};
+      state.storage = storageResult.value || null;
+      state.storageLoaded = !storageResult.error;
+      state.viewDataErrors.status = storageResult.error || null;
       state.lastError = null;
       if (document.visibilityState !== "hidden") {
         renderOperationalData();

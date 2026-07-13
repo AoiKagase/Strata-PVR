@@ -1101,6 +1101,41 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardHardening(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`var resourceSummary = [`,
+			`points.length + "点"`,
+			`text(byId("resourceChartSummary"), resourceSummary);`,
+			`state.viewDataErrors.status`,
+			`throw networkError(error);`,
+			`state.storageLoaded = !storageResult.error;`,
+			`ストレージ情報を取得できませんでした`,
+			`loadViewData("status", true)`,
+		},
+		filepath.Join("..", "..", "web", "index.html"): {
+			`id="storageList"`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`.recorded-actions {`,
+			`flex-wrap: nowrap;`,
+			`flex-basis: auto;`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {
