@@ -104,6 +104,24 @@ func TestHelp(t *testing.T) {
 	}
 }
 
+func TestSchedulerTimerConfiguration(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "contrib", "systemd", "strata-pvr-scheduler.timer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"OnBootSec=2min",
+		"OnUnitActiveSec=10min",
+		"AccuracySec=1min",
+		"Persistent=true",
+		"Unit=strata-pvr-scheduler.service",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("scheduler timer missing %q: %s", want, data)
+		}
+	}
+}
+
 func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
 	dir := t.TempDir()
 	old, err := os.Getwd()

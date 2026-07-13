@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1638,6 +1639,10 @@ func TestAPIScheduleDeflateAndLastModified(t *testing.T) {
 		Programs: []legacy.Program{{ID: "p1", Title: "番組", Start: 1, End: 2, Channel: legacy.Channel{ID: "ch"}}},
 	}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
+		t.Fatal(err)
+	}
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	if err := schedulestore.Write(context.Background(), paths.Database, schedule); err != nil {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
@@ -3514,9 +3519,14 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	paths.LogDir = filepath.Join(dir, "log")
-	done := make(chan struct{}, 1)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
 	paths.Scheduler = func(_ context.Context, _ bool) error {
-		done <- struct{}{}
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
 		return nil
 	}
 	handler := newTestHandler(t, paths, &config.Config{})
@@ -3528,19 +3538,33 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 		t.Fatalf("scheduler missing log status=%d body=%q", res.Code, res.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil)
-	res = httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusAccepted {
-		t.Fatalf("scheduler force status=%d body=%q", res.Code, res.Body.String())
-	}
-	if got := res.Body.String(); got != `{}` {
-		t.Fatalf("scheduler force body=%q", got)
-	}
+	first := httptest.NewRecorder()
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		handler.ServeHTTP(first, httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	}()
 	select {
-	case <-done:
+	case <-started:
 	case <-time.After(time.Second):
-		t.Fatal("scheduler force did not run")
+		t.Fatal("first scheduler force did not start")
+	}
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	if second.Code != http.StatusAccepted || second.Body.String() != `{}` {
+		t.Fatalf("coalesced force = %d %q", second.Code, second.Body.String())
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("scheduler callback calls=%d, want 1", got)
+	}
+	close(release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first scheduler force did not finish")
+	}
+	if first.Code != http.StatusAccepted || first.Body.String() != `{}` {
+		t.Fatalf("first force = %d %q", first.Code, first.Body.String())
 	}
 }
 

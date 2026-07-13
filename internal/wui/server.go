@@ -215,6 +215,7 @@ type server struct {
 	recordingPreviews *recordingPreviewCache
 	metricsOnce       sync.Once
 	configMu          sync.Mutex
+	schedulerMu       sync.Mutex
 	authMu            sync.Mutex
 	authCache         map[[sha256.Size]byte]time.Time
 	authWorkers       chan struct{}
@@ -1451,7 +1452,12 @@ func (s *server) handleSchedulerForce(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.schedulerMu.TryLock() {
+		writeCompactJSON(w, http.StatusAccepted, map[string]any{})
+		return
+	}
 	go func() {
+		defer s.schedulerMu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		_ = s.runScheduler(ctx, false)
