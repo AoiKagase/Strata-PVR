@@ -3568,6 +3568,88 @@ func TestAPISchedulerNoLogAndForce(t *testing.T) {
 	}
 }
 
+func TestAPISchedulerPutWaitsForActiveForce(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	firstFinished := make(chan struct{})
+	secondStarted := make(chan struct{})
+	var releaseOnce sync.Once
+	var calls atomic.Int32
+	paths.Scheduler = func(_ context.Context, _ bool) error {
+		switch calls.Add(1) {
+		case 1:
+			close(started)
+			<-release
+			close(firstFinished)
+		case 2:
+			close(secondStarted)
+		}
+		return nil
+	}
+	handler := newHandler(paths.runtime(), &config.Config{}, false)
+
+	force := httptest.NewRecorder()
+	forceDone := make(chan struct{})
+	go func() {
+		defer close(forceDone)
+		handler.ServeHTTP(force, httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not start")
+	}
+	select {
+	case <-forceDone:
+	case <-time.After(time.Second):
+		t.Fatal("force request did not return")
+	}
+	if force.Code != http.StatusAccepted || force.Body.String() != `{}` {
+		t.Fatalf("force = %d %q", force.Code, force.Body.String())
+	}
+
+	put := httptest.NewRecorder()
+	putDone := make(chan struct{})
+	go func() {
+		defer close(putDone)
+		handler.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/api/scheduler", nil))
+	}()
+	defer func() { releaseOnce.Do(func() { close(release) }) }()
+	select {
+	case <-secondStarted:
+		t.Fatal("normal scheduler started while force was active")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("scheduler callback calls while force active = %d, want 1", got)
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case <-firstFinished:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not finish")
+	}
+	select {
+	case <-secondStarted:
+	case <-time.After(time.Second):
+		t.Fatal("normal scheduler did not start after force finished")
+	}
+	select {
+	case <-putDone:
+	case <-time.After(time.Second):
+		t.Fatal("normal scheduler PUT did not return")
+	}
+	if put.Code != http.StatusNoContent {
+		t.Fatalf("normal scheduler PUT status = %d body=%q", put.Code, put.Body.String())
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("scheduler callback calls = %d, want 2", got)
+	}
+}
+
 func TestAPIStatusReadsPIDFiles(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

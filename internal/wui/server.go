@@ -1407,6 +1407,8 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 		return
 	}
 	if r.Method == http.MethodPut {
+		s.schedulerMu.Lock()
+		defer s.schedulerMu.Unlock()
 		if err := s.runScheduler(r.Context(), false); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
