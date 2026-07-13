@@ -212,12 +212,46 @@ func TestAbortSkippedRecordingsStopsOnlySkippedAutoReserves(t *testing.T) {
 	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
 		t.Fatal(err)
 	}
-	updated, err := abortSkippedRecordings(context.Background(), paths.Database, reserves, recording)
+	updated, err := abortSkippedRecordings(context.Background(), paths.Database, reserves, []string{"skip", "keep", "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if updated != 1 {
 		t.Fatalf("updated = %d", updated)
+	}
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if !recording[0].Abort || recording[1].Abort || recording[2].Abort {
+		t.Fatalf("recording abort states = %#v", recording)
+	}
+}
+
+func TestAbortSkippedRecordingsDoesNotStopManualOrUnrelatedRecording(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+	})
+	reserves := []legacy.Program{
+		{ID: "skip", IsSkip: true},
+		{ID: "manual", IsSkip: true, IsManualReserved: true},
+	}
+	recording := []legacy.Program{
+		{ID: "skip"},
+		{ID: "manual", IsManualReserved: true},
+		{ID: "other"},
+	}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := abortSkippedRecordings(context.Background(), paths.Database, reserves, []string{"skip", "manual", "other"})
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v", updated, err)
 	}
 	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
 		t.Fatal(err)
@@ -678,38 +712,63 @@ func TestRunOnceFinalizesActiveRecordingWhenContextIsCancelled(t *testing.T) {
 	paths = seedOperatorTestDatabase(t, paths)
 	ctx, cancel := context.WithCancel(context.Background())
 	streamer := &abortableStreamer{}
-	done := make(chan error, 1)
+	type runOnceOutcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan runOnceOutcome, 1)
 	go func() {
-		result, err := runOnceTest(t, ctx, paths, &config.Config{
+		result, err := RunOnce(ctx, paths.runtime(), &config.Config{
 			RecordedDir:    filepath.Join(dir, "recorded"),
 			RecordedFormat: "<id>.m2ts",
 		}, streamer, now)
-		if err != nil {
-			done <- err
-			return
-		}
-		if result.Started != 1 || result.Completed != 1 || result.Failed != 0 {
-			done <- os.ErrInvalid
-			return
-		}
-		done <- nil
+		done <- runOnceOutcome{result: result, err: err}
 	}()
+
+	for deadline := time.Now().Add(2 * time.Second); streamer.stream == nil && time.Now().Before(deadline); {
+		select {
+		case outcome := <-done:
+			if outcome.err != nil {
+				t.Fatal(outcome.err)
+			}
+			t.Fatalf("RunOnce returned before recording started: %#v", outcome.result)
+		default:
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if streamer.stream == nil {
+		t.Fatal("recording stream was not started")
+	}
 
 	var recording []legacy.Program
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		select {
+		case outcome := <-done:
+			if outcome.err != nil {
+				t.Fatal(outcome.err)
+			}
+			t.Fatalf("RunOnce returned before recording became active: %#v", outcome.result)
+		default:
+		}
 		if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err == nil && len(recording) == 1 && recording[0].Recorded != "" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
+		t.Fatal(err)
 	}
 	if len(recording) != 1 || recording[0].Recorded == "" {
 		t.Fatalf("recording entry was not active before cancel: %#v", recording)
 	}
 	cancel()
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
+	case outcome := <-done:
+		if outcome.err != nil {
+			t.Fatal(outcome.err)
+		}
+		if outcome.result.Started != 1 || outcome.result.Completed != 1 || outcome.result.Failed != 0 {
+			t.Fatalf("unexpected result: %#v", outcome.result)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("recording did not stop after context cancellation")

@@ -107,40 +107,52 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 // while the long-running operator must continue checking reservations while
 // previous recordings are still receiving their streams.
 func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time, recordings *sync.WaitGroup) error {
-	reserves, err := reservationstore.Read(ctx, paths.Database)
+	startBefore := now.Add(recordStartMargin).UnixMilli()
+	endAfter := now.UnixMilli()
+	reserves, err := reservationstore.ReadDue(ctx, paths.Database, startBefore, endAfter)
 	if err != nil {
 		return err
 	}
-	recording, err := programstore.Read(ctx, paths.Database, programstore.Recording)
+	recordingIDs, err := programstore.ReadIDs(ctx, paths.Database, programstore.Recording)
 	if err != nil {
 		return err
 	}
-	if stopped, err := abortSkippedRecordings(ctx, paths.Database, reserves, recording); err != nil {
+	if stopped, err := abortSkippedRecordings(ctx, paths.Database, reserves, recordingIDs); err != nil {
 		return err
 	} else if stopped > 0 {
 		if err := logging.AppendLine(paths.Log, "ABORT: skipped recordings=%d", stopped); err != nil {
 			return err
 		}
 	}
-	recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
-	if err != nil {
-		return err
+	if cfg.StorageLowSpaceThresholdMB > 0 {
+		recording, err := programstore.Read(ctx, paths.Database, programstore.Recording)
+		if err != nil {
+			return err
+		}
+		recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
+		if err != nil {
+			return err
+		}
+		if _, err = handleLowStorage(ctx, paths, cfg, recording, recorded); err != nil {
+			return err
+		}
 	}
-	if _, err = handleLowStorage(ctx, paths, cfg, recording, recorded); err != nil {
-		return err
+	recordingIDSet := make(map[string]struct{}, len(recordingIDs))
+	for _, id := range recordingIDs {
+		recordingIDSet[id] = struct{}{}
 	}
 	pending := make([]legacy.Program, 0)
 	for _, reserve := range reserves {
-		if !shouldStart(reserve, recording, now) {
+		if !shouldStart(reserve, recordingIDSet, now) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
 			return err
 		}
-		recording = append(recording, reserve)
 		if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, reserve); err != nil {
 			return err
 		}
+		recordingIDSet[reserve.ID] = struct{}{}
 		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
 			return err
 		}
@@ -162,18 +174,26 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 // abortSkippedRecordings applies a later skip action to a recording that has
 // already started. The recording goroutine polls its Abort flag and closes its
 // stream without waiting for the program to end.
-func abortSkippedRecordings(ctx context.Context, databasePath string, reserves, recording []legacy.Program) (int, error) {
-	skipped := make(map[string]bool, len(reserves))
-	for _, reserve := range reserves {
-		if reserve.IsSkip {
-			skipped[reserve.ID] = true
-		}
+func abortSkippedRecordings(ctx context.Context, databasePath string, reserves []legacy.Program, recordingIDs []string) (int, error) {
+	recordingIDSet := make(map[string]struct{}, len(recordingIDs))
+	for _, id := range recordingIDs {
+		recordingIDSet[id] = struct{}{}
 	}
 	updated := 0
 	recordingStateMu.Lock()
 	defer recordingStateMu.Unlock()
-	for _, active := range recording {
-		if active.IsManualReserved || active.Abort || !skipped[active.ID] {
+	for _, reserve := range reserves {
+		if !reserve.IsSkip || reserve.IsManualReserved {
+			continue
+		}
+		if _, ok := recordingIDSet[reserve.ID]; !ok {
+			continue
+		}
+		active, found, err := programstore.ReadByID(ctx, databasePath, programstore.Recording, reserve.ID)
+		if err != nil {
+			return updated, err
+		}
+		if !found || active.IsManualReserved || active.Abort {
 			continue
 		}
 		active.Abort = true
@@ -263,6 +283,14 @@ func acquireProcessLock(pidPath string) (*system.ProcessLock, error) {
 }
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
+	if paths.Database != "" {
+		db, err := database.Open(ctx, paths.Database)
+		if err != nil {
+			return Result{}, err
+		}
+		defer db.Close()
+		ctx = database.WithHandle(ctx, db)
+	}
 	reserves, err := reservationstore.Read(ctx, paths.Database)
 	if err != nil {
 		return Result{}, err
@@ -279,10 +307,14 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 	if err != nil {
 		return Result{}, err
 	}
+	recordingIDSet := make(map[string]struct{}, len(recording))
+	for _, program := range recording {
+		recordingIDSet[program.ID] = struct{}{}
+	}
 
 	result := Result{}
 	for _, reserve := range reserves {
-		if !shouldStart(reserve, recording, now) {
+		if !shouldStart(reserve, recordingIDSet, now) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
@@ -292,6 +324,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := programstore.Upsert(ctx, paths.Database, programstore.Recording, reserve); err != nil {
 			return result, err
 		}
+		recordingIDSet[reserve.ID] = struct{}{}
 		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
 			return result, err
 		}
@@ -302,6 +335,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 		completed, err := recordProgramWithLog(ctx, paths.Database, paths.Log, cfg, source, reserve)
 		recording = removeProgram(recording, reserve.ID)
+		delete(recordingIDSet, reserve.ID)
 		if err != nil {
 			if writeErr := programstore.Remove(ctx, paths.Database, programstore.Recording, reserve.ID); writeErr != nil {
 				err = errors.Join(err, writeErr)
@@ -338,11 +372,11 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 	return result, nil
 }
 
-func shouldStart(program legacy.Program, recording []legacy.Program, now time.Time) bool {
+func shouldStart(program legacy.Program, recordingIDs map[string]struct{}, now time.Time) bool {
 	if program.IsSkip || program.End <= now.UnixMilli() {
 		return false
 	}
-	if containsProgram(recording, program.ID) {
+	if _, ok := recordingIDs[program.ID]; ok {
 		return false
 	}
 	startAt := time.UnixMilli(program.Start).Add(-recordStartMargin)
@@ -512,18 +546,14 @@ func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel 
 			case <-done:
 				return
 			case <-ticker.C:
-				recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
-				if err != nil {
+				program, found, err := programstore.ReadByID(ctx, databasePath, programstore.Recording, programID)
+				if err != nil || !found || !program.Abort {
 					continue
 				}
-				for _, program := range recording {
-					if program.ID == programID && program.Abort {
-						aborted.Store(true)
-						cancel()
-						_ = stream.Close()
-						return
-					}
-				}
+				aborted.Store(true)
+				cancel()
+				_ = stream.Close()
+				return
 			}
 		}
 	}()
