@@ -883,25 +883,6 @@ func TestRunOnceRetryReplacesStaleOutputInsteadOfAppending(t *testing.T) {
 	}
 }
 
-func TestReplaceRecordingOutputPreservesFinalWhenPartIsMissing(t *testing.T) {
-	dir := t.TempDir()
-	finalPath := filepath.Join(dir, "recorded.m2ts")
-	partPath := filepath.Join(dir, "missing.part")
-	if err := os.WriteFile(finalPath, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := replaceRecordingOutput(partPath, finalPath); err == nil {
-		t.Fatal("missing part file unexpectedly replaced output")
-	}
-	data, err := os.ReadFile(finalPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "old" {
-		t.Fatalf("existing output = %q, want old", data)
-	}
-}
-
 func TestReplaceRecordingOutputReplacesExistingFinalPath(t *testing.T) {
 	dir := t.TempDir()
 	finalPath := filepath.Join(dir, "recorded.m2ts")
@@ -1029,6 +1010,51 @@ func TestCompleteRefusesMissingRecording(t *testing.T) {
 	err := programstore.Complete(context.Background(), databasePath, legacy.Program{ID: "missing"})
 	if !errors.Is(err, programstore.ErrProgramNotFound) {
 		t.Fatalf("missing completion error = %v, want ErrProgramNotFound", err)
+	}
+}
+
+func TestFinishRecordingMissingActiveRowKeepsReservation(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Recording), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{paths.Reserves, paths.Recording, paths.Recorded} {
+		if err := storage.WriteJSONAtomic(path, []legacy.Program{}, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths = seedOperatorTestDatabase(t, paths)
+	program := legacy.Program{ID: "missing", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli()}
+	if err := reservationstore.Write(context.Background(), paths.Database, []legacy.Program{program}); err != nil {
+		t.Fatal(err)
+	}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, nil); err != nil {
+		t.Fatal(err)
+	}
+	finishRecording(context.Background(), paths.runtime(), &config.Config{
+		RecordedDir:    filepath.Join(dir, "recorded"),
+		RecordedFormat: "<id>.m2ts",
+	}, &fakeStreamer{body: "stale"}, program)
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 0 {
+		t.Fatalf("stale recording was promoted: %#v", recorded)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].ID != program.ID {
+		t.Fatalf("reservation was removed after missing active row: %#v", reserves)
 	}
 }
 

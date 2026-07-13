@@ -1893,7 +1893,6 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 				}
 			}
 		}
-		recording[index].Abort = true
 		if err := programstore.SetAbort(r.Context(), s.paths.Database, programstore.Recording, id, true); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return

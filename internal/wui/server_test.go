@@ -1830,7 +1830,12 @@ func TestAPIReserveDeleteRejectsAutomaticReserve(t *testing.T) {
 func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
-	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc"}}, false); err != nil {
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{
+		ID:       "abc",
+		Recorded: "recorded/abc.m2ts",
+		PID:      -1,
+		Raw:      map[string]json.RawMessage{"external": json.RawMessage(`{"keep":true}`)},
+	}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "abc"}}, false); err != nil {
@@ -1847,7 +1852,7 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
-	if len(recording) != 1 || !recording[0].Abort {
+	if len(recording) != 1 || !recording[0].Abort || recording[0].Recorded != "recorded/abc.m2ts" || recording[0].PID != -1 || string(recording[0].Raw["external"]) != `{"keep":true}` {
 		t.Fatalf("recording was not aborted: %#v", recording)
 	}
 	var reserves []legacy.Program
