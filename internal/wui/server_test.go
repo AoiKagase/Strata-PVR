@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -3644,6 +3645,86 @@ func TestAPISchedulerPutWaitsForActiveForce(t *testing.T) {
 	}
 	if put.Code != http.StatusNoContent {
 		t.Fatalf("normal scheduler PUT status = %d body=%q", put.Code, put.Body.String())
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("scheduler callback calls = %d, want 2", got)
+	}
+}
+
+func TestAPISchedulerPutCancellationDoesNotStartScheduler(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	paths.Scheduler = func(ctx context.Context, _ bool) error {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return ctx.Err()
+	}
+	handler := newHandler(paths.runtime(), &config.Config{}, false)
+	forceDone := make(chan struct{})
+	go func() {
+		defer close(forceDone)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not start")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	putDone := make(chan struct{})
+	go func() {
+		defer close(putDone)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler", nil).WithContext(ctx))
+	}()
+	close(release)
+	select {
+	case <-forceDone:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not finish")
+	}
+	select {
+	case <-putDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled scheduler PUT did not finish")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("scheduler callback calls = %d, want 1", got)
+	}
+}
+
+func TestAPISchedulerPutErrorReleasesSchedulerGate(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	forceStarted := make(chan struct{})
+	var calls atomic.Int32
+	paths.Scheduler = func(_ context.Context, _ bool) error {
+		if calls.Add(1) == 1 {
+			return errors.New("scheduler failed")
+		}
+		close(forceStarted)
+		return nil
+	}
+	handler := newHandler(paths.runtime(), &config.Config{}, false)
+	put := httptest.NewRecorder()
+	handler.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/api/scheduler", nil))
+	if put.Code != http.StatusInternalServerError {
+		t.Fatalf("failed scheduler PUT status = %d", put.Code)
+	}
+	force := httptest.NewRecorder()
+	handler.ServeHTTP(force, httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	if force.Code != http.StatusAccepted || force.Body.String() != `{}` {
+		t.Fatalf("force after failed PUT = %d %q", force.Code, force.Body.String())
+	}
+	select {
+	case <-forceStarted:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not start after failed PUT")
 	}
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("scheduler callback calls = %d, want 2", got)

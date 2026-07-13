@@ -883,6 +883,25 @@ func TestRunOnceRetryReplacesStaleOutputInsteadOfAppending(t *testing.T) {
 	}
 }
 
+func TestReplaceRecordingOutputPreservesFinalWhenPartIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	finalPath := filepath.Join(dir, "recorded.m2ts")
+	partPath := filepath.Join(dir, "missing.part")
+	if err := os.WriteFile(finalPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceRecordingOutput(partPath, finalPath); err == nil {
+		t.Fatal("missing part file unexpectedly replaced output")
+	}
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "old" {
+		t.Fatalf("existing output = %q, want old", data)
+	}
+}
+
 func TestReplaceRecordingOutputReplacesExistingFinalPath(t *testing.T) {
 	dir := t.TempDir()
 	finalPath := filepath.Join(dir, "recorded.m2ts")
@@ -906,6 +925,26 @@ func TestReplaceRecordingOutputReplacesExistingFinalPath(t *testing.T) {
 	}
 	if _, err := os.Stat(partPath); !os.IsNotExist(err) {
 		t.Fatalf("part output still exists: %v", err)
+	}
+}
+
+func TestReplaceRecordingOutputMissingPartKeepsExistingFinalPath(t *testing.T) {
+	dir := t.TempDir()
+	finalPath := filepath.Join(dir, "recorded.m2ts")
+	partPath := finalPath + ".part"
+	if err := os.WriteFile(finalPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceRecordingOutput(partPath, finalPath); err == nil {
+		t.Fatal("missing part output was accepted")
+	}
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "old" {
+		t.Fatalf("existing final output = %q, want %q", data, "old")
 	}
 }
 
@@ -949,6 +988,47 @@ func TestUpdateRecordingProgramPreservesLatestAbortAndExternalFields(t *testing.
 	}
 	if got.Recorded != update.Recorded || got.PID != update.PID || string(got.Raw["priority"]) != "2" {
 		t.Fatalf("recorder metadata was not applied: %#v", got)
+	}
+}
+
+func TestCompletePreservesLatestRecordingState(t *testing.T) {
+	dir := t.TempDir()
+	databasePath := filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	current := legacy.Program{
+		ID:    "complete",
+		Abort: true,
+		Raw:   map[string]json.RawMessage{"external": json.RawMessage(`{"keep":true}`)},
+	}
+	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, current); err != nil {
+		t.Fatal(err)
+	}
+	if err := programstore.Complete(context.Background(), databasePath, legacy.Program{
+		ID:       current.ID,
+		Recorded: "complete.m2ts",
+		Abort:    false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := programstore.Read(context.Background(), databasePath, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || !recorded[0].Abort || string(recorded[0].Raw["external"]) != `{"keep":true}` {
+		t.Fatalf("completed program lost latest state: %#v", recorded)
+	}
+}
+
+func TestCompleteRefusesMissingRecording(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := programstore.Complete(context.Background(), databasePath, legacy.Program{ID: "missing"})
+	if !errors.Is(err, programstore.ErrProgramNotFound) {
+		t.Fatalf("missing completion error = %v, want ErrProgramNotFound", err)
 	}
 }
 

@@ -2,7 +2,10 @@ package programstore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
@@ -12,6 +15,8 @@ const (
 	Recording = "recording"
 	Recorded  = "recorded"
 )
+
+var ErrProgramNotFound = errors.New("program not found")
 
 func Read(ctx context.Context, databasePath, collection string) ([]legacy.Program, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
@@ -136,7 +141,37 @@ func Complete(ctx context.Context, databasePath string, program legacy.Program) 
 		return err
 	}
 	defer release()
-	return database.CompleteProgram(ctx, db, document)
+	found, err := database.CompleteProgramFromRecording(ctx, db, document, mergeCompletedProgramDocuments)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%w: %s: %w", ErrProgramNotFound, program.ID, sql.ErrNoRows)
+	}
+	return nil
+}
+
+func mergeCompletedProgramDocuments(currentDocument, completedDocument json.RawMessage) (json.RawMessage, error) {
+	var current, completed legacy.Program
+	if err := json.Unmarshal(currentDocument, &current); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(completedDocument, &completed); err != nil {
+		return nil, err
+	}
+	current.Recorded = completed.Recorded
+	current.PID = completed.PID
+	if len(completed.Raw) > 0 {
+		if current.Raw == nil {
+			current.Raw = make(map[string]json.RawMessage)
+		}
+		for _, key := range []string{"priority", "tuner", "command"} {
+			if value, ok := completed.Raw[key]; ok {
+				current.Raw[key] = value
+			}
+		}
+	}
+	return json.Marshal(current)
 }
 
 func encodeProgram(program legacy.Program) (database.ProgramDocument, error) {

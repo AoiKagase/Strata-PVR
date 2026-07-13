@@ -164,6 +164,49 @@ func DeleteProgram(ctx context.Context, db *sql.DB, collection, programID string
 	return nil
 }
 
+// CompleteProgramFromRecording promotes an active recording while merging the
+// completion document with the latest active document in one transaction.
+// The found result prevents a stale recorder from resurrecting a deleted row.
+func CompleteProgramFromRecording(ctx context.Context, db *sql.DB, program ProgramDocument, merge func(current, completed json.RawMessage) (json.RawMessage, error)) (bool, error) {
+	if program.ProgramID == "" || !json.Valid(program.Document) || merge == nil {
+		return false, fmt.Errorf("complete recording: invalid program")
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	defer tx.Rollback()
+	var currentDocument string
+	var start, end int64
+	if err := tx.QueryRowContext(ctx, `SELECT document_json, start_at, end_at FROM program_collections WHERE collection = 'recording' AND program_id = ?`, program.ProgramID).Scan(&currentDocument, &start, &end); err == sql.ErrNoRows {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	merged, err := merge(json.RawMessage(currentDocument), program.Document)
+	if err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	if !json.Valid(merged) {
+		return false, fmt.Errorf("complete recording: invalid merged document")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM program_collections WHERE collection = 'recording' AND program_id = ?`, program.ProgramID); err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM program_collections WHERE collection = 'recorded' AND program_id = ?`, program.ProgramID); err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO program_collections(collection, program_id, position, start_at, end_at, document_json)
+		VALUES ('recorded', ?, COALESCE((SELECT MAX(position) + 1 FROM program_collections WHERE collection = 'recorded'), 0), ?, ?, ?)`,
+		program.ProgramID, start, end, string(merged)); err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("complete recording: %w", err)
+	}
+	return true, nil
+}
+
 func CompleteProgram(ctx context.Context, db *sql.DB, program ProgramDocument) error {
 	if program.ProgramID == "" || !json.Valid(program.Document) {
 		return fmt.Errorf("complete program: invalid program")

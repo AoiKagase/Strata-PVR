@@ -1409,6 +1409,9 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 	if r.Method == http.MethodPut {
 		s.schedulerMu.Lock()
 		defer s.schedulerMu.Unlock()
+		if err := r.Context().Err(); err != nil {
+			return
+		}
 		if err := s.runScheduler(r.Context(), false); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
@@ -1891,7 +1894,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 		recording[index].Abort = true
-		if err := programstore.Upsert(r.Context(), s.paths.Database, programstore.Recording, recording[index]); err != nil {
+		if err := programstore.SetAbort(r.Context(), s.paths.Database, programstore.Recording, id, true); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}

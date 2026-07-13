@@ -174,3 +174,67 @@ func TestUpdateProgramDocumentUsesLatestDocumentAsUpdateInput(t *testing.T) {
 		t.Fatalf("updated document lost external field: %#v", got)
 	}
 }
+
+func TestCompleteProgramFromRecordingMergesLatestDocument(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := ReplaceProgramCollection(ctx, db, "recording", []ProgramDocument{{
+		ProgramID: "active",
+		Start:     10,
+		End:       20,
+		Document:  json.RawMessage(`{"id":"active","abort":true,"external":{"keep":true}}`),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := CompleteProgramFromRecording(ctx, db, ProgramDocument{
+		ProgramID: "active",
+		Document:  json.RawMessage(`{"id":"active","abort":false,"recorded":"new.m2ts"}`),
+	}, func(current, completed json.RawMessage) (json.RawMessage, error) {
+		var currentObject, completedObject map[string]any
+		if err := json.Unmarshal(current, &currentObject); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(completed, &completedObject); err != nil {
+			return nil, err
+		}
+		currentObject["recorded"] = completedObject["recorded"]
+		return json.Marshal(currentObject)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("active recording was not completed")
+	}
+	recorded, err := ReadProgramCollection(ctx, db, "recorded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || string(recorded[0]) != `{"abort":true,"external":{"keep":true},"id":"active","recorded":"new.m2ts"}` {
+		t.Fatalf("recorded document = %s", recorded)
+	}
+}
+
+func TestCompleteProgramFromRecordingReportsMissingActiveRow(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	found, err := CompleteProgramFromRecording(ctx, db, ProgramDocument{
+		ProgramID: "missing",
+		Document:  json.RawMessage(`{"id":"missing"}`),
+	}, func(_, completed json.RawMessage) (json.RawMessage, error) { return completed, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("missing active row was completed")
+	}
+}

@@ -493,24 +493,6 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	return program, nil
 }
 
-func replaceRecordingOutput(partPath, finalPath string) error {
-	if err := os.Rename(partPath, finalPath); err == nil {
-		return nil
-	} else {
-		renameErr := err
-		if err := os.Remove(finalPath); err != nil {
-			if os.IsNotExist(err) {
-				return renameErr
-			}
-			return errors.Join(renameErr, err)
-		}
-		if err := os.Rename(partPath, finalPath); err != nil {
-			return errors.Join(renameErr, err)
-		}
-		return nil
-	}
-}
-
 func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {
 	done := make(chan struct{})
 	stopped := make(chan struct{})
