@@ -55,6 +55,29 @@ func TestReadReservationsDueFiltersByStartAndEnd(t *testing.T) {
 	}
 }
 
+func TestReadReservationsByIDsIncludesEndedReservationsInPositionOrder(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	reservations := []ReservationDocument{
+		{ProgramID: "ended", Start: 100, End: 200, Document: json.RawMessage(`{"id":"ended"}`)},
+		{ProgramID: "active", Start: 300, End: 400, Document: json.RawMessage(`{"id":"active"}`)},
+	}
+	if err := ReplaceReservations(ctx, db, reservations); err != nil {
+		t.Fatal(err)
+	}
+	documents, err := ReadReservationsByIDs(ctx, db, []string{"active", "ended"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(documents) != 2 || string(documents[0]) != `{"id":"ended"}` || string(documents[1]) != `{"id":"active"}` {
+		t.Fatalf("selected reservations = %s", documents)
+	}
+}
+
 func TestReplaceReservationsRollsBackDuplicateProgramID(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))

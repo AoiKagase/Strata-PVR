@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type ReservationDocument struct {
@@ -36,6 +37,34 @@ func ReadReservations(ctx context.Context, db *sql.DB) ([]json.RawMessage, error
 
 func ReadReservationsDue(ctx context.Context, db *sql.DB, startBefore, endAfter int64) ([]json.RawMessage, error) {
 	rows, err := db.QueryContext(ctx, `SELECT document_json FROM reservations WHERE start_at <= ? AND end_at > ? ORDER BY position`, startBefore, endAfter)
+	if err != nil {
+		return nil, fmt.Errorf("read reservations: %w", err)
+	}
+	defer rows.Close()
+	documents := []json.RawMessage{}
+	for rows.Next() {
+		var document string
+		if err := rows.Scan(&document); err != nil {
+			return nil, fmt.Errorf("read reservation: %w", err)
+		}
+		documents = append(documents, json.RawMessage(document))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read reservations: %w", err)
+	}
+	return documents, nil
+}
+
+func ReadReservationsByIDs(ctx context.Context, db *sql.DB, programIDs []string) ([]json.RawMessage, error) {
+	if len(programIDs) == 0 {
+		return []json.RawMessage{}, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(programIDs)), ",")
+	args := make([]any, len(programIDs))
+	for i, programID := range programIDs {
+		args[i] = programID
+	}
+	rows, err := db.QueryContext(ctx, `SELECT document_json FROM reservations WHERE program_id IN (`+placeholders+`) ORDER BY position`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read reservations: %w", err)
 	}

@@ -116,7 +116,11 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	if err != nil {
 		return err
 	}
-	if stopped, err := abortSkippedRecordings(ctx, paths.Database, reserves, recordingIDs); err != nil {
+	abortReserves, err := reservationstore.ReadByIDs(ctx, paths.Database, recordingIDs)
+	if err != nil {
+		return err
+	}
+	if stopped, err := abortSkippedRecordings(ctx, paths.Database, abortReserves, recordingIDs); err != nil {
 		return err
 	} else if stopped > 0 {
 		if err := logging.AppendLine(paths.Log, "ABORT: skipped recordings=%d", stopped); err != nil {
@@ -484,12 +488,27 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if recordCtx.Err() != nil {
 		return program, recordCtx.Err()
 	}
+	abortRequested, err := recordingAbortRequested(recordCtx, databasePath, program.ID)
+	if err != nil {
+		return program, err
+	}
+	if abortRequested {
+		return program, context.Canceled
+	}
 	if err := replaceRecordingOutput(partPath, finalPath); err != nil {
 		return program, err
 	}
 	renamed = true
 	program.PID = 0
 	return program, nil
+}
+
+func recordingAbortRequested(ctx context.Context, databasePath, programID string) (bool, error) {
+	program, found, err := programstore.ReadByID(context.WithoutCancel(ctx), databasePath, programstore.Recording, programID)
+	if err != nil {
+		return false, err
+	}
+	return found && program.Abort, nil
 }
 
 func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {

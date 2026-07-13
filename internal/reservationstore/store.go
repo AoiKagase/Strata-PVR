@@ -50,6 +50,30 @@ func ReadDue(ctx context.Context, databasePath string, startBefore, endAfter int
 	return reservations, nil
 }
 
+func ReadByIDs(ctx context.Context, databasePath string, programIDs []string) ([]legacy.Program, error) {
+	if len(programIDs) == 0 {
+		return []legacy.Program{}, nil
+	}
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	documents, err := database.ReadReservationsByIDs(ctx, db, programIDs)
+	if err != nil {
+		return nil, err
+	}
+	reservations := make([]legacy.Program, 0, len(documents))
+	for _, document := range documents {
+		var reservation legacy.Program
+		if err := json.Unmarshal(document, &reservation); err != nil {
+			return nil, err
+		}
+		reservations = append(reservations, reservation)
+	}
+	return reservations, nil
+}
+
 func Write(ctx context.Context, databasePath string, reservations []legacy.Program) error {
 	documents, err := Documents(reservations)
 	if err != nil {

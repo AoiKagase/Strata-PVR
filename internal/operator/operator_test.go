@@ -27,6 +27,33 @@ type fakeStreamer struct {
 	body   string
 }
 
+type abortAtEOFStreamer struct {
+	databasePath string
+	programID    string
+}
+
+func (s *abortAtEOFStreamer) ProgramStream(context.Context, int64, bool) (io.ReadCloser, error) {
+	return &abortAtEOFReader{reader: strings.NewReader("partial"), databasePath: s.databasePath, programID: s.programID}, nil
+}
+
+type abortAtEOFReader struct {
+	reader       *strings.Reader
+	databasePath string
+	programID    string
+	aborted      bool
+}
+
+func (r *abortAtEOFReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if err == io.EOF && !r.aborted {
+		r.aborted = true
+		_ = programstore.SetAbort(context.Background(), r.databasePath, programstore.Recording, r.programID, true)
+	}
+	return n, err
+}
+
+func (r *abortAtEOFReader) Close() error { return nil }
+
 type testPaths struct {
 	Config    string
 	Database  string
@@ -259,6 +286,40 @@ func TestAbortSkippedRecordingsDoesNotStopManualOrUnrelatedRecording(t *testing.
 	}
 	if !recording[0].Abort || recording[1].Abort || recording[2].Abort {
 		t.Fatalf("recording abort states = %#v", recording)
+	}
+}
+
+func TestStartPendingRecordingsAbortsLateSkippedActiveRecording(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	paths := testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Recording), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{ID: "late", Start: 0, End: now.Add(-time.Minute).UnixMilli(), IsSkip: true}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{program}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: program.ID}}, false); err != nil {
+		t.Fatal(err)
+	}
+	paths = seedOperatorTestDatabase(t, paths)
+	var recordings sync.WaitGroup
+	if err := startPendingRecordings(context.Background(), paths.runtime(), &config.Config{}, &fakeStreamer{}, now, &recordings); err != nil {
+		t.Fatal(err)
+	}
+	recordings.Wait()
+	updated, found, err := programstore.ReadByID(context.Background(), paths.Database, programstore.Recording, program.ID)
+	if err != nil || !found {
+		t.Fatal(err)
+	}
+	if !updated.Abort {
+		t.Fatalf("late skipped active recording was not aborted: %#v", updated)
 	}
 }
 
@@ -734,6 +795,40 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 	if len(reserves) != 1 || reserves[0].ID != program.ID {
 		t.Fatalf("reservation was removed after abort: %#v", reserves)
+	}
+}
+
+func TestRecordProgramRejectsAbortSetAtEOFBeforePromotion(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Recording), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{paths.Reserves, paths.Recording, paths.Recorded} {
+		if err := storage.WriteJSONAtomic(path, []legacy.Program{}, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths = seedOperatorTestDatabase(t, paths)
+	program := legacy.Program{ID: "eofabort", Start: 1000, End: 3600000, Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, []legacy.Program{program}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	completed, err := recordProgramWithLog(context.Background(), paths.Database, paths.Log, cfg, &abortAtEOFStreamer{databasePath: paths.Database, programID: program.ID}, program)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("recording error = %v, want context.Canceled (completed=%#v)", err, completed)
+	}
+	finalPath := filepath.Join(cfg.RecordedDir, "eofabort.m2ts")
+	for _, path := range []string{finalPath, finalPath + ".part"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("aborted output %s exists: %v", path, err)
+		}
 	}
 }
 
