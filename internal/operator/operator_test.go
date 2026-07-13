@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"strata-pvr/internal/config"
+	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
@@ -286,6 +287,40 @@ func TestAbortSkippedRecordingsDoesNotStopManualOrUnrelatedRecording(t *testing.
 	}
 	if !recording[0].Abort || recording[1].Abort || recording[2].Abort {
 		t.Fatalf("recording abort states = %#v", recording)
+	}
+}
+
+func TestAbortSkippedRecordingsIgnoresCompletionInProgress(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+	})
+	reserves := []legacy.Program{{ID: "finalizing", IsSkip: true}}
+	recording := []legacy.Program{{
+		ID:  "finalizing",
+		Raw: map[string]json.RawMessage{"_strataFinalizing": json.RawMessage(`true`)},
+	}}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := abortSkippedRecordings(context.Background(), paths.Database, reserves, []string{"finalizing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated != 0 {
+		t.Fatalf("updated = %d, want 0", updated)
+	}
+	if err := readOperatorTestPrograms(paths, programstore.Recording, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 1 || recording[0].Abort {
+		t.Fatalf("finalizing recording was aborted: %#v", recording)
 	}
 }
 
@@ -832,6 +867,40 @@ func TestRecordProgramRejectsAbortSetAtEOFBeforePromotion(t *testing.T) {
 	}
 }
 
+func TestRecordProgramPromotionFailureRemovesClaimedActiveRow(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths{
+		Database: filepath.Join(dir, "data", "strata.db"),
+		Log:      filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{ID: "promfail", Start: time.Now().Add(-time.Minute).UnixMilli(), End: time.Now().Add(time.Hour).UnixMilli()}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	finalPath := filepath.Join(cfg.RecordedDir, "promfail.m2ts")
+	if err := os.MkdirAll(finalPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := recordProgramWithLog(context.Background(), paths.Database, paths.Log, cfg, &fakeStreamer{body: "ts"}, program)
+	if err == nil {
+		t.Fatal("promotion unexpectedly succeeded")
+	}
+	active, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("claimed active row was left after promotion failure: %#v", active)
+	}
+	if info, err := os.Stat(finalPath); err != nil || !info.IsDir() {
+		t.Fatalf("existing final path was not preserved: info=%v err=%v", info, err)
+	}
+}
+
 func TestRunOnceCancellingContextLeavesReservationAndNoRecordedOutput(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
@@ -940,6 +1009,92 @@ func TestRunOnceCancellingContextLeavesReservationAndNoRecordedOutput(t *testing
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("cancelled recording output %s still exists: %v", path, err)
 		}
+	}
+}
+
+func TestRunOnceDoesNotRerecordReservationAlreadyInRecorded(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths{Database: filepath.Join(dir, "data", "strata.db")}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{
+		ID:    "rec1",
+		Start: time.Now().Add(-time.Minute).UnixMilli(),
+		End:   time.Now().Add(time.Hour).UnixMilli(),
+	}
+	if err := reservationstore.Upsert(context.Background(), paths.Database, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recorded, program); err != nil {
+		t.Fatal(err)
+	}
+	streamer := &fakeStreamer{}
+	result, err := RunOnce(context.Background(), paths.runtime(), &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}, streamer, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != (Result{}) {
+		t.Fatalf("already-recorded reservation was started: %#v", result)
+	}
+	if streamer.id != 0 {
+		t.Fatalf("stream was opened for already-recorded program: %d", streamer.id)
+	}
+}
+
+func TestRunOnceRetriesReservationDeleteAfterDatabaseRecovers(t *testing.T) {
+	dir := t.TempDir()
+	databasePath := filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1000, 0)
+	program := legacy.Program{ID: "delretry", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli()}
+	if err := reservationstore.Upsert(context.Background(), databasePath, program); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_reservation_delete
+		BEFORE DELETE ON reservations
+		BEGIN SELECT RAISE(ABORT, 'injected reservation delete failure'); END;`)
+	if closeErr := db.Close(); err != nil {
+		t.Fatal(err)
+	} else if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	paths := testPaths{Database: databasePath}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	if _, err := RunOnce(context.Background(), paths.runtime(), cfg, &fakeStreamer{body: "ts"}, now); err == nil {
+		t.Fatal("RunOnce succeeded despite reservation delete failure")
+	}
+	recorded, err := programstore.Read(context.Background(), databasePath, programstore.Recorded)
+	if err != nil || len(recorded) != 1 {
+		t.Fatalf("recorded state after delete failure = %#v err=%v", recorded, err)
+	}
+
+	db, err = database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_reservation_delete"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RunOnce(context.Background(), paths.runtime(), cfg, &fakeStreamer{}, now); err != nil {
+		t.Fatal(err)
+	}
+	reserves, err := reservationstore.Read(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 0 {
+		t.Fatalf("reservation delete was not retried: %#v", reserves)
 	}
 }
 
@@ -1159,6 +1314,168 @@ func TestFinishRecordingMissingActiveRowKeepsReservation(t *testing.T) {
 	}
 }
 
+func TestFinishRecordingCompleteFailureRemovesActiveAndOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Reserves:  filepath.Join(dir, "data", "reserves.json"),
+		Recording: filepath.Join(dir, "data", "recording.json"),
+		Recorded:  filepath.Join(dir, "data", "recorded.json"),
+		Log:       filepath.Join(dir, "log", "operator"),
+	})
+	program := legacy.Program{
+		ID:      "cfail",
+		Start:   time.Now().Add(-time.Minute).UnixMilli(),
+		End:     time.Now().Add(time.Hour).UnixMilli(),
+		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
+	}
+	if err := reservationstore.Write(context.Background(), paths.Database, []legacy.Program{program}); err != nil {
+		t.Fatal(err)
+	}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, []legacy.Program{program}); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recorded_insert
+		BEFORE INSERT ON program_collections
+		WHEN NEW.collection = 'recorded'
+		BEGIN SELECT RAISE(ABORT, 'injected completion failure'); END;`)
+	if closeErr := db.Close(); err != nil {
+		t.Fatal(err)
+	} else if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	finishRecording(context.Background(), paths.runtime(), cfg, &fakeStreamer{body: "ts"}, program)
+
+	active, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active recording was left after completion failure: %#v", active)
+	}
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 0 {
+		t.Fatalf("failed completion was promoted: %#v", recorded)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].ID != program.ID {
+		t.Fatalf("reservation was not retained: %#v", reserves)
+	}
+	finalPath := filepath.Join(cfg.RecordedDir, "cfail.m2ts")
+	if _, err := os.Stat(finalPath); !os.IsNotExist(err) {
+		t.Fatalf("failed completion output still exists: %v", err)
+	}
+}
+
+func TestPendingCompletionRollbackRetriesAfterDatabaseRecovers(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths{Database: filepath.Join(dir, "data", "strata.db")}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{
+		ID:       "retry",
+		Recorded: filepath.Join(dir, "recorded", "retry.m2ts"),
+		PID:      0,
+		Raw:      map[string]json.RawMessage{"_strataFinalizing": json.RawMessage(`"stale-token"`)},
+	}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(program.Recorded), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(program.Recorded, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recording_delete
+		BEFORE DELETE ON program_collections
+		WHEN OLD.collection = 'recording'
+		BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;`)
+	if err == nil {
+		_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recording_update
+			BEFORE UPDATE ON program_collections
+			WHEN OLD.collection = 'recording'
+			BEGIN SELECT RAISE(ABORT, 'injected update failure'); END;`)
+	}
+	if closeErr := db.Close(); err != nil {
+		t.Fatal(err)
+	} else if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if err := rollbackCompletedRecording(context.Background(), paths.Database, program); err == nil {
+		t.Fatal("rollback unexpectedly succeeded while database trigger was active")
+	}
+
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recording_delete"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recording_update"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	retryPendingCompletionRollbacks(context.Background(), paths.Database)
+	active, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("pending completion rollback did not remove active row: %#v", active)
+	}
+	if _, err := os.Stat(program.Recorded); !os.IsNotExist(err) {
+		t.Fatalf("pending completion rollback left output: %v", err)
+	}
+}
+
+func TestPendingCompletionRollbackDoesNotDeleteNewRecording(t *testing.T) {
+	dir := t.TempDir()
+	databasePath := filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := legacy.Program{ID: "retry", Recorded: filepath.Join(dir, "recorded", "retry.m2ts"), PID: 0}
+	queueCompletionRollback(databasePath, old)
+	current := old
+	current.PID = -1
+	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, current); err != nil {
+		t.Fatal(err)
+	}
+	retryPendingCompletionRollbacks(context.Background(), databasePath)
+	active, err := programstore.Read(context.Background(), databasePath, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].PID != -1 {
+		t.Fatalf("new recording was removed by stale rollback: %#v", active)
+	}
+}
+
 func TestPIDFileLifecycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data", "operator.pid")
 	if err := writePIDFile(path); err != nil {
@@ -1320,5 +1637,44 @@ func TestLowStorageStopMarksActiveRecordingsAbort(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), paths.writeLog(programstore.Recording)) {
 		t.Fatalf("operator log missing recording write: %s", string(logData))
+	}
+}
+
+func TestLowStorageStopIgnoresFinalizingRecording(t *testing.T) {
+	dir := t.TempDir()
+	oldGetDiskUsage := getDiskUsage
+	getDiskUsage = func(string) (system.DiskUsage, error) {
+		return system.DiskUsage{Avail: 10 * 1024 * 1024}, nil
+	}
+	defer func() { getDiskUsage = oldGetDiskUsage }()
+
+	paths := testPaths{
+		Database: filepath.Join(dir, "data", "strata.db"),
+		Log:      filepath.Join(dir, "log", "operator"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recording := []legacy.Program{{
+		ID:  "finalizing",
+		Raw: map[string]json.RawMessage{"_strataFinalizing": json.RawMessage(`true`)},
+	}}
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, recording); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		RecordedDir:                filepath.Join(dir, "recorded"),
+		StorageLowSpaceThresholdMB: 100,
+		StorageLowSpaceAction:      "stop",
+	}
+	if _, err := handleLowStorage(context.Background(), paths.runtime(), cfg, recording, nil); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 1 || updated[0].Abort {
+		t.Fatalf("finalizing recording was aborted: %#v", updated)
 	}
 }

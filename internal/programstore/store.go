@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"sync/atomic"
+	"time"
 
 	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
@@ -18,11 +21,30 @@ const (
 
 const completionMarker = "_strataFinalizing"
 
+var completionClaimSequence uint64
+
 var (
 	ErrProgramNotFound   = errors.New("program not found")
 	ErrProgramAborted    = errors.New("program was aborted")
 	ErrProgramFinalizing = errors.New("program is finalizing")
 )
+
+func CompletionClaimed(program legacy.Program) bool {
+	_, claimed := program.Raw[completionMarker]
+	return claimed
+}
+
+func CompletionClaimToken(program legacy.Program) string {
+	value, ok := program.Raw[completionMarker]
+	if !ok {
+		return ""
+	}
+	var token string
+	if json.Unmarshal(value, &token) != nil {
+		return ""
+	}
+	return token
+}
 
 func Read(ctx context.Context, databasePath, collection string) ([]legacy.Program, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
@@ -127,7 +149,7 @@ func UpdateFound(ctx context.Context, databasePath, collection, programID string
 
 func SetAbort(ctx context.Context, databasePath, collection, programID string, abort bool) error {
 	return Update(ctx, databasePath, collection, programID, func(program legacy.Program) (legacy.Program, error) {
-		if _, finalizing := program.Raw[completionMarker]; finalizing {
+		if CompletionClaimed(program) {
 			return program, ErrProgramFinalizing
 		}
 		program.Abort = abort
@@ -136,11 +158,17 @@ func SetAbort(ctx context.Context, databasePath, collection, programID string, a
 }
 
 func ClaimCompletion(ctx context.Context, databasePath string, program legacy.Program) (bool, error) {
-	return UpdateFound(ctx, databasePath, Recording, program.ID, func(current legacy.Program) (legacy.Program, error) {
+	claimed, _, err := ClaimCompletionWithToken(ctx, databasePath, program)
+	return claimed, err
+}
+
+func ClaimCompletionWithToken(ctx context.Context, databasePath string, program legacy.Program) (bool, string, error) {
+	claimToken := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(atomic.AddUint64(&completionClaimSequence, 1), 10)
+	claimed, err := UpdateFound(ctx, databasePath, Recording, program.ID, func(current legacy.Program) (legacy.Program, error) {
 		if current.Abort {
 			return current, ErrProgramAborted
 		}
-		if _, finalizing := current.Raw[completionMarker]; finalizing {
+		if CompletionClaimed(current) {
 			return current, ErrProgramFinalizing
 		}
 		current.Recorded = program.Recorded
@@ -153,9 +181,14 @@ func ClaimCompletion(ctx context.Context, databasePath string, program legacy.Pr
 				current.Raw[key] = value
 			}
 		}
-		current.Raw[completionMarker] = json.RawMessage(`true`)
+		encodedToken, err := json.Marshal(claimToken)
+		if err != nil {
+			return current, err
+		}
+		current.Raw[completionMarker] = encodedToken
 		return current, nil
 	})
+	return claimed, claimToken, err
 }
 
 func ClearCompletionClaim(ctx context.Context, databasePath, programID string) error {

@@ -1897,6 +1897,83 @@ func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
 	}
 }
 
+func TestAPIRecordingDeleteReturnsConflictWhileCompleting(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{
+		ID:  "finalizing",
+		Raw: map[string]json.RawMessage{"_strataFinalizing": json.RawMessage(`true`)},
+	}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Reserves, []legacy.Program{{ID: "finalizing"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/recording/finalizing", nil))
+	if res.Code != http.StatusConflict {
+		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	var reserves []legacy.Program
+	err := storage.ReadJSON(paths.Reserves, &reserves, "[]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("reserve was changed during completion: %#v", reserves)
+	}
+}
+
+func TestAPIRecordingDeleteRollsBackAbortWhenReserveUpdateFails(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{ID: "reservefail"}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservationstore.Upsert(context.Background(), paths.Database, program); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_reserve_update
+		BEFORE UPDATE ON reservations
+		BEGIN SELECT RAISE(ABORT, 'injected reserve failure'); END;`)
+	if closeErr := db.Close(); err != nil {
+		t.Fatal(err)
+	} else if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	handler := newTestHandler(t, paths, &config.Config{})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/recording/reservefail", nil))
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("delete status = %d body=%s", res.Code, res.Body.String())
+	}
+	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 1 || recording[0].Abort {
+		t.Fatalf("abort was not rolled back: %#v", recording)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("reserve changed after failed update: %#v", reserves)
+	}
+}
+
 func TestAPIRecordedCleanupEndpointDryRunAndApply(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

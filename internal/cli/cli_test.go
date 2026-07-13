@@ -1282,6 +1282,99 @@ func TestStopUsesStrataDatabaseWithoutRewritingJSON(t *testing.T) {
 	}
 }
 
+func TestStopTreatsCompletionInProgressAsAlreadyHandled(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"init"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	program := legacy.Program{
+		ID:  "finalizing",
+		Raw: map[string]json.RawMessage{"_strataFinalizing": json.RawMessage(`true`)},
+	}
+	if err := programstore.Upsert(context.Background(), filepath.Join("data", "strata.db"), programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservationstore.Upsert(context.Background(), filepath.Join("data", "strata.db"), legacy.Program{ID: program.ID}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"stop", program.ID}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "完了処理中") {
+		t.Fatalf("unexpected completion output: %s", out.String())
+	}
+	recording, err := programstore.Read(context.Background(), filepath.Join("data", "strata.db"), programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 1 || recording[0].Abort {
+		t.Fatalf("recording was aborted during completion: %#v", recording)
+	}
+	reserves, err := reservationstore.Read(context.Background(), filepath.Join("data", "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("reserve was changed during completion: %#v", reserves)
+	}
+}
+
+func TestStopRollsBackAbortWhenReserveUpdateFails(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), []string{"init"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join("data", "strata.db")
+	program := legacy.Program{ID: "reservefail"}
+	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservationstore.Upsert(context.Background(), databasePath, program); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_reserve_update
+		BEFORE UPDATE ON reservations
+		BEGIN SELECT RAISE(ABORT, 'injected reserve failure'); END;`)
+	if closeErr := db.Close(); err != nil {
+		t.Fatal(err)
+	} else if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	if err := Run(context.Background(), []string{"stop", program.ID}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+		t.Fatal("stop succeeded after reserve update failure")
+	}
+	recording, err := programstore.Read(context.Background(), databasePath, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recording) != 1 || recording[0].Abort {
+		t.Fatalf("abort was not rolled back: %#v", recording)
+	}
+	reserves, err := reservationstore.Read(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 1 || reserves[0].IsSkip {
+		t.Fatalf("reserve changed after failed update: %#v", reserves)
+	}
+}
+
 func TestStopSimulationDoesNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := os.Getwd()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -1270,20 +1271,30 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 	}
 	for i := range recording {
 		if recording[i].ID == id {
-			recording[i].Abort = true
 			target := recording[i]
 			if simulation {
+				target.Abort = true
 				fmt.Fprintln(stdout, "[simulation] stop:")
 				writePretty(stdout, target)
 				return nil
 			}
+			if err := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, true); err != nil {
+				if errors.Is(err, programstore.ErrProgramFinalizing) {
+					fmt.Fprintln(stdout, "stop:")
+					writePretty(stdout, target)
+					fmt.Fprintln(stdout, "録画は完了処理中です。")
+					return nil
+				}
+				return err
+			}
+			target.Abort = true
 			if !recording[i].IsManualReserved {
 				if err := markReserveSkip(p, recording[i].ID); err != nil {
+					if rollbackErr := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, false); rollbackErr != nil {
+						err = errors.Join(err, rollbackErr)
+					}
 					return err
 				}
-			}
-			if err := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, true); err != nil {
-				return err
 			}
 			fmt.Fprintln(stdout, "stop:")
 			writePretty(stdout, target)

@@ -110,6 +110,10 @@ func TestClaimCompletionPreventsAbortUntilCompletion(t *testing.T) {
 	if err != nil || !claimed {
 		t.Fatalf("claim = %v, %v", claimed, err)
 	}
+	claimedProgram, found, err := ReadByID(ctx, databasePath, Recording, active.ID)
+	if err != nil || !found || CompletionClaimToken(claimedProgram) == "" {
+		t.Fatalf("completion claim token = %q found=%v err=%v", CompletionClaimToken(claimedProgram), found, err)
+	}
 	if err := SetAbort(ctx, databasePath, Recording, active.ID, true); !errors.Is(err, ErrProgramFinalizing) {
 		t.Fatalf("abort while finalizing = %v, want ErrProgramFinalizing", err)
 	}
