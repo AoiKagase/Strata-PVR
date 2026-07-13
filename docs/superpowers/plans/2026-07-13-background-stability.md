@@ -592,6 +592,8 @@ OnUnitActiveSec=10min
 
 既存の CLI/systemd テストの近くに timer file を読み、`OnBootSec=2min`、`OnUnitActiveSec=10min`、`AccuracySec=1min`、`Persistent=true`、`Unit=strata-pvr-scheduler.service` を確認するテストを追加する。テストは repository root からの相対パスに依存せず、`runtime.Caller` からプロジェクト root を求める既存 test helper があればそれを使う。
 
+ベースラインで確認された `TestAPIScheduleDeflateAndLastModified` の fixture 競合を解消するため、このテストでは `paths.Database` を先に設定し、`schedulestore.Write(context.Background(), paths.Database, schedule)` で DB を作成してから `newTestHandler` を呼ぶ。これにより `newTestHandler` の request ごとの seed import/export が無効になり、最初の response の `Last-Modified` と条件付き GET の DB mtime が一致する。
+
 - [ ] **Step 6: WUI と timer の回帰テストを実行する**
 
 Run: `rtk go test ./internal/wui ./internal/cli -count=1`
