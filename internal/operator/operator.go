@@ -54,14 +54,20 @@ type Result struct {
 }
 
 func Run(ctx context.Context, paths Paths, interval time.Duration) error {
-	cfg, err := config.Load(paths.Config)
+	lock, err := acquireProcessLock(paths.PID)
 	if err != nil {
 		return err
 	}
+	defer lock.Close()
 	if err := writePIDFile(paths.PID); err != nil {
 		return err
 	}
 	defer removePIDFile(paths.PID)
+
+	cfg, err := config.Load(paths.Config)
+	if err != nil {
+		return err
+	}
 	if err := initializeRuntimeState(paths, cfg); err != nil {
 		return err
 	}
@@ -237,9 +243,23 @@ func writePIDFile(path string) error {
 }
 
 func removePIDFile(path string) {
-	if path != "" {
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if string(data) == strconv.Itoa(os.Getpid())+"\n" {
 		_ = os.Remove(path)
 	}
+}
+
+func acquireProcessLock(pidPath string) (*system.ProcessLock, error) {
+	if pidPath == "" {
+		return nil, nil
+	}
+	return system.AcquireProcessLock(pidPath + ".lock")
 }
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/schedulestore"
 	"strata-pvr/internal/storage"
+	"strata-pvr/internal/system"
 )
 
 type fakeSource struct {
@@ -560,5 +562,47 @@ func TestPIDFileLifecycle(t *testing.T) {
 	removePIDFile(path)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("pid file was not removed: %v", err)
+	}
+}
+
+func TestRemovePIDFileKeepsAnotherProcessPID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data", "scheduler.pid")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("999999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removePIDFile(path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "999999\n"; got != want {
+		t.Fatalf("pid file = %q, want %q", got, want)
+	}
+}
+
+func TestAcquireProcessLockUsesPIDLockPath(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "data", "scheduler.pid")
+	first, err := acquireProcessLock(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	if _, err := acquireProcessLock(pidPath); !errors.Is(err, system.ErrProcessAlreadyRunning) {
+		t.Fatalf("second scheduler lock error = %v", err)
+	}
+}
+
+func TestAcquireProcessLockAllowsEmptyPIDPath(t *testing.T) {
+	lock, err := acquireProcessLock("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock != nil {
+		defer lock.Close()
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/schedulestore"
+	"strata-pvr/internal/system"
 )
 
 type Source interface {
@@ -45,6 +46,11 @@ type Result struct {
 }
 
 func Run(ctx context.Context, paths Paths, simulation bool) (Result, error) {
+	lock, err := acquireProcessLock(paths.PID)
+	if err != nil {
+		return Result{}, err
+	}
+	defer lock.Close()
 	if err := writePIDFile(paths.PID); err != nil {
 		return Result{}, err
 	}
@@ -81,9 +87,23 @@ func writePIDFile(path string) error {
 }
 
 func removePIDFile(path string) {
-	if path != "" {
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if string(data) == strconv.Itoa(os.Getpid())+"\n" {
 		_ = os.Remove(path)
 	}
+}
+
+func acquireProcessLock(pidPath string) (*system.ProcessLock, error) {
+	if pidPath == "" {
+		return nil, nil
+	}
+	return system.AcquireProcessLock(pidPath + ".lock")
 }
 
 func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source Source, simulation bool, now time.Time) (Result, error) {
