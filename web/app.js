@@ -68,6 +68,7 @@
     currentView: "",
     viewScrollPositions: {},
     scheduleGuideScroll: { left: 0, top: 0 },
+    scheduleGuideScrollToCurrentTime: false,
     listFilters: loadListFilters(),
     searchPage: 1,
     recordedPage: 1,
@@ -1489,6 +1490,7 @@
 
   function setView(name) {
     var found = false;
+    var previousView = state.currentView;
     if (state.currentView) {
       state.viewScrollPositions[state.currentView] = window.pageYOffset || document.documentElement.scrollTop || 0;
     }
@@ -1507,6 +1509,9 @@
       return;
     }
     state.currentView = found ? name : "dashboard";
+    if (state.currentView === "schedule" && previousView !== "schedule") {
+      state.scheduleGuideScrollToCurrentTime = true;
+    }
     if (state.hasLoaded) {
       if (state.currentView === "status") {
         renderStatus();
@@ -3069,6 +3074,17 @@
     return program.end || (program.start + scheduleMinimumProgramMinutes * 60 * 1000);
   }
 
+  function scheduleCurrentTimeScrollTop(scroll, firstStart, lastEnd, minuteHeight, now) {
+    if (!scroll || now < firstStart || now > lastEnd) {
+      return null;
+    }
+    var lineTop = Math.round(((now - firstStart) / 60000) * minuteHeight);
+    var headerHeight = 76;
+    var visibleTimelineHeight = Math.max(0, scroll.clientHeight - headerHeight);
+    var leadingContext = Math.round(visibleTimelineHeight * 0.35);
+    return Math.max(0, lineTop - leadingContext);
+  }
+
   function scheduleWindowHours() {
     if (Object.prototype.hasOwnProperty.call(scheduleWindowHoursByMode, state.scheduleWindowMode)) {
       return scheduleWindowHoursByMode[state.scheduleWindowMode];
@@ -3641,6 +3657,10 @@
         }
       });
     });
+    var timelineNow = Date.now();
+    if ((!state.scheduleDay || dateKey(timelineNow) === state.scheduleDay) && timelineNow < firstStart) {
+      firstStart = timelineNow;
+    }
     firstStart = Math.floor(firstStart / 3600000) * 3600000;
     lastEnd = Math.ceil(lastEnd / 3600000) * 3600000;
     var totalMinutes = Math.max(60, Math.round((lastEnd - firstStart) / 60000));
@@ -3785,8 +3805,17 @@
     scroll.appendChild(grid);
     root.appendChild(scroll);
     window.setTimeout(function () {
+      var scrollTop = state.scheduleGuideScroll.top || 0;
+      if (state.scheduleGuideScrollToCurrentTime) {
+        var currentTimeScrollTop = scheduleCurrentTimeScrollTop(scroll, firstStart, lastEnd, minuteHeight, Date.now());
+        if (currentTimeScrollTop !== null) {
+          scrollTop = currentTimeScrollTop;
+          state.scheduleGuideScroll.top = scrollTop;
+          state.scheduleGuideScrollToCurrentTime = false;
+        }
+      }
       scroll.scrollLeft = state.scheduleGuideScroll.left || 0;
-      scroll.scrollTop = state.scheduleGuideScroll.top || 0;
+      scroll.scrollTop = scrollTop;
       renderVisibleScheduleLanes();
     }, 0);
   }
