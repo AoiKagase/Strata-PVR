@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
@@ -21,6 +22,46 @@ func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
 			t.Errorf("args do not contain %q: %s", want, joined)
 		}
 	}
+}
+
+func TestHLSFFmpegArgsCanReadLiveInputFromPipe(t *testing.T) {
+	args := hlsFFmpegArgs("pipe:0", t.TempDir(), hlsPresets["540p"], 0, 0, "", "libx264")
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-re", "-f mpegts -i pipe:0", "-hls_playlist_type event", "-hls_time 4"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("live HLS args missing %q: %s", want, joined)
+		}
+	}
+}
+
+func TestHLSSessionManagerClosesUnusedLiveInput(t *testing.T) {
+	m := newHLSSessionManager(Paths{})
+	key := channelHLSKey("abc")
+	id := hlsSessionID(key, "540p", 0, 0, "")
+	existing := &hlsSession{id: id, timer: time.NewTimer(time.Hour)}
+	defer existing.timer.Stop()
+	m.sessions[id] = existing
+	input := &testHLSReadCloser{Reader: strings.NewReader("unused")}
+	got, err := m.getOrStartStream(key, input, "540p", hlsPresets["540p"], 0, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != existing {
+		t.Fatal("live HLS did not reuse the existing session")
+	}
+	if !input.closed {
+		t.Fatal("unused live input was not closed")
+	}
+}
+
+type testHLSReadCloser struct {
+	*strings.Reader
+	closed bool
+}
+
+func (r *testHLSReadCloser) Close() error {
+	r.closed = true
+	return nil
 }
 
 func TestHLSSessionStopCancelsAndRemovesSession(t *testing.T) {

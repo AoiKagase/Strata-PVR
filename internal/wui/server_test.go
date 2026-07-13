@@ -895,6 +895,24 @@ func TestRecordedPlaybackUsesHLSOnlyForAppleNativeBrowsers(t *testing.T) {
 	}
 }
 
+func TestLiveChannelPlaybackUsesHLSForAppleNativeBrowsers(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function liveChannelPlaybackURL(channelID, query)`,
+		`return channelURL(channelID, "hls/index", "m3u8", hlsQuery);`,
+		`return channelURL(channelID, "watch", "mp4", query);`,
+		`return liveChannelPlaybackURL(group.id, query);`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardScheduleDefaultsToDayRangeWithFullRangeOption(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

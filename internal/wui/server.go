@@ -994,6 +994,16 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleChannelSubtitles(w, r, parts[1])
+	case len(parts) == 4 && parts[0] == "channel" && parts[2] == "hls":
+		if !requireAPIType(w, r, apiType, "m3u8", "ts") {
+			return
+		}
+		channel, ok := s.findChannel(parts[1])
+		if !ok {
+			legacyHTTPError(w, r, http.StatusNotFound)
+			return
+		}
+		s.handleChannelHLS(w, r, channel.ID, parts[3], apiType)
 	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "xspf", "m2ts", "mp4") {
 			return
@@ -3882,8 +3892,12 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"GET", "HEAD", "DELETE"}, true
 	case len(parts) == 2 && parts[0] == "program":
 		return []string{"GET", "PUT"}, true
-	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "subtitles" || parts[2] == "watch"):
+	case len(parts) == 3 && parts[0] == "channel" && (parts[2] == "logo" || parts[2] == "subtitles"):
 		return []string{"GET"}, true
+	case len(parts) == 3 && parts[0] == "channel" && parts[2] == "watch":
+		return []string{"GET", "HEAD"}, true
+	case len(parts) == 4 && parts[0] == "channel" && parts[2] == "hls":
+		return []string{"GET", "HEAD", "DELETE"}, true
 	default:
 		return nil, false
 	}

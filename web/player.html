@@ -179,7 +179,7 @@
         showMessage("再生に失敗しました。録画状態と WUI ログを確認して再試行してください。", true);
       });
       window.addEventListener("pagehide", function () {
-        if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
+        if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src) || /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
           fetch(resolvedSrc || src, { method: "DELETE", keepalive: true }).catch(function () {});
         }
       });

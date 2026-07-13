@@ -1993,6 +1993,18 @@
     return url + "?" + new URLSearchParams(query).toString();
   }
 
+  function liveChannelPlaybackURL(channelID, query) {
+    var video = document.createElement("video");
+    if (recordedNativeHLSSupported(video, window.navigator && window.navigator.userAgent)) {
+      var hlsQuery = { quality: qualityFromQuery(query) || "540p" };
+      if (query && query.audio === "secondary") {
+        hlsQuery.audio = "secondary";
+      }
+      return channelURL(channelID, "hls/index", "m3u8", hlsQuery);
+    }
+    return channelURL(channelID, "watch", "mp4", query);
+  }
+
   function openURL(url) {
     window.location.href = url;
   }
@@ -2562,7 +2574,7 @@
   }
 
   function stopHLSPlayback(url) {
-    if (!url || !/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url)) {
+    if (!url || (!/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url) && !/\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url))) {
       return;
     }
     fetch(url, { method: "DELETE", keepalive: true }).catch(function () {});
@@ -2692,7 +2704,7 @@
         if (channelID) {
           row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
             openAdjustablePlayer(program.title || channelID || "チャンネル", function (query) {
-              return channelURL(channelID, "watch", "mp4", query);
+              return liveChannelPlaybackURL(channelID, query);
             }, null, false, 0, "", function () {
               return channelSubtitlesURL(channelID);
             });
@@ -3058,7 +3070,7 @@
     if (group.id) {
       actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
         openAdjustablePlayer(group.name || group.id || "チャンネル", function (query) {
-          return channelURL(group.id, "watch", "mp4", query);
+          return liveChannelPlaybackURL(group.id, query);
         }, null, false, 0, "", function () {
           return channelSubtitlesURL(group.id);
         });
@@ -3839,7 +3851,7 @@
     }
     row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
       openAdjustablePlayer(label || channelID || "チャンネル", function (query) {
-        return channelURL(channelID, "watch", "mp4", query);
+        return liveChannelPlaybackURL(channelID, query);
       }, null, false, 0, "", function () {
         return channelSubtitlesURL(channelID);
       });

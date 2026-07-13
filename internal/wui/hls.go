@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"strata-pvr/internal/logging"
+	"strata-pvr/internal/mirakurun"
 	"strata-pvr/internal/programstore"
 )
 
@@ -34,6 +36,7 @@ type hlsSession struct {
 	id, dir    string
 	lastAccess time.Time
 	cancel     context.CancelFunc
+	input      io.Closer
 	done       chan struct{}
 	err        error
 	timer      *time.Timer
@@ -97,6 +100,58 @@ func (s *server) handleRecordedHLS(w http.ResponseWriter, r *http.Request, id, r
 	legacyHTTPError(w, r, http.StatusNotFound)
 }
 
+func (s *server) handleChannelHLS(w http.ResponseWriter, r *http.Request, channelID, resource, apiType string) {
+	if s.hls == nil {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	if apiType == "ts" && validHLSSegmentName(resource+".ts") {
+		s.serveHLSSegment(w, r, resource+".ts")
+		return
+	}
+	if apiType != "m3u8" || resource != "index" {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	quality, preset, start, duration, audio, ok := hlsRequestOptions(r)
+	if !ok {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	if r.Method == http.MethodDelete {
+		s.hls.stop(channelHLSKey(channelID), quality, start, duration, audio)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if session := s.hls.lookup(hlsSessionID(channelHLSKey(channelID), quality, start, duration, audio)); session != nil {
+		s.serveHLSPlaylistSession(w, r, session)
+		return
+	}
+	serviceID, err := strconv.ParseInt(channelID, 36, 64)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	client.UserAgent = mirakurun.StrataUserAgent("wui")
+	body, err := client.ServiceStream(context.Background(), serviceID, true)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	session, err := s.hls.getOrStartStream(channelHLSKey(channelID), body, quality, preset, start, duration, audio)
+	if err != nil {
+		_ = body.Close()
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	s.serveHLSPlaylistSession(w, r, session)
+}
+
 func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePath string) {
 	quality, preset, start, duration, audio, ok := hlsRequestOptions(r)
 	if !ok {
@@ -108,6 +163,10 @@ func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePa
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
+	s.serveHLSPlaylistSession(w, r, session)
+}
+
+func (s *server) serveHLSPlaylistSession(w http.ResponseWriter, r *http.Request, session *hlsSession) {
 	playlist := filepath.Join(session.dir, "index.m3u8")
 	deadline := time.NewTimer(15 * time.Second)
 	defer deadline.Stop()
@@ -167,14 +226,25 @@ func (s *server) serveHLSSegment(w http.ResponseWriter, r *http.Request, name st
 }
 
 func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
+	return m.getOrStartSource(filePath, nil, quality, preset, start, duration, audio)
+}
+
+func (m *hlsSessionManager) getOrStartStream(key string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
+	return m.getOrStartSource(key, input, quality, preset, start, duration, audio)
+}
+
+func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
 	encoder, err := detectedH264Encoder()
 	if err != nil {
 		return nil, err
 	}
-	id := hlsSessionID(filePath, quality, start, duration, audio)
+	id := hlsSessionID(source, quality, start, duration, audio)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing := m.sessions[id]; existing != nil {
+		if input != nil {
+			_ = input.Close()
+		}
 		existing.lastAccess = time.Now()
 		existing.timer.Reset(hlsSessionIdleTimeout)
 		return existing, nil
@@ -191,9 +261,16 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), cancel: cancel, done: make(chan struct{})}
-	args := hlsFFmpegArgs(filePath, dir, preset, start, duration, audio, encoder)
+	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), cancel: cancel, input: input, done: make(chan struct{})}
+	inputPath := source
+	if input != nil {
+		inputPath = "pipe:0"
+	}
+	args := hlsFFmpegArgs(inputPath, dir, preset, start, duration, audio, encoder)
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	if input != nil {
+		cmd.Stdin = input
+	}
 	logFile, err := os.Create(filepath.Join(dir, "ffmpeg.log"))
 	if err != nil {
 		cancel()
@@ -203,6 +280,9 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
 		cancel()
+		if input != nil {
+			_ = input.Close()
+		}
 		return nil, err
 	}
 	m.sessions[id] = session
@@ -210,6 +290,9 @@ func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPrese
 	_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "SPAWN HLS: ffmpeg %s", strings.Join(args, " "))
 	go func() {
 		err := cmd.Wait()
+		if input != nil {
+			_ = input.Close()
+		}
 		_ = logFile.Close()
 		m.mu.Lock()
 		session.err = err
@@ -248,6 +331,9 @@ func (m *hlsSessionManager) expire(id string) {
 	delete(m.sessions, id)
 	m.mu.Unlock()
 	session.cancel()
+	if session.input != nil {
+		_ = session.input.Close()
+	}
 	_ = os.RemoveAll(session.dir)
 }
 
@@ -269,7 +355,14 @@ func (m *hlsSessionManager) expireNow(id string) {
 		return
 	}
 	session.cancel()
+	if session.input != nil {
+		_ = session.input.Close()
+	}
 	_ = os.RemoveAll(session.dir)
+}
+
+func channelHLSKey(channelID string) string {
+	return "channel:" + channelID
 }
 
 func hlsSessionID(filePath, quality string, start, duration int, audio string) string {
