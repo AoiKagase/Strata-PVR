@@ -37,6 +37,42 @@ func ReadProgramCollection(ctx context.Context, db *sql.DB, collection string) (
 	return documents, nil
 }
 
+func ReadProgramIDs(ctx context.Context, db *sql.DB, collection string) ([]string, error) {
+	if !validProgramCollection(collection) {
+		return nil, fmt.Errorf("invalid program collection %q", collection)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT program_id FROM program_collections WHERE collection = ? ORDER BY position`, collection)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", collection, err)
+	}
+	defer rows.Close()
+	programIDs := []string{}
+	for rows.Next() {
+		var programID string
+		if err := rows.Scan(&programID); err != nil {
+			return nil, fmt.Errorf("read %s: %w", collection, err)
+		}
+		programIDs = append(programIDs, programID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", collection, err)
+	}
+	return programIDs, nil
+}
+
+func ReadProgramByID(ctx context.Context, db *sql.DB, collection, programID string) (json.RawMessage, bool, error) {
+	if !validProgramCollection(collection) {
+		return nil, false, fmt.Errorf("invalid program collection %q", collection)
+	}
+	var document string
+	if err := db.QueryRowContext(ctx, `SELECT document_json FROM program_collections WHERE collection = ? AND program_id = ?`, collection, programID).Scan(&document); err == sql.ErrNoRows {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, fmt.Errorf("read %s program %q: %w", collection, programID, err)
+	}
+	return json.RawMessage(document), true, nil
+}
+
 func ReplaceProgramCollection(ctx context.Context, db *sql.DB, collection string, programs []ProgramDocument) error {
 	if !validProgramCollection(collection) {
 		return fmt.Errorf("invalid program collection %q", collection)

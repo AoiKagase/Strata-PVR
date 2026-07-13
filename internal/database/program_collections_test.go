@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +34,53 @@ func TestProgramCollectionsRemainIndependent(t *testing.T) {
 	}
 	if len(active) != 1 || string(active[0]) != string(recording.Document) || len(library) != 1 || string(library[0]) != string(recorded.Document) {
 		t.Fatalf("recording=%s recorded=%s", active, library)
+	}
+}
+
+func TestReadProgramIDsReturnsCollectionIDsInPositionOrder(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := ReplaceProgramCollection(ctx, db, "recording", []ProgramDocument{
+		{ProgramID: "second", Document: json.RawMessage(`{"id":"second"}`)},
+		{ProgramID: "first", Document: json.RawMessage(`{"id":"first"}`)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReplaceProgramCollection(ctx, db, "recorded", []ProgramDocument{{ProgramID: "recorded", Document: json.RawMessage(`{"id":"recorded"}`)}}); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := ReadProgramIDs(ctx, db, "recording")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"second", "first"}; !reflect.DeepEqual(ids, want) {
+		t.Fatalf("recording IDs = %v, want %v", ids, want)
+	}
+}
+
+func TestReadProgramByIDDoesNotCrossCollections(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	for _, collection := range []string{"recording", "recorded"} {
+		if err := ReplaceProgramCollection(ctx, db, collection, []ProgramDocument{{ProgramID: "same", Document: json.RawMessage(`{"collection":"` + collection + `"}`)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	document, found, err := ReadProgramByID(ctx, db, "recording", "same")
+	if err != nil || !found || !strings.Contains(string(document), `"recording"`) {
+		t.Fatalf("recording lookup = %s, %v, %v", document, found, err)
+	}
+	_, found, err = ReadProgramByID(ctx, db, "recording", "missing")
+	if err != nil || found {
+		t.Fatalf("missing lookup = found=%v err=%v", found, err)
 	}
 }
 

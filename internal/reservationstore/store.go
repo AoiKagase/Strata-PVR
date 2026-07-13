@@ -29,6 +29,27 @@ func Read(ctx context.Context, databasePath string) ([]legacy.Program, error) {
 	return reservations, nil
 }
 
+func ReadDue(ctx context.Context, databasePath string, startBefore, endAfter int64) ([]legacy.Program, error) {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	documents, err := database.ReadReservationsDue(ctx, db, startBefore, endAfter)
+	if err != nil {
+		return nil, err
+	}
+	reservations := make([]legacy.Program, 0, len(documents))
+	for _, document := range documents {
+		var reservation legacy.Program
+		if err := json.Unmarshal(document, &reservation); err != nil {
+			return nil, err
+		}
+		reservations = append(reservations, reservation)
+	}
+	return reservations, nil
+}
+
 func Write(ctx context.Context, databasePath string, reservations []legacy.Program) error {
 	documents, err := Documents(reservations)
 	if err != nil {

@@ -34,6 +34,32 @@ func Read(ctx context.Context, databasePath, collection string) ([]legacy.Progra
 	return programs, nil
 }
 
+func ReadIDs(ctx context.Context, databasePath, collection string) ([]string, error) {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return database.ReadProgramIDs(ctx, db, collection)
+}
+
+func ReadByID(ctx context.Context, databasePath, collection, programID string) (legacy.Program, bool, error) {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return legacy.Program{}, false, err
+	}
+	defer release()
+	document, found, err := database.ReadProgramByID(ctx, db, collection, programID)
+	if err != nil || !found {
+		return legacy.Program{}, found, err
+	}
+	var program legacy.Program
+	if err := json.Unmarshal(document, &program); err != nil {
+		return legacy.Program{}, false, err
+	}
+	return program, true, nil
+}
+
 func Write(ctx context.Context, databasePath, collection string, programs []legacy.Program) error {
 	documents := make([]database.ProgramDocument, 0, len(programs))
 	for _, program := range programs {

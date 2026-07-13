@@ -34,6 +34,26 @@ func ReadReservations(ctx context.Context, db *sql.DB) ([]json.RawMessage, error
 	return documents, nil
 }
 
+func ReadReservationsDue(ctx context.Context, db *sql.DB, startBefore, endAfter int64) ([]json.RawMessage, error) {
+	rows, err := db.QueryContext(ctx, `SELECT document_json FROM reservations WHERE start_at <= ? AND end_at > ? ORDER BY position`, startBefore, endAfter)
+	if err != nil {
+		return nil, fmt.Errorf("read reservations: %w", err)
+	}
+	defer rows.Close()
+	documents := []json.RawMessage{}
+	for rows.Next() {
+		var document string
+		if err := rows.Scan(&document); err != nil {
+			return nil, fmt.Errorf("read reservation: %w", err)
+		}
+		documents = append(documents, json.RawMessage(document))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read reservations: %w", err)
+	}
+	return documents, nil
+}
+
 func ReplaceReservations(ctx context.Context, db *sql.DB, reservations []ReservationDocument) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
