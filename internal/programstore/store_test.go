@@ -98,3 +98,29 @@ func TestCompleteReturnsNotFoundWithoutPromotingWhenRecordingDisappeared(t *test
 		t.Fatalf("recorded collection after missing completion = %#v, err=%v", got, err)
 	}
 }
+
+func TestClaimCompletionPreventsAbortUntilCompletion(t *testing.T) {
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "strata.db")
+	active := legacy.Program{ID: "active", Recorded: "recorded/active.m2ts"}
+	if err := Upsert(ctx, databasePath, Recording, active); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := ClaimCompletion(ctx, databasePath, active)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	if err := SetAbort(ctx, databasePath, Recording, active.ID, true); !errors.Is(err, ErrProgramFinalizing) {
+		t.Fatalf("abort while finalizing = %v, want ErrProgramFinalizing", err)
+	}
+	if err := Complete(ctx, databasePath, active); err != nil {
+		t.Fatal(err)
+	}
+	completed, found, err := ReadByID(ctx, databasePath, Recorded, active.ID)
+	if err != nil || !found {
+		t.Fatalf("completed found=%v err=%v", found, err)
+	}
+	if _, ok := completed.Raw[completionMarker]; ok {
+		t.Fatalf("completion marker leaked into recorded document: %#v", completed.Raw)
+	}
+}

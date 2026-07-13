@@ -221,6 +221,10 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 	err = programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed)
 	recordingStateMu.Unlock()
 	if err != nil {
+		if errors.Is(err, programstore.ErrProgramNotFound) {
+			_ = programstore.ClearCompletionClaim(context.WithoutCancel(ctx), paths.Database, completed.ID)
+			removeCompletedOutput(completed)
+		}
 		_ = logging.AppendLine(paths.Log, "ERROR: complete recording %s: %v", program.ID, err)
 		return
 	}
@@ -362,6 +366,10 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 		recorded = mergeRecordedProgram(recorded, completed)
 		if err := programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed); err != nil {
+			if errors.Is(err, programstore.ErrProgramNotFound) {
+				_ = programstore.ClearCompletionClaim(context.WithoutCancel(ctx), paths.Database, completed.ID)
+				removeCompletedOutput(completed)
+			}
 			return result, err
 		}
 		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
@@ -386,6 +394,13 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		result.Completed++
 	}
 	return result, nil
+}
+
+func removeCompletedOutput(program legacy.Program) {
+	if program.Recorded == "" {
+		return
+	}
+	_ = os.Remove(filepath.FromSlash(program.Recorded))
 }
 
 func shouldStart(program legacy.Program, recordingIDs map[string]struct{}, now time.Time) bool {
@@ -495,7 +510,19 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if abortRequested {
 		return program, context.Canceled
 	}
+	if databasePath != ":memory:" {
+		claimed, err := programstore.ClaimCompletion(context.WithoutCancel(recordCtx), databasePath, program)
+		if err != nil {
+			return program, err
+		}
+		if !claimed {
+			return program, programstore.ErrProgramNotFound
+		}
+	}
 	if err := replaceRecordingOutput(partPath, finalPath); err != nil {
+		if databasePath != ":memory:" {
+			_ = programstore.ClearCompletionClaim(context.WithoutCancel(recordCtx), databasePath, program.ID)
+		}
 		return program, err
 	}
 	renamed = true
@@ -504,11 +531,17 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 }
 
 func recordingAbortRequested(ctx context.Context, databasePath, programID string) (bool, error) {
+	if databasePath == ":memory:" {
+		return false, nil
+	}
 	program, found, err := programstore.ReadByID(context.WithoutCancel(ctx), databasePath, programstore.Recording, programID)
 	if err != nil {
 		return false, err
 	}
-	return found && program.Abort, nil
+	if !found {
+		return false, programstore.ErrProgramNotFound
+	}
+	return program.Abort, nil
 }
 
 func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {

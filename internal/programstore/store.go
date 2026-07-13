@@ -16,7 +16,13 @@ const (
 	Recorded  = "recorded"
 )
 
-var ErrProgramNotFound = errors.New("program not found")
+const completionMarker = "_strataFinalizing"
+
+var (
+	ErrProgramNotFound   = errors.New("program not found")
+	ErrProgramAborted    = errors.New("program was aborted")
+	ErrProgramFinalizing = errors.New("program is finalizing")
+)
 
 func Read(ctx context.Context, databasePath, collection string) ([]legacy.Program, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
@@ -96,12 +102,17 @@ func Upsert(ctx context.Context, databasePath, collection string, program legacy
 }
 
 func Update(ctx context.Context, databasePath, collection, programID string, update func(legacy.Program) (legacy.Program, error)) error {
+	_, err := UpdateFound(ctx, databasePath, collection, programID, update)
+	return err
+}
+
+func UpdateFound(ctx context.Context, databasePath, collection, programID string, update func(legacy.Program) (legacy.Program, error)) (bool, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer release()
-	_, err = database.UpdateProgramDocument(ctx, db, collection, programID, func(document json.RawMessage) (json.RawMessage, error) {
+	return database.UpdateProgramDocument(ctx, db, collection, programID, func(document json.RawMessage) (json.RawMessage, error) {
 		var current legacy.Program
 		if err := json.Unmarshal(document, &current); err != nil {
 			return nil, err
@@ -112,12 +123,44 @@ func Update(ctx context.Context, databasePath, collection, programID string, upd
 		}
 		return json.Marshal(updated)
 	})
-	return err
 }
 
 func SetAbort(ctx context.Context, databasePath, collection, programID string, abort bool) error {
 	return Update(ctx, databasePath, collection, programID, func(program legacy.Program) (legacy.Program, error) {
+		if _, finalizing := program.Raw[completionMarker]; finalizing {
+			return program, ErrProgramFinalizing
+		}
 		program.Abort = abort
+		return program, nil
+	})
+}
+
+func ClaimCompletion(ctx context.Context, databasePath string, program legacy.Program) (bool, error) {
+	return UpdateFound(ctx, databasePath, Recording, program.ID, func(current legacy.Program) (legacy.Program, error) {
+		if current.Abort {
+			return current, ErrProgramAborted
+		}
+		if _, finalizing := current.Raw[completionMarker]; finalizing {
+			return current, ErrProgramFinalizing
+		}
+		current.Recorded = program.Recorded
+		current.PID = 0
+		if current.Raw == nil {
+			current.Raw = make(map[string]json.RawMessage)
+		}
+		for _, key := range []string{"priority", "tuner", "command"} {
+			if value, ok := program.Raw[key]; ok {
+				current.Raw[key] = value
+			}
+		}
+		current.Raw[completionMarker] = json.RawMessage(`true`)
+		return current, nil
+	})
+}
+
+func ClearCompletionClaim(ctx context.Context, databasePath, programID string) error {
+	return Update(ctx, databasePath, Recording, programID, func(program legacy.Program) (legacy.Program, error) {
+		delete(program.Raw, completionMarker)
 		return program, nil
 	})
 }
@@ -171,6 +214,7 @@ func mergeCompletedProgramDocuments(currentDocument, completedDocument json.RawM
 			}
 		}
 	}
+	delete(current.Raw, completionMarker)
 	return json.Marshal(current)
 }
 
