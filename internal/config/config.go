@@ -202,9 +202,6 @@ func loadDocument(b []byte) (*Config, error) {
 	if _, ok := recordingRaw["startMargin"]; !ok {
 		doc.Recording.StartMargin = 15
 	}
-	if doc.Recording.StartMargin < 0 || doc.Recording.EndMargin < 0 {
-		return nil, fmt.Errorf("recording margins must not be negative")
-	}
 	if doc.Recording.LowSpace.Action != "remove" && doc.Recording.LowSpace.Action != "stop" {
 		return nil, fmt.Errorf("recording.lowSpace.action must be remove or stop")
 	}

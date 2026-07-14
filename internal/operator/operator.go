@@ -708,6 +708,9 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 			cancel()
 		})
 		defer endTimer.Stop()
+	} else if recordingEndMargin(cfg) < 0 {
+		endReached.Store(true)
+		cancel()
 	}
 	if setter, ok := source.(prioritySetter); ok {
 		setter.SetPriority(programPriority(cfg, program))
@@ -842,14 +845,16 @@ func recordingEndMargin(cfg *config.Config) time.Duration {
 }
 
 func marginDuration(seconds int) time.Duration {
-	if seconds <= 0 {
-		return 0
+	maxDuration := time.Duration(1<<63 - 1)
+	maxSeconds := int64(maxDuration / time.Second)
+	seconds64 := int64(seconds)
+	if seconds64 > maxSeconds {
+		return maxDuration
 	}
-	maxSeconds := int64((1<<63 - 1) / int64(time.Second))
-	if int64(seconds) > maxSeconds {
-		return time.Duration(1<<63 - 1)
+	if seconds64 < -maxSeconds {
+		return -maxDuration
 	}
-	return time.Duration(seconds) * time.Second
+	return time.Duration(seconds64) * time.Second
 }
 
 func recordingAbortRequested(ctx context.Context, databasePath, programID string) (bool, error) {

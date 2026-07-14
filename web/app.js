@@ -4471,8 +4471,8 @@
     var port = requiredInteger("strataWebPort", "ポート", 1, 65535);
     var directory = requiredString("strataRecordingDirectory", "録画保存先");
     var filenameFormat = requiredString("strataFilenameFormat", "ファイル名形式");
-    var startMargin = requiredInteger("strataRecordingStartMargin", "録画開始マージン", 0, Number.MAX_SAFE_INTEGER);
-    var endMargin = requiredInteger("strataRecordingEndMargin", "録画終了マージン", 0, Number.MAX_SAFE_INTEGER);
+    var startMargin = requiredInteger("strataRecordingStartMargin", "録画開始マージン", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    var endMargin = requiredInteger("strataRecordingEndMargin", "録画終了マージン", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
     var threshold = requiredInteger("strataLowSpaceThreshold", "空き容量しきい値", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxAge = requiredInteger("strataPreviewCacheMaxAge", "プレビュー保持日数", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxSize = requiredInteger("strataPreviewCacheMaxSize", "プレビュー上限", 0, Number.MAX_SAFE_INTEGER);

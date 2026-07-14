@@ -218,6 +218,12 @@ func TestShouldStartWithConfiguredMargin(t *testing.T) {
 	if shouldStartWithMargin(program, nil, now, 5*time.Second) {
 		t.Fatal("program started before the configured start margin")
 	}
+	if shouldStartWithMargin(program, nil, now, -10*time.Second) {
+		t.Fatal("program started before a negative configured start margin")
+	}
+	if !shouldStartWithMargin(program, nil, now.Add(19*time.Second), -10*time.Second) {
+		t.Fatal("program did not start after a negative configured start margin")
+	}
 }
 
 func TestRecordProgramHonorsConfiguredEndMargin(t *testing.T) {
@@ -235,6 +241,24 @@ func TestRecordProgramHonorsConfiguredEndMargin(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed < 900*time.Millisecond {
 		t.Fatalf("recording ended after %s; configured end margin was not applied", elapsed)
+	}
+}
+
+func TestRecordProgramHonorsNegativeEndMargin(t *testing.T) {
+	dir := t.TempDir()
+	streamer := &endMarginStreamer{closed: make(chan struct{})}
+	cfg := &config.Config{
+		RecordedDir:        dir,
+		RecordedFormat:     "<id>.m2ts",
+		RecordingEndMargin: -1,
+	}
+	program := legacy.Program{ID: "1", Start: time.Now().UnixMilli(), End: time.Now().Add(1500 * time.Millisecond).UnixMilli()}
+	started := time.Now()
+	if _, err := recordProgram(context.Background(), cfg, streamer, program); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < 250*time.Millisecond || elapsed > 1*time.Second {
+		t.Fatalf("recording ended after %s; negative configured end margin was not applied", elapsed)
 	}
 }
 

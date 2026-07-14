@@ -109,15 +109,20 @@ func TestRecordingMarginsUseDefaultsAndMapToRuntimeConfig(t *testing.T) {
 	}
 }
 
-func TestParseRejectsNegativeRecordingMargins(t *testing.T) {
+func TestParseAcceptsNegativeRecordingMargins(t *testing.T) {
 	doc := DefaultDocument()
-	doc.Recording.StartMargin = -1
+	doc.Recording.StartMargin = -3
+	doc.Recording.EndMargin = -7
 	b, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Parse(b); err == nil {
-		t.Fatal("negative recording margin was accepted")
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != -3 || cfg.RecordingEndMargin != -7 {
+		t.Fatalf("recording margins = %d/%d, want -3/-7", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
 	}
 }
 
