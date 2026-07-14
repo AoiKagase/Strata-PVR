@@ -153,8 +153,15 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	retryPendingCompletions(ctx, paths.Database)
 	recordingStateMu.Unlock()
 	retryPendingReservationDeletes(ctx, paths.Database)
-	startBefore := now.Add(recordingStartMargin(cfg)).UnixMilli()
+	startMargin := recordingStartMargin(cfg)
+	endMargin := recordingEndMargin(cfg)
+	startBefore := now.Add(startMargin).UnixMilli()
 	endAfter := now.UnixMilli()
+	if endMargin < 0 {
+		// ReadDue compares the guide's unadjusted end time. Shift the query
+		// boundary so a negative margin shortens the late-start window too.
+		endAfter = now.Add(-endMargin).UnixMilli()
+	}
 	recordingIDs, err := programstore.ReadIDs(ctx, paths.Database, programstore.Recording)
 	if err != nil {
 		return err
@@ -203,7 +210,7 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	}
 	pending := make([]legacy.Program, 0)
 	for _, reserve := range reserves {
-		if !shouldStartWithMargin(reserve, recordingIDSet, now, recordingStartMargin(cfg)) {
+		if !shouldStartWithMargins(reserve, recordingIDSet, now, startMargin, endMargin) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
@@ -405,7 +412,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 	result := Result{}
 	for _, reserve := range reserves {
-		if !shouldStartWithMargin(reserve, recordingIDSet, now, recordingStartMargin(cfg)) {
+		if !shouldStartWithMargins(reserve, recordingIDSet, now, recordingStartMargin(cfg), recordingEndMargin(cfg)) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
@@ -638,7 +645,14 @@ func shouldStart(program legacy.Program, recordingIDs map[string]struct{}, now t
 }
 
 func shouldStartWithMargin(program legacy.Program, recordingIDs map[string]struct{}, now time.Time, startMargin time.Duration) bool {
+	return shouldStartWithMargins(program, recordingIDs, now, startMargin, 0)
+}
+
+func shouldStartWithMargins(program legacy.Program, recordingIDs map[string]struct{}, now time.Time, startMargin, endMargin time.Duration) bool {
 	if program.IsSkip || program.End <= now.UnixMilli() {
+		return false
+	}
+	if endMargin < 0 && !time.UnixMilli(program.End).Add(endMargin).After(now) {
 		return false
 	}
 	if _, ok := recordingIDs[program.ID]; ok {

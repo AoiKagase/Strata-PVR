@@ -226,6 +226,25 @@ func TestShouldStartWithConfiguredMargin(t *testing.T) {
 	}
 }
 
+func TestShouldNotStartAfterConfiguredNegativeEndMargin(t *testing.T) {
+	now := time.Unix(1000, 0)
+	program := legacy.Program{
+		ID:    "end-margin",
+		Start: now.Add(-10 * time.Minute).UnixMilli(),
+		End:   now.Add(time.Minute).UnixMilli(),
+	}
+	if shouldStartWithMargins(program, nil, now, 15*time.Second, -2*time.Minute) {
+		t.Fatal("program started after its configured end margin had elapsed")
+	}
+	if !shouldStartWithMargins(program, nil, now, 15*time.Second, 0) {
+		t.Fatal("program did not start while its unadjusted recording window was open")
+	}
+	program.End = now.Add(-time.Minute).UnixMilli()
+	if shouldStartWithMargins(program, nil, now, 15*time.Second, 2*time.Minute) {
+		t.Fatal("positive end margin revived a reservation after the guide end")
+	}
+}
+
 func TestRecordProgramHonorsConfiguredEndMargin(t *testing.T) {
 	dir := t.TempDir()
 	streamer := &endMarginStreamer{closed: make(chan struct{})}
@@ -342,6 +361,51 @@ func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {
 	}
 	close(release)
 	recordings.Wait()
+}
+
+func TestStartPendingRecordingsSkipsElapsedNegativeEndMargin(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1000, 0)
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Database: filepath.Join(dir, "data", "strata.db"),
+		Log:      filepath.Join(dir, "log", "operator"),
+	})
+	program := legacy.Program{
+		ID:      "late",
+		Start:   now.Add(-10 * time.Minute).UnixMilli(),
+		End:     now.Add(time.Minute).UnixMilli(),
+		Channel: legacy.Channel{Type: "GR"},
+	}
+	if err := reservationstore.Write(context.Background(), paths.Database, []legacy.Program{program}); err != nil {
+		t.Fatal(err)
+	}
+
+	streamer := &concurrentStreamer{started: make(chan int64, 1), release: make(chan struct{})}
+	var recordings sync.WaitGroup
+	cfg := &config.Config{
+		RecordedDir:        filepath.Join(dir, "recorded"),
+		RecordedFormat:     "<id>.m2ts",
+		RecordingEndMargin: -120,
+	}
+	if err := startPendingRecordings(context.Background(), paths.runtime(), cfg, streamer, now, &recordings); err != nil {
+		t.Fatal(err)
+	}
+	recordings.Wait()
+	select {
+	case <-streamer.started:
+		t.Fatal("stream was requested after the configured end margin had elapsed")
+	default:
+	}
+	active, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("elapsed reservation was marked recording: %#v", active)
+	}
 }
 
 func TestAbortSkippedRecordingsStopsOnlySkippedAutoReserves(t *testing.T) {
