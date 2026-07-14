@@ -624,8 +624,8 @@
             <div class="config-form">
               <label><span>保存先</span><input id="strataRecordingDirectory" class="config-form-control" type="text" autocomplete="off" required></label>
               <label><span>ファイル名形式</span><input id="strataFilenameFormat" class="config-form-control" type="text" autocomplete="off" required></label>
-              <label><span>録画開始マージン（秒、負数可）</span><input id="strataRecordingStartMargin" class="config-form-control" type="number" step="1" inputmode="numeric" required></label>
-              <label><span>録画終了マージン（秒、負数可）</span><input id="strataRecordingEndMargin" class="config-form-control" type="number" step="1" inputmode="numeric" required></label>
+              <label><span>録画開始マージン（秒、負数可）</span><input id="strataRecordingStartMargin" class="config-form-control" type="number" step="1" inputmode="numeric" title="正数で番組開始時刻より前、負数で番組開始時刻より後に録画を開始します。" required></label>
+              <label><span>録画終了マージン（秒、負数可）</span><input id="strataRecordingEndMargin" class="config-form-control" type="number" step="1" inputmode="numeric" title="正数で番組終了時刻より後、負数で番組終了時刻より前に録画を終了します。" required></label>
               <label><span>録画優先度</span><input id="strataRecordingPriority" class="config-form-control" type="number" step="1" inputmode="numeric"></label>
               <label><span>競合優先度</span><input id="strataConflictedPriority" class="config-form-control" type="number" step="1" inputmode="numeric"></label>
               <label><span>空き容量しきい値 MB</span><input id="strataLowSpaceThreshold" class="config-form-control" type="number" min="0" step="1" inputmode="numeric"></label>
