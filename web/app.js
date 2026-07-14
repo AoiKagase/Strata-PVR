@@ -2,6 +2,7 @@
   var hiddenChannelsStorageKey = "strata-pvr.scheduleHiddenChannels";
   var listFiltersStorageKey = "strata-pvr.listFilters";
   var recordedPageSizeStorageKey = "strata-pvr.recordedPageSize";
+  var recordedViewModeStorageKey = "strata-pvr.recordedViewMode";
   var scheduleZoomStorageKey = "strata-pvr.scheduleZoomLevel";
   var scheduleWindowHoursByMode = {
     "day": 24,
@@ -73,6 +74,7 @@
     searchPage: 1,
     recordedPage: 1,
     recordedPageSize: loadRecordedPageSize(),
+    recordedViewMode: loadRecordedViewMode(),
     programStateIndex: { reserves: {}, recording: {} },
     realtimeChannel: null,
     rulesLoaded: false,
@@ -163,6 +165,30 @@
     try {
       if (window.localStorage) {
         window.localStorage.setItem(recordedPageSizeStorageKey, String(state.recordedPageSize));
+      }
+    } catch (error) {
+      // localStorage can be unavailable in private or embedded contexts.
+    }
+  }
+
+  function normalizeRecordedViewMode(value) {
+    return value === "tile" ? "tile" : "list";
+  }
+
+  function loadRecordedViewMode() {
+    try {
+      var raw = window.localStorage ? window.localStorage.getItem(recordedViewModeStorageKey) : "";
+      return normalizeRecordedViewMode(raw);
+    } catch (error) {
+      return "list";
+    }
+  }
+
+  function saveRecordedViewMode() {
+    state.recordedViewMode = normalizeRecordedViewMode(state.recordedViewMode);
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(recordedViewModeStorageKey, state.recordedViewMode);
       }
     } catch (error) {
       // localStorage can be unavailable in private or embedded contexts.
@@ -2817,7 +2843,16 @@
     return resource === "recorded" && Boolean(program && program.isRemoved);
   }
 
+  function renderProgramPreviewPlaceholder() {
+    var placeholder = document.createElement("div");
+    placeholder.className = "program-preview-placeholder";
+    placeholder.setAttribute("aria-hidden", "true");
+    placeholder.textContent = "プレビューなし";
+    return placeholder;
+  }
+
   function renderProgramPreview(program, resource) {
+    var layout = arguments[2] || "";
     if (!program || !program.recorded || (resource !== "recording" && resource !== "recorded")) {
       return null;
     }
@@ -2832,7 +2867,11 @@
     image.addEventListener("error", function () {
       var row = image.closest(".program-row");
       if (row) {
-        row.classList.remove("with-preview");
+        if (layout === "tile") {
+          image.replaceWith(renderProgramPreviewPlaceholder());
+        } else {
+          row.classList.remove("with-preview");
+        }
         if (resource === "recorded") {
           renderRecordedPreviewWarning(row);
         }
@@ -2965,6 +3004,9 @@
     options = options || {};
     var item = document.createElement("article");
     item.className = "program-row";
+    if (options.layout === "tile") {
+      item.className += " program-tile";
+    }
     if (options.compactActions) {
       item.className += " compact-actions";
     }
@@ -3002,9 +3044,11 @@
     if (options.preview) {
       var previewResource = options.previewResource || "recording";
       var previewUnavailable = programPreviewUnavailable(program, previewResource);
-      var preview = renderProgramPreview(program, previewResource);
+      var preview = renderProgramPreview(program, previewResource, options.layout);
       if (preview) {
         item.appendChild(preview);
+      } else if (options.layout === "tile") {
+        item.appendChild(renderProgramPreviewPlaceholder());
       } else {
         item.classList.remove("with-preview");
       }
@@ -3240,13 +3284,15 @@
     if (!root) {
       return;
     }
+    options = options || {};
+    var listClassName = options.listClassName ? " " + options.listClassName : "";
     root.innerHTML = "";
     if (!items || items.length === 0) {
-      root.className = "list empty";
+      root.className = ("list empty" + listClassName).trim();
       root.textContent = emptyText;
       return;
     }
-    root.className = "list";
+    root.className = ("list" + listClassName).trim();
     items.slice(0, limit || 8).forEach(function (program) {
       root.appendChild(renderProgramRow(program, actions, true, options));
     });
@@ -3450,6 +3496,18 @@
         button.disabled = item.disabled;
       });
     });
+  }
+
+  function updateRecordedViewModeControls() {
+    state.recordedViewMode = normalizeRecordedViewMode(state.recordedViewMode);
+    document.querySelectorAll("[data-recorded-view-mode]").forEach(function (button) {
+      var active = button.getAttribute("data-recorded-view-mode") === state.recordedViewMode;
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function recordedViewListClass() {
+    return state.recordedViewMode === "tile" ? "recorded-list--tile" : "recorded-list--list";
   }
 
   function renderOnAirList() {
@@ -5273,12 +5331,13 @@
     updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
     updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
     updateRecordedPaginationControls(filteredRecorded.length);
+    updateRecordedViewModeControls();
 
     renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
+    renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded", layout: state.recordedViewMode, listClassName: recordedViewListClass() });
     renderOnAirList();
     renderSchedule();
     renderSearch();
@@ -5771,6 +5830,24 @@
     });
   }
 
+  function bindRecordedViewMode() {
+    document.querySelectorAll("[data-recorded-view-mode]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var mode = normalizeRecordedViewMode(button.getAttribute("data-recorded-view-mode"));
+        if (mode === state.recordedViewMode) {
+          return;
+        }
+        state.recordedViewMode = mode;
+        saveRecordedViewMode();
+        updateRecordedViewModeControls();
+        render();
+        announce(mode === "tile" ? "録画済みをタイル表示に切り替えました" : "録画済みを一覧表示に切り替えました");
+        button.focus({ preventScroll: true });
+      });
+    });
+    updateRecordedViewModeControls();
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     syncStickyOffsets();
     window.addEventListener("resize", syncStickyOffsets);
@@ -5803,6 +5880,7 @@
     if (recordedCleanupButton) {
       recordedCleanupButton.addEventListener("click", cleanupRecorded);
     }
+    bindRecordedViewMode();
     bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     bindRecordedPagination();

@@ -43,6 +43,9 @@
     <symbol id="icon-list" viewBox="0 0 24 24">
       <path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path>
     </symbol>
+    <symbol id="icon-grid" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect>
+    </symbol>
     <symbol id="icon-maximize" viewBox="0 0 24 24">
       <path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
     </symbol>
@@ -313,6 +316,16 @@
           <p>録画済み番組の再生、変換、ダウンロード、削除を行います。</p>
         </div>
         <div class="panel-actions">
+          <div class="view-toggle" role="group" aria-label="録画済みの表示形式">
+            <button class="view-toggle-button" data-recorded-view-mode="list" type="button" aria-pressed="true" title="録画済みを一覧で表示">
+              <svg class="icon" aria-hidden="true"><use href="#icon-list"></use></svg>
+              <span>一覧</span>
+            </button>
+            <button class="view-toggle-button" data-recorded-view-mode="tile" type="button" aria-pressed="false" title="録画済みをタイルで表示">
+              <svg class="icon" aria-hidden="true"><use href="#icon-grid"></use></svg>
+              <span>タイル</span>
+            </button>
+          </div>
           <button id="recordedCleanupButton" type="button" title="実ファイルが見つからない録画済み項目を整理">クリーンアップ</button>
         </div>
       </div>

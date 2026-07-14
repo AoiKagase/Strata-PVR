@@ -669,9 +669,15 @@ func TestNativeDashboardMutationRoutesAreExtensionless(t *testing.T) {
 
 func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 	files := map[string][]string{
+		filepath.Join("..", "..", "web", "index.html"): {
+			`data-recorded-view-mode="list"`,
+			`data-recorded-view-mode="tile"`,
+			`<symbol id="icon-grid"`,
+		},
 		filepath.Join("..", "..", "web", "app.js"): {
 			`function programPreviewURL(program, resource, size)`,
 			`function renderProgramPreview(program, resource)`,
+			`function bindRecordedViewMode()`,
 			`function activeRecordingPrograms()`,
 			`return (state.recording || []).filter(function (program)`,
 			`if (active && !active.abort)`,
@@ -686,6 +692,7 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.program-row.with-preview`,
 			`.program-preview-image`,
+			`.recorded-list--tile`,
 		},
 	}
 	for path, wants := range files {

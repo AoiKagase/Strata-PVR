@@ -662,6 +662,48 @@ h3 {
   gap: 8px;
 }
 
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-control-soft);
+}
+
+.view-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.view-toggle-button:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-control);
+  color: var(--ink);
+}
+
+.view-toggle-button[aria-pressed="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-hover-surface);
+  color: var(--accent-strong);
+}
+
+.view-toggle-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
 .schedule-controls {
   display: flex;
   flex-wrap: wrap;
@@ -867,6 +909,19 @@ summary:focus-visible,
   background: var(--surface-muted);
 }
 
+.program-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .program-row.preview-unavailable {
   padding-right: 10px;
   padding-left: 10px;
@@ -1003,6 +1058,55 @@ summary:focus-visible,
 .program-row .program-category-chip {
   color: var(--muted);
   font-size: 11px;
+}
+
+.recorded-list--tile {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+
+.recorded-list--tile .program-row {
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  gap: 10px;
+  min-height: 100%;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.recorded-list--tile .program-row:last-child {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.recorded-list--tile .program-row.with-preview {
+  grid-template-columns: 1fr;
+}
+
+.recorded-list--tile .program-preview-image,
+.recorded-list--tile .program-preview-placeholder {
+  width: 100%;
+  border-radius: 6px;
+}
+
+.recorded-list--tile .program-row-body {
+  align-content: start;
+  gap: 7px;
+}
+
+.recorded-list--tile .program-title-button {
+  min-height: 32px;
+}
+
+.recorded-list--tile .recorded-actions {
+  align-self: end;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.recorded-list--tile .program-row.preview-unavailable {
+  padding: 12px;
 }
 
 .rule-list-controls {
@@ -2708,6 +2812,10 @@ body.view-settings .settings-grid {
   select,
   input:not([type="checkbox"]),
   textarea {
+    min-height: 44px;
+  }
+
+  .view-toggle-button {
     min-height: 44px;
   }
 
