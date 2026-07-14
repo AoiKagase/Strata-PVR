@@ -39,7 +39,7 @@ func (s *endMarginStreamer) ProgramStream(context.Context, int64, bool) (io.Read
 
 func (s *endMarginStreamer) Read([]byte) (int, error) {
 	<-s.closed
-	return 0, io.EOF
+	return 0, errors.New("stream closed at recording end")
 }
 
 func (s *endMarginStreamer) Close() error {

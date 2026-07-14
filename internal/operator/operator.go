@@ -749,11 +749,12 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 		return program, err
 	}
 	if _, err := io.Copy(out, stream); err != nil {
-		out.Close()
 		if recordCtx.Err() != nil && !endReached.Load() {
+			out.Close()
 			return program, recordCtx.Err()
 		}
 		if !endReached.Load() {
+			out.Close()
 			return program, err
 		}
 	}
