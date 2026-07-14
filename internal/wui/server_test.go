@@ -2913,7 +2913,7 @@ func TestAPIRecordingPreviewUsesReliableTailInput(t *testing.T) {
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recording.m2ts")
 	body := strings.Repeat("a", int(recordingPreviewTailBytes)+10)
-	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(recordedPath+".part", []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	old := runFFmpegPreview
@@ -3142,6 +3142,27 @@ func TestGrowingFileReaderFollowsAppends(t *testing.T) {
 	}
 }
 
+func TestGrowingFileReaderFollowsPartRename(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "recording.m2ts")
+	partPath := filePath + ".part"
+	if err := os.WriteFile(partPath, []byte("live"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reader := newGrowingFileReader(context.Background(), partPath, 0)
+	initial := make([]byte, 2)
+	if _, err := io.ReadFull(reader, initial); err != nil || string(initial) != "li" {
+		t.Fatalf("initial read=%q err=%v", initial, err)
+	}
+	if err := os.Rename(partPath, filePath); err != nil {
+		t.Fatal(err)
+	}
+	completed := make([]byte, 2)
+	if _, err := io.ReadFull(reader, completed); err != nil || string(completed) != "ve" {
+		t.Fatalf("completed read=%q err=%v", completed, err)
+	}
+}
+
 func installFakeFFprobe(t *testing.T, output string, probeErr error) func() {
 	t.Helper()
 	old := runFFprobeFormat
@@ -3199,7 +3220,7 @@ func TestAPIRecordingWatchMP4UsesGeneratedGrowingInput(t *testing.T) {
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recording.m2ts")
 	body := "old!live" + strings.Repeat("x", int(recordingWatchInitialBytes)-len("live"))
-	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(recordedPath+".part", []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {

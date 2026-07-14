@@ -2186,8 +2186,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		legacyHTTPError(w, r, http.StatusGone)
 		return
 	}
-	filePath := filepath.FromSlash(program.Recorded)
-	info, err := os.Stat(filePath)
+	filePath, info, err := statProgramFile(program.Recorded, collection == programstore.Recording)
 	if err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
@@ -2318,8 +2317,8 @@ func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, 
 		legacyHTTPError(w, r, http.StatusGone)
 		return
 	}
-	filePath := filepath.FromSlash(program.Recorded)
-	if _, err := os.Stat(filePath); err != nil {
+	filePath, _, err := statProgramFile(program.Recorded, collection == programstore.Recording)
+	if err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
 			return
@@ -2574,6 +2573,7 @@ func probeMediaFormat(ctx context.Context, filePath string) (mediaFormat, error)
 }
 
 func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, initialBytes int64) {
+	filePath = completedRecordingPath(filePath)
 	offset := int64(0)
 	if info, err := os.Stat(filePath); err == nil {
 		offset = info.Size() - initialBytes
@@ -2597,6 +2597,7 @@ func streamGrowingFile(w http.ResponseWriter, r *http.Request, filePath string, 
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+			filePath = completedRecordingPath(filePath)
 			info, err := os.Stat(filePath)
 			if err != nil {
 				return
@@ -2644,10 +2645,11 @@ func (r *growingFileReader) Read(p []byte) (int, error) {
 			return 0, r.ctx.Err()
 		default:
 		}
-		file, err := os.Open(r.filePath)
+		file, resolvedPath, err := openGrowingFile(r.filePath)
 		if err != nil {
 			return 0, err
 		}
+		r.filePath = resolvedPath
 		if _, err := file.Seek(r.offset, io.SeekStart); err != nil {
 			_ = file.Close()
 			return 0, err
@@ -2672,6 +2674,30 @@ func (r *growingFileReader) Read(p []byte) (int, error) {
 		case <-timer.C:
 		}
 	}
+}
+
+func openGrowingFile(filePath string) (*os.File, string, error) {
+	file, err := os.Open(filePath)
+	if err == nil || !os.IsNotExist(err) || !strings.HasSuffix(filePath, ".part") {
+		return file, filePath, err
+	}
+	completedPath := strings.TrimSuffix(filePath, ".part")
+	file, err = os.Open(completedPath)
+	return file, completedPath, err
+}
+
+func completedRecordingPath(filePath string) string {
+	if !strings.HasSuffix(filePath, ".part") {
+		return filePath
+	}
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		return filePath
+	}
+	completedPath := strings.TrimSuffix(filePath, ".part")
+	if _, err := os.Stat(completedPath); err == nil {
+		return completedPath
+	}
+	return filePath
 }
 
 func copyFileFromOffset(w io.Writer, filePath string, offset int64) error {
@@ -2755,8 +2781,7 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, co
 		legacyHTTPError(w, r, http.StatusGone)
 		return
 	}
-	filePath := filepath.FromSlash(program.Recorded)
-	info, err := os.Stat(filePath)
+	filePath, info, err := statProgramFile(program.Recorded, collection == programstore.Recording)
 	if err != nil {
 		if os.IsNotExist(err) {
 			legacyHTTPError(w, r, http.StatusGone)
@@ -4104,6 +4129,22 @@ func findProgram(programs []legacy.Program, id string) int {
 		}
 	}
 	return -1
+}
+
+func statProgramFile(recordedPath string, recording bool) (string, os.FileInfo, error) {
+	filePath := filepath.FromSlash(recordedPath)
+	if recording {
+		partPath := filePath + ".part"
+		info, err := os.Stat(partPath)
+		if err == nil {
+			return partPath, info, nil
+		}
+		if !os.IsNotExist(err) {
+			return partPath, nil, err
+		}
+	}
+	info, err := os.Stat(filePath)
+	return filePath, info, err
 }
 
 func removeProgram(programs []legacy.Program, id string) []legacy.Program {
