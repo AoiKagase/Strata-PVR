@@ -4336,6 +4336,8 @@
     setControlValue("strataAuthEnabled", authentication.enabled);
     setControlValue("strataRecordingDirectory", recording.directory);
     setControlValue("strataFilenameFormat", recording.filenameFormat);
+    setControlValue("strataRecordingStartMargin", recording.startMargin === undefined ? 15 : recording.startMargin);
+    setControlValue("strataRecordingEndMargin", recording.endMargin === undefined ? 0 : recording.endMargin);
     setControlValue("strataRecordingPriority", (cfg.mirakurun || {}).recordingPriority);
     setControlValue("strataConflictedPriority", (cfg.mirakurun || {}).conflictedPriority);
     setControlValue("strataLowSpaceThreshold", lowSpace.thresholdMB);
@@ -4469,12 +4471,14 @@
     var port = requiredInteger("strataWebPort", "ポート", 1, 65535);
     var directory = requiredString("strataRecordingDirectory", "録画保存先");
     var filenameFormat = requiredString("strataFilenameFormat", "ファイル名形式");
+    var startMargin = requiredInteger("strataRecordingStartMargin", "録画開始マージン", 0, Number.MAX_SAFE_INTEGER);
+    var endMargin = requiredInteger("strataRecordingEndMargin", "録画終了マージン", 0, Number.MAX_SAFE_INTEGER);
     var threshold = requiredInteger("strataLowSpaceThreshold", "空き容量しきい値", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxAge = requiredInteger("strataPreviewCacheMaxAge", "プレビュー保持日数", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxSize = requiredInteger("strataPreviewCacheMaxSize", "プレビュー上限", 0, Number.MAX_SAFE_INTEGER);
     var excluded = strataServiceList("strataExcludedServices", "除外サービス");
     var order = strataServiceList("strataServiceOrder", "サービス順");
-    if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || threshold === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
+    if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || startMargin === null || endMargin === null || threshold === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
       return null;
     }
     var enabled = byId("strataAuthEnabled").checked;
@@ -4503,7 +4507,7 @@
       schema: cfg.schema,
       version: cfg.version,
       mirakurun: { url: mirakurunURL, recordingPriority: Number(controlString("strataRecordingPriority")), conflictedPriority: Number(controlString("strataConflictedPriority")) },
-      recording: { directory: directory, filenameFormat: filenameFormat, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") } },
+      recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") } },
 	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
       web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
       services: { excluded: excluded, order: order },
@@ -4588,6 +4592,8 @@
       ["形式", "Strata config v" + cfg.version],
       ["Mirakurun", (cfg.mirakurun || {}).url],
       ["録画保存先", (cfg.recording || {}).directory],
+      ["録画開始マージン", ((cfg.recording || {}).startMargin === undefined ? 15 : (cfg.recording || {}).startMargin) + " 秒"],
+      ["録画終了マージン", ((cfg.recording || {}).endMargin === undefined ? 0 : (cfg.recording || {}).endMargin) + " 秒"],
       ["待受", ((cfg.web || {}).listenAddress || "") + ":" + ((cfg.web || {}).port || "")],
       ["認証", ((cfg.web || {}).authentication || {}).enabled],
 		["ユーザー", (((cfg.web || {}).authentication || {}).users || []).map(function (user) { return user.username; })]

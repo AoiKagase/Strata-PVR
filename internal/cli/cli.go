@@ -461,6 +461,8 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 	doc.Mirakurun.ConflictedPriority = old.ConflictedPriority
 	doc.Recording.Directory = old.RecordedDir
 	doc.Recording.FilenameFormat = old.RecordedFormat
+	doc.Recording.StartMargin = old.RecordingStartMargin
+	doc.Recording.EndMargin = old.RecordingEndMargin
 	doc.Recording.LowSpace = config.LowSpaceSettings{
 		ThresholdMB: old.StorageLowSpaceThresholdMB, Action: old.StorageLowSpaceAction,
 	}

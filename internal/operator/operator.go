@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"strata-pvr/internal/config"
@@ -152,7 +153,7 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	retryPendingCompletionRollbacks(ctx, paths.Database)
 	recordingStateMu.Unlock()
 	retryPendingReservationDeletes(ctx, paths.Database)
-	startBefore := now.Add(recordStartMargin).UnixMilli()
+	startBefore := now.Add(recordingStartMargin(cfg)).UnixMilli()
 	endAfter := now.UnixMilli()
 	recordingIDs, err := programstore.ReadIDs(ctx, paths.Database, programstore.Recording)
 	if err != nil {
@@ -202,7 +203,7 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	}
 	pending := make([]legacy.Program, 0)
 	for _, reserve := range reserves {
-		if !shouldStart(reserve, recordingIDSet, now) {
+		if !shouldStartWithMargin(reserve, recordingIDSet, now, recordingStartMargin(cfg)) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
@@ -408,7 +409,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 	result := Result{}
 	for _, reserve := range reserves {
-		if !shouldStart(reserve, recordingIDSet, now) {
+		if !shouldStartWithMargin(reserve, recordingIDSet, now, recordingStartMargin(cfg)) {
 			continue
 		}
 		if err := logging.AppendLine(paths.Log, "PREPARE: %s", operatorProgramLogLine(reserve)); err != nil {
@@ -673,13 +674,17 @@ func removeCompletedOutput(program legacy.Program) error {
 }
 
 func shouldStart(program legacy.Program, recordingIDs map[string]struct{}, now time.Time) bool {
+	return shouldStartWithMargin(program, recordingIDs, now, recordStartMargin)
+}
+
+func shouldStartWithMargin(program legacy.Program, recordingIDs map[string]struct{}, now time.Time, startMargin time.Duration) bool {
 	if program.IsSkip || program.End <= now.UnixMilli() {
 		return false
 	}
 	if _, ok := recordingIDs[program.ID]; ok {
 		return false
 	}
-	startAt := time.UnixMilli(program.Start).Add(-recordStartMargin)
+	startAt := time.UnixMilli(program.Start).Add(-startMargin)
 	return !now.Before(startAt)
 }
 
@@ -694,6 +699,16 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	}
 	recordCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	endReached := atomic.Bool{}
+	var endTimer *time.Timer
+	endAt := time.UnixMilli(program.End).Add(recordingEndMargin(cfg))
+	if endAt.After(time.Now()) {
+		endTimer = time.AfterFunc(time.Until(endAt), func() {
+			endReached.Store(true)
+			cancel()
+		})
+		defer endTimer.Stop()
+	}
 	if setter, ok := source.(prioritySetter); ok {
 		setter.SetPriority(programPriority(cfg, program))
 	}
@@ -757,10 +772,12 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	}
 	if _, err := io.Copy(out, stream); err != nil {
 		out.Close()
-		if recordCtx.Err() != nil {
+		if recordCtx.Err() != nil && !endReached.Load() {
 			return program, recordCtx.Err()
 		}
-		return program, err
+		if !endReached.Load() {
+			return program, err
+		}
 	}
 	if err := out.Sync(); err != nil {
 		out.Close()
@@ -769,7 +786,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err := out.Close(); err != nil {
 		return program, err
 	}
-	if recordCtx.Err() != nil {
+	if recordCtx.Err() != nil && !endReached.Load() {
 		return program, recordCtx.Err()
 	}
 	abortRequested, err := recordingAbortRequested(recordCtx, databasePath, program.ID)
@@ -805,6 +822,34 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	renamed = true
 	program.PID = 0
 	return program, nil
+}
+
+func recordingStartMargin(cfg *config.Config) time.Duration {
+	if cfg == nil {
+		return recordStartMargin
+	}
+	if !cfg.RecordingStartMarginSet && cfg.RecordingStartMargin == 0 {
+		return recordStartMargin
+	}
+	return marginDuration(cfg.RecordingStartMargin)
+}
+
+func recordingEndMargin(cfg *config.Config) time.Duration {
+	if cfg == nil {
+		return 0
+	}
+	return marginDuration(cfg.RecordingEndMargin)
+}
+
+func marginDuration(seconds int) time.Duration {
+	if seconds <= 0 {
+		return 0
+	}
+	maxSeconds := int64((1<<63 - 1) / int64(time.Second))
+	if int64(seconds) > maxSeconds {
+		return time.Duration(1<<63 - 1)
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func recordingAbortRequested(ctx context.Context, databasePath, programID string) (bool, error) {

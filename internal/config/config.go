@@ -34,6 +34,8 @@ type MirakurunSettings struct {
 type RecordingSettings struct {
 	Directory      string           `json:"directory"`
 	FilenameFormat string           `json:"filenameFormat"`
+	StartMargin    int              `json:"startMargin"`
+	EndMargin      int              `json:"endMargin"`
 	LowSpace       LowSpaceSettings `json:"lowSpace"`
 }
 
@@ -79,6 +81,9 @@ type Config struct {
 	WUIWebDir                  string
 	NormalizationForm          string
 	RecordedFormat             string
+	RecordingStartMargin       int
+	RecordingStartMarginSet    bool
+	RecordingEndMargin         int
 	RecordingPriority          int
 	ConflictedPriority         int
 	StorageLowSpaceThresholdMB int
@@ -101,6 +106,8 @@ type LegacyConfig struct {
 	WUIOpenPort                int      `json:"wuiOpenPort"`
 	NormalizationForm          string   `json:"normalizationForm"`
 	RecordedFormat             string   `json:"recordedFormat"`
+	RecordingStartMargin       int      `json:"recordingStartMargin"`
+	RecordingEndMargin         int      `json:"recordingEndMargin"`
 	RecordingPriority          int      `json:"recordingPriority"`
 	ConflictedPriority         int      `json:"conflictedPriority"`
 	StorageLowSpaceThresholdMB int      `json:"storageLowSpaceThresholdMB"`
@@ -184,6 +191,20 @@ func loadDocument(b []byte) (*Config, error) {
 	if doc.PreviewCache.MaxAgeDays < 0 || doc.PreviewCache.MaxSizeMB < 0 {
 		return nil, fmt.Errorf("previewCache limits must not be negative")
 	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, err
+	}
+	var recordingRaw map[string]json.RawMessage
+	if err := json.Unmarshal(raw["recording"], &recordingRaw); err != nil {
+		return nil, fmt.Errorf("recording settings must be an object")
+	}
+	if _, ok := recordingRaw["startMargin"]; !ok {
+		doc.Recording.StartMargin = 15
+	}
+	if doc.Recording.StartMargin < 0 || doc.Recording.EndMargin < 0 {
+		return nil, fmt.Errorf("recording margins must not be negative")
+	}
 	if doc.Recording.LowSpace.Action != "remove" && doc.Recording.LowSpace.Action != "stop" {
 		return nil, fmt.Errorf("recording.lowSpace.action must be remove or stop")
 	}
@@ -193,6 +214,9 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.ConflictedPriority = doc.Mirakurun.ConflictedPriority
 	cfg.RecordedDir = doc.Recording.Directory
 	cfg.RecordedFormat = doc.Recording.FilenameFormat
+	cfg.RecordingStartMargin = doc.Recording.StartMargin
+	cfg.RecordingStartMarginSet = recordingRaw != nil && recordingRaw["startMargin"] != nil
+	cfg.RecordingEndMargin = doc.Recording.EndMargin
 	cfg.StorageLowSpaceThresholdMB = doc.Recording.LowSpace.ThresholdMB
 	cfg.StorageLowSpaceAction = doc.Recording.LowSpace.Action
 	cfg.WUIHost = doc.Web.ListenAddress
@@ -230,6 +254,8 @@ func DefaultDocument() Document {
 		Recording: RecordingSettings{
 			Directory:      "./recorded/",
 			FilenameFormat: "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+			StartMargin:    15,
+			EndMargin:      0,
 			LowSpace:       LowSpaceSettings{ThresholdMB: 3000, Action: "remove"},
 		},
 		Web:          WebSettings{ListenAddress: "0.0.0.0", Port: 20772},
@@ -244,6 +270,8 @@ func defaultConfig() *Config {
 		WUIHost:                    "0.0.0.0",
 		WUIPort:                    20772,
 		RecordedFormat:             "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+		RecordingStartMargin:       15,
+		RecordingEndMargin:         0,
 		RecordingPriority:          2,
 		ConflictedPriority:         1,
 		StorageLowSpaceThresholdMB: 3000,
@@ -262,6 +290,8 @@ func defaultLegacyConfig() *LegacyConfig {
 		WUIHost:                    "0.0.0.0",
 		WUIOpenPort:                20772,
 		RecordedFormat:             "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+		RecordingStartMargin:       15,
+		RecordingEndMargin:         0,
 		RecordingPriority:          2,
 		ConflictedPriority:         1,
 		StorageLowSpaceThresholdMB: 3000,

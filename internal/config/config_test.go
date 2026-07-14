@@ -27,6 +27,16 @@ func TestLoadLegacyIgnoresUnknownFieldsAndAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadLegacyRecordingMargins(t *testing.T) {
+	cfg, err := ParseLegacy([]byte(`{"recordingStartMargin":4,"recordingEndMargin":9}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != 4 || cfg.RecordingEndMargin != 9 {
+		t.Fatalf("legacy recording margins = %d/%d, want 4/9", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
+	}
+}
+
 func TestSampleConfigLoads(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "config.sample.json"))
 	if err != nil {
@@ -70,6 +80,44 @@ func TestLoadStrataDocument(t *testing.T) {
 	}
 	if len(cfg.WUIAccounts) != 1 || cfg.WUIAccounts[0].Username != "admin" {
 		t.Fatalf("Strata accounts were not mapped: %#v", cfg.WUIAccounts)
+	}
+}
+
+func TestRecordingMarginsUseDefaultsAndMapToRuntimeConfig(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Recording.StartMargin = 7
+	doc.Recording.EndMargin = 11
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != 7 || cfg.RecordingEndMargin != 11 {
+		t.Fatalf("recording margins = %d/%d, want 7/11", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
+	}
+
+	withoutStart := []byte(`{"schema":"strata/config","version":1,"mirakurun":{"url":"http://127.0.0.1:40772"},"recording":{"directory":"./recorded/","filenameFormat":"<id>.m2ts","lowSpace":{"thresholdMB":0,"action":"remove"}},"web":{"listenAddress":"0.0.0.0","port":20772,"authentication":{"enabled":false}},"services":{}}`)
+	cfg, err = Parse(withoutStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != 15 || cfg.RecordingEndMargin != 0 {
+		t.Fatalf("missing recording margins = %d/%d, want 15/0", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
+	}
+}
+
+func TestParseRejectsNegativeRecordingMargins(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Recording.StartMargin = -1
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse(b); err == nil {
+		t.Fatal("negative recording margin was accepted")
 	}
 }
 

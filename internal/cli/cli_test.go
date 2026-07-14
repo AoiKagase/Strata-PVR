@@ -480,6 +480,19 @@ func TestConvertLegacyConfigWarnsWhenListenersAreMerged(t *testing.T) {
 	}
 }
 
+func TestConvertLegacyConfigMapsRecordingMargins(t *testing.T) {
+	doc, _, err := convertLegacyConfig(&config.LegacyConfig{
+		RecordingStartMargin: 4,
+		RecordingEndMargin:   9,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Recording.StartMargin != 4 || doc.Recording.EndMargin != 9 {
+		t.Fatalf("converted recording margins = %d/%d, want 4/9", doc.Recording.StartMargin, doc.Recording.EndMargin)
+	}
+}
+
 func mustReadCLIFile(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -28,6 +28,25 @@ type fakeStreamer struct {
 	body   string
 }
 
+type endMarginStreamer struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (s *endMarginStreamer) ProgramStream(context.Context, int64, bool) (io.ReadCloser, error) {
+	return s, nil
+}
+
+func (s *endMarginStreamer) Read([]byte) (int, error) {
+	<-s.closed
+	return 0, io.EOF
+}
+
+func (s *endMarginStreamer) Close() error {
+	s.once.Do(func() { close(s.closed) })
+	return nil
+}
+
 type abortAtEOFStreamer struct {
 	databasePath string
 	programID    string
@@ -188,6 +207,35 @@ func (s *concurrentStreamer) ProgramStream(_ context.Context, id int64, _ bool) 
 
 func (f *priorityStreamer) SetPriority(priority int) {
 	f.priority = priority
+}
+
+func TestShouldStartWithConfiguredMargin(t *testing.T) {
+	now := time.Unix(1000, 0)
+	program := legacy.Program{ID: "margin", Start: now.Add(8 * time.Second).UnixMilli(), End: now.Add(time.Hour).UnixMilli()}
+	if !shouldStartWithMargin(program, nil, now, 10*time.Second) {
+		t.Fatal("program was not due within the configured start margin")
+	}
+	if shouldStartWithMargin(program, nil, now, 5*time.Second) {
+		t.Fatal("program started before the configured start margin")
+	}
+}
+
+func TestRecordProgramHonorsConfiguredEndMargin(t *testing.T) {
+	dir := t.TempDir()
+	streamer := &endMarginStreamer{closed: make(chan struct{})}
+	cfg := &config.Config{
+		RecordedDir:        dir,
+		RecordedFormat:     "<id>.m2ts",
+		RecordingEndMargin: 1,
+	}
+	program := legacy.Program{ID: "1", Start: time.Now().UnixMilli(), End: time.Now().Add(100 * time.Millisecond).UnixMilli()}
+	started := time.Now()
+	if _, err := recordProgram(context.Background(), cfg, streamer, program); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < 900*time.Millisecond {
+		t.Fatalf("recording ended after %s; configured end margin was not applied", elapsed)
+	}
 }
 
 func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {

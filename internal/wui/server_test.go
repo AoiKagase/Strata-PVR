@@ -998,6 +998,8 @@ func TestNativeDashboardStrataConfigForm(t *testing.T) {
 			`id="strataListenAddress"`,
 			`id="strataAuthEnabled"`,
 			`id="strataAuthUsers"`,
+			`id="strataRecordingStartMargin"`,
+			`id="strataRecordingEndMargin"`,
 		},
 		filepath.Join("..", "..", "web", "app.js"): {
 			`cfg.schema === "strata/config"`,

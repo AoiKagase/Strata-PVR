@@ -9,6 +9,8 @@
   "recording": {
     "directory": "./recorded/",
     "filenameFormat": "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
+    "startMargin": 15,
+    "endMargin": 0,
     "lowSpace": {
       "thresholdMB": 3000,
       "action": "remove"
