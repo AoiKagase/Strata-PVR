@@ -1475,6 +1475,10 @@
     return window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
   }
 
+  function usesTouchScheduleLayout() {
+    return isMobileScheduleLayout() || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  }
+
   function setScheduleMenuOpen(open) {
     var expanded = Boolean(open);
     document.body.classList.toggle("schedule-menu-open", expanded);
@@ -3741,6 +3745,82 @@
       return;
     }
     renderScheduleGuide(root, channelGroups);
+    renderScheduleTouchList(root, channelGroups);
+  }
+
+  function renderScheduleTouchList(root, channelGroups) {
+    if (!usesTouchScheduleLayout()) {
+      return;
+    }
+    var programs = [];
+    channelGroups.forEach(function (group) {
+      group.programs.forEach(function (program) {
+        programs.push(program);
+      });
+    });
+    programs.sort(function (a, b) {
+      return (a.start || 0) - (b.start || 0);
+    });
+    if (!programs.length) {
+      return;
+    }
+
+    var details = document.createElement("details");
+    details.className = "schedule-touch-list";
+    var summary = document.createElement("summary");
+    summary.textContent = "番組を一覧で操作（" + programs.length + "件）";
+    details.appendChild(summary);
+
+    var list = document.createElement("div");
+    list.className = "list schedule-touch-programs";
+    list.setAttribute("aria-busy", "false");
+    details.appendChild(list);
+    var renderedCount = 0;
+    var renderPending = false;
+
+    function renderProgramChunk() {
+      renderPending = false;
+      if (!details.open || !document.contains(details)) {
+        list.setAttribute("aria-busy", "false");
+        return;
+      }
+      list.setAttribute("aria-busy", "true");
+      var fragment = document.createDocumentFragment();
+      var end = Math.min(programs.length, renderedCount + 40);
+      while (renderedCount < end) {
+        fragment.appendChild(renderProgramRow(programs[renderedCount], [], true, {}));
+        renderedCount += 1;
+      }
+      list.appendChild(fragment);
+      if (renderedCount < programs.length) {
+        renderPending = true;
+        if (window.requestAnimationFrame) {
+          window.requestAnimationFrame(renderProgramChunk);
+        } else {
+          window.setTimeout(renderProgramChunk, 0);
+        }
+        return;
+      }
+      details.dataset.loaded = "true";
+      list.setAttribute("aria-busy", "false");
+    }
+
+    details.addEventListener("toggle", function () {
+      if (!details.open) {
+        list.setAttribute("aria-busy", "false");
+        return;
+      }
+      if (details.dataset.loaded === "true" || renderPending) {
+        return;
+      }
+      renderPending = true;
+      if (window.requestAnimationFrame) {
+        window.requestAnimationFrame(renderProgramChunk);
+      } else {
+        window.setTimeout(renderProgramChunk, 0);
+      }
+    });
+    root.appendChild(details);
   }
 
   function selectedOptionLabel(id, fallback) {
@@ -5469,6 +5549,25 @@
     text(byId(id), tailText(value, 80));
   }
 
+  function renderFilteredListView(filterName) {
+    if (filterName === "reserves") {
+      var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
+      updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
+      updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
+      renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { compactActions: true });
+      return;
+    }
+    if (filterName === "recorded") {
+      var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
+      var pagedRecorded = recordedPageItems(filteredRecorded);
+      updateListCategoryOptions("recordedListCategory", state.recorded, "recorded");
+      updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
+      updateRecordedPaginationControls(filteredRecorded.length);
+      updateRecordedViewModeControls();
+      renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded", layout: state.recordedViewMode, listClassName: recordedViewListClass() });
+    }
+  }
+
   function render() {
     state.programStateIndex = {
       reserves: programByID(state.reserves),
@@ -5476,23 +5575,13 @@
     };
     updateOperationalStatus();
 
-    var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
     var recordedNewestFirst = sortedPrograms(state.recorded, "recorded");
-    var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
-    var pagedRecorded = recordedPageItems(filteredRecorded);
-
-    updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
-    updateListCategoryOptions("recordedListCategory", state.recorded, "recorded");
-    updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
-    updateListFilterSummary("recordedListFilterSummary", filteredRecorded.length, state.recorded.length);
-    updateRecordedPaginationControls(filteredRecorded.length);
-    updateRecordedViewModeControls();
 
     renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
     renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { compactActions: true });
-    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
-    renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded", layout: state.recordedViewMode, listClassName: recordedViewListClass() });
+    renderFilteredListView("reserves");
+    renderFilteredListView("recorded");
     renderOnAirList();
     renderSchedule();
     renderSearch();
@@ -5524,10 +5613,7 @@
       return;
     }
     if (state.currentView === "reserves") {
-      var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
-      updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
-      updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
-      renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { compactActions: true });
+      renderFilteredListView("reserves");
       return;
     }
     if (state.currentView === "status") {
@@ -5804,7 +5890,9 @@
     var sort = byId(sortID);
     var type = byId(typeID);
     var current = state.listFilters[filterName] || {};
-    var renderFiltered = debounce(render, 120);
+    var renderFiltered = debounce(function () {
+      renderFilteredListView(filterName);
+    }, 120);
     if (query) {
       query.value = current.query || "";
       query.addEventListener("input", function () {
@@ -5823,7 +5911,7 @@
           state.recordedPage = 1;
         }
         saveListFilters();
-        render();
+        renderFilteredListView(filterName);
       });
     }
     if (sort) {
@@ -5838,7 +5926,7 @@
           state.recordedPage = 1;
         }
         saveListFilters();
-        render();
+        renderFilteredListView(filterName);
       });
     }
     if (type) {
@@ -5850,7 +5938,7 @@
       type.addEventListener("change", function () {
         state.listFilters[filterName].type = type.value;
         saveListFilters();
-        render();
+        renderFilteredListView(filterName);
       });
     }
   }
@@ -5955,7 +6043,7 @@
         state.recordedPageSize = normalizeRecordedPageSize(pageSize.value);
         state.recordedPage = 1;
         saveRecordedPageSize();
-        render();
+        renderFilteredListView("recorded");
       });
     });
     [
@@ -5984,7 +6072,7 @@
         button.addEventListener("click", function () {
           var filteredRecorded = sortedPrograms(filteredPrograms(state.recorded, "recorded"), "recorded");
           state.recordedPage = Math.max(1, Math.min(recordedPageCount(filteredRecorded.length), control.page()));
-          render();
+          renderFilteredListView("recorded");
           var firstRow = byId("recordedListPage") && byId("recordedListPage").querySelector(".program-title-button");
           if (firstRow && typeof firstRow.focus === "function") {
             firstRow.focus({ preventScroll: true });
@@ -6004,8 +6092,7 @@
         }
         state.recordedViewMode = mode;
         saveRecordedViewMode();
-        updateRecordedViewModeControls();
-        render();
+        renderFilteredListView("recorded");
         announce(mode === "tile" ? "録画済みをタイル表示に切り替えました" : "録画済みを一覧表示に切り替えました");
         button.focus({ preventScroll: true });
       });
@@ -6055,12 +6142,16 @@
       query: "reserveListQuery",
       type: "reserveListType",
       sort: "reserveListSort"
+    }, function () {
+      renderFilteredListView("reserves");
     });
     resetListFilter("recorded", {
       button: "recordedListFilterReset",
       category: "recordedListCategory",
       query: "recordedListQuery",
       sort: "recordedListSort"
+    }, function () {
+      renderFilteredListView("recorded");
     });
     var ruleListQuery = byId("ruleListQuery");
     if (ruleListQuery) {

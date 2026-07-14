@@ -449,6 +449,68 @@ func TestNativeDashboardAssetsServe(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardTextAssetsSupportDeflate(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.WebRoot = filepath.Clean(filepath.Join("..", "..", "web"))
+	handler := newTestHandler(t, paths, &config.Config{})
+
+	req := httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("app.js status=%d body=%q", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Encoding"); got != "deflate" {
+		t.Fatalf("Content-Encoding=%q", got)
+	}
+	if got := res.Header().Get("Vary"); got != "Accept-Encoding" {
+		t.Fatalf("Vary=%q", got)
+	}
+	compressedSize := res.Body.Len()
+	zr, err := zlib.NewReader(bytes.NewReader(res.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decompressed, err := io.ReadAll(zr)
+	if err != nil {
+		_ = zr.Close()
+		t.Fatal(err)
+	}
+	if err := zr.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(decompressed, []byte("renderScheduleTouchList")) {
+		t.Fatal("deflated app.js body missing schedule touch list implementation")
+	}
+	if compressedSize >= len(decompressed) {
+		t.Fatalf("compressed app.js size=%d, original size=%d", compressedSize, len(decompressed))
+	}
+
+	lastModified := res.Header().Get("Last-Modified")
+	if lastModified == "" {
+		t.Fatal("compressed app.js Last-Modified missing")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	req.Header.Set("Accept-Encoding", "deflate")
+	req.Header.Set("If-Modified-Since", lastModified)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotModified || res.Body.Len() != 0 {
+		t.Fatalf("conditional compressed status=%d body length=%d", res.Code, res.Body.Len())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	req.Header.Set("Accept-Encoding", "deflate")
+	req.Header.Set("Range", "bytes=0-3")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Header().Get("Content-Encoding") != "" {
+		t.Fatalf("range compressed status=%d encoding=%q", res.Code, res.Header().Get("Content-Encoding"))
+	}
+}
+
 func TestNativeDashboardListFilters(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "index.html"): {
@@ -652,6 +714,8 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`id="liveAnnouncement"`,
 		`role="status"`,
 		`aria-live="polite"`,
+		`id="searchListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true"`,
+		`id="ruleListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true"`,
 	} {
 		if !strings.Contains(string(index), want) {
 			t.Fatalf("web/index.html missing accessibility marker %q", want)
@@ -662,6 +726,8 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`lastOperationalAnnouncement`,
 		`var operationalAnnouncement = [`,
 		`announce(operationalAnnouncement);`,
+		`function renderScheduleTouchList(root, channelGroups)`,
+		`summary.textContent = "番組を一覧で操作（" + programs.length + "件）";`,
 	} {
 		if !strings.Contains(string(app), want) {
 			t.Fatalf("web/app.js missing accessibility hardening marker %q", want)
@@ -676,10 +742,31 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`@media (pointer: coarse)`,
 		`.schedule-nav-controls button.icon-button`,
 		`.schedule-zoom-controls button`,
+		`.schedule-touch-programs .program-title-button`,
 	} {
 		if !strings.Contains(string(styles), want) {
 			t.Fatalf("web/styles.css missing accessibility hardening marker %q", want)
 		}
+	}
+}
+
+func TestNativeDashboardListFiltersRenderOnlyTheirView(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`function renderFilteredListView(filterName)`,
+		`var renderFiltered = debounce(function () {`,
+		`renderFilteredListView(filterName);`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing scoped list rendering marker %q", want)
+		}
+	}
+	if strings.Contains(source, `var renderFiltered = debounce(render, 120);`) {
+		t.Fatal("list filter input still triggers a full dashboard render")
 	}
 }
 

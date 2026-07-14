@@ -762,6 +762,39 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if contentType := staticContentType(filePath); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
+	compressible := staticCompressible(filePath)
+	if compressible {
+		w.Header().Set("Vary", "Accept-Encoding")
+	}
+	if r.Header.Get("Range") == "" && compressible && acceptsDeflate(r.Header.Get("Accept-Encoding")) {
+		lastModified := info.ModTime().UTC().Format(http.TimeFormat)
+		if lastModified != "" {
+			w.Header().Set("Last-Modified", lastModified)
+			if r.Header.Get("If-Modified-Since") == lastModified {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+		body, err := fs.ReadFile(s.assets, filePath)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		var compressed bytes.Buffer
+		zw := zlib.NewWriter(&compressed)
+		if _, err := zw.Write(body); err != nil {
+			_ = zw.Close()
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		if err := zw.Close(); err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Encoding", "deflate")
+		http.ServeContent(w, r, path.Base(filePath), info.ModTime(), bytes.NewReader(compressed.Bytes()))
+		return
+	}
 	serveRequest := r
 	if path.Base(r.URL.Path) == "index.html" {
 		serveRequest = r.Clone(r.Context())
@@ -771,6 +804,15 @@ func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.FileServer(http.FS(s.assets)).ServeHTTP(w, serveRequest)
+}
+
+func staticCompressible(filePath string) bool {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".css", ".html", ".js", ".json", ".svg", ".txt":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *server) staticFileInfo(urlPath string) (string, fs.FileInfo, bool) {

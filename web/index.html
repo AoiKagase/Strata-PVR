@@ -252,7 +252,7 @@
           <input id="searchEndHour" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="24">
         </label>
         <button id="searchFilterReset" class="filter-clear-button" type="button">クリア</button>
-        <span id="searchListFilterSummary" class="list-filter-summary">0件</span>
+        <span id="searchListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true">0件</span>
       </div>
       <div class="list-pagination-controls" aria-label="番組検索ページング">
         <span id="searchPageSummary" class="list-page-summary" data-search-page-summary>番組検索</span>
@@ -543,7 +543,7 @@
             </select>
           </label>
           <button id="ruleListFilterReset" class="filter-clear-button" type="button">クリア</button>
-          <span id="ruleListFilterSummary" class="list-filter-summary">0件</span>
+          <span id="ruleListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true">0件</span>
         </div>
         <div id="ruleList" class="list empty">ルールはありません</div>
       </section>

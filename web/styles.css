@@ -403,6 +403,10 @@ body {
   line-height: 1;
 }
 
+.schedule-touch-list {
+  display: none;
+}
+
 .schedule-zoom-label {
   display: inline-grid;
   align-items: center;
@@ -3386,6 +3390,33 @@ body.view-schedule .schedule-zoom-controls {
   .schedule-zoom-controls button {
     width: 44px;
     min-width: 44px;
+  }
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  .schedule-touch-list {
+    display: block;
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .schedule-touch-list summary,
+  .schedule-touch-programs .program-title-button {
+    min-height: 44px;
+  }
+
+  .schedule-touch-programs .program-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 58px;
+  }
+
+  .schedule-touch-list summary {
+    display: flex;
+    align-items: center;
+    color: var(--accent-strong);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
   }
 }
 
