@@ -855,6 +855,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleConfig(w, r)
+	case len(parts) == 1 && parts[0] == "preview-cache":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handlePreviewCache(w, r)
 	case len(parts) == 1 && parts[0] == "rules":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -1162,6 +1167,61 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(data)
 	}
+}
+
+func (s *server) handlePreviewCache(w http.ResponseWriter, r *http.Request) {
+	removed, err := s.clearPreviewCache(r.Context())
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writePrettyJSON(w, http.StatusOK, map[string]int{"removed": removed})
+}
+
+func (s *server) clearPreviewCache(ctx context.Context) (int, error) {
+	if s.paths.Database == "" {
+		return 0, nil
+	}
+	ctx = database.WithHandle(ctx, s.db)
+	db, release, err := database.Acquire(ctx, s.paths.Database)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	files, err := database.ClearPreviewCache(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, fileName := range files {
+		if filepath.Base(fileName) != fileName {
+			continue
+		}
+		err := os.Remove(filepath.Join(s.previewCacheDir(), fileName))
+		if err == nil || os.IsNotExist(err) {
+			removed++
+			continue
+		}
+		return 0, err
+	}
+	entries, err := os.ReadDir(s.previewCacheDir())
+	if os.IsNotExist(err) {
+		return removed, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	for _, entry := range entries {
+		extension := strings.ToLower(filepath.Ext(entry.Name()))
+		if entry.IsDir() || (extension != ".jpg" && extension != ".png") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.previewCacheDir(), entry.Name())); err != nil && !os.IsNotExist(err) {
+			return 0, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 func publicStrataConfig(data []byte) ([]byte, error) {
@@ -3851,6 +3911,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"GET"}, true
 	case len(parts) == 1 && parts[0] == "config":
 		return []string{"GET", "PUT"}, true
+	case len(parts) == 1 && parts[0] == "preview-cache":
+		return []string{"DELETE"}, true
 	case len(parts) == 1 && parts[0] == "rules":
 		return []string{"GET", "POST"}, true
 	case len(parts) == 2 && parts[0] == "rules":
@@ -3915,7 +3977,7 @@ func methodAllowed(method string, allowed []string) bool {
 
 func knownAPIResource(name string) bool {
 	switch name {
-	case "status", "scheduler", "storage", "metrics", "log", "config", "rules", "schedule", "search", "reserves", "recording", "recorded", "program", "channel":
+	case "status", "scheduler", "storage", "metrics", "log", "config", "preview-cache", "rules", "schedule", "search", "reserves", "recording", "recorded", "program", "channel":
 		return true
 	default:
 		return false

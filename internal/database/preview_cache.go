@@ -62,6 +62,42 @@ func DeletePreviewCacheEntries(ctx context.Context, db *sql.DB, cacheKeys []stri
 	return nil
 }
 
+func ClearPreviewCache(ctx context.Context, db *sql.DB) ([]string, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("clear preview cache: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `SELECT file_name FROM preview_cache`)
+	if err != nil {
+		return nil, fmt.Errorf("list preview cache files to clear: %w", err)
+	}
+	files := []string{}
+	for rows.Next() {
+		var fileName string
+		if err := rows.Scan(&fileName); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan preview cache file to clear: %w", err)
+		}
+		files = append(files, fileName)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate preview cache files to clear: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close preview cache files to clear: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM preview_cache`); err != nil {
+		return nil, fmt.Errorf("clear preview cache entries: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("clear preview cache: %w", err)
+	}
+	return files, nil
+}
+
 func FindPreviewCache(ctx context.Context, db *sql.DB, cacheKey string) (PreviewCacheEntry, bool, error) {
 	var entry PreviewCacheEntry
 	err := db.QueryRowContext(ctx, `SELECT cache_key, program_id, source_path, source_size, source_mtime, file_name FROM preview_cache WHERE cache_key = ?`, cacheKey).Scan(

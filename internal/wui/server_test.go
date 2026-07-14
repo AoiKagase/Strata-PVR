@@ -256,6 +256,7 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 	}{
 		{"/api/status", "GET"},
 		{"/api/config", "GET, PUT"},
+		{"/api/preview-cache", "DELETE"},
 		{"/api/recorded/abc/watch.m2ts", "GET"},
 	} {
 		req = httptest.NewRequest(http.MethodHead, tc.path, nil)
@@ -2839,6 +2840,66 @@ func TestNewHandlerAppliesPreviewCacheRetention(t *testing.T) {
 	entries, err := database.ListPreviewCacheEntries(context.Background(), db)
 	if err != nil || len(entries) != 1 || entries[0].CacheKey != "newer" {
 		t.Fatalf("retained entries=%v err=%v", entries, err)
+	}
+}
+
+func TestAPIDeletesPreviewCache(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	handler := newTestHandler(t, paths, &config.Config{})
+	cacheDir := filepath.Join(dir, "data", ".cache", "previews")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"first.jpg", "second.png", "orphan.jpg", "keep.txt"} {
+		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct{ key, file string }{{"first", "first.jpg"}, {"second", "second.png"}} {
+		if _, err := database.StorePreviewCache(context.Background(), db, database.PreviewCacheEntry{CacheKey: item.key, ProgramID: item.key, FileName: item.file}); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/preview-cache", nil)
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("clear preview cache status=%d body=%q", res.Code, res.Body.String())
+	}
+	var result struct {
+		Removed int `json:"removed"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Removed != 3 {
+		t.Fatalf("removed=%d, want 3", result.Removed)
+	}
+	for _, name := range []string{"first.jpg", "second.png", "orphan.jpg"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "keep.txt")); err != nil {
+		t.Fatalf("non-preview file should remain: %v", err)
+	}
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	entries, err := database.ListPreviewCacheEntries(context.Background(), db)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("preview cache entries=%v err=%v", entries, err)
 	}
 }
 

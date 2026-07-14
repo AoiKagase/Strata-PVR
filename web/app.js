@@ -4530,6 +4530,33 @@
     });
   }
 
+  function clearStrataPreviewCache() {
+    var button = byId("clearStrataPreviewCacheButton");
+    return confirmAction("保存済みのプレビューキャッシュをすべて削除しますか？", {
+      danger: true,
+      okLabel: "クリア",
+      title: "プレビューキャッシュの確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+      }
+      setBusy("プレビューキャッシュをクリア中");
+      return request("preview-cache", "DELETE").then(function (result) {
+        var removed = Number(result && result.removed || 0);
+        setBusy("プレビューキャッシュをクリアしました（" + removed + "件）");
+      }).catch(showError).finally(function () {
+        if (button) {
+          button.disabled = false;
+          button.setAttribute("aria-busy", "false");
+        }
+      });
+    });
+  }
+
   function renderSettings() {
     var root = byId("settingsList");
     if (!root) {
@@ -6030,6 +6057,10 @@
     var saveStrataConfigButton = byId("saveStrataConfigButton");
     if (saveStrataConfigButton) {
       saveStrataConfigButton.addEventListener("click", saveStrataConfigFromForm);
+    }
+    var clearStrataPreviewCacheButton = byId("clearStrataPreviewCacheButton");
+    if (clearStrataPreviewCacheButton) {
+      clearStrataPreviewCacheButton.addEventListener("click", clearStrataPreviewCache);
     }
     var strataAuthEnabled = byId("strataAuthEnabled");
     if (strataAuthEnabled) {

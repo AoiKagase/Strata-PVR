@@ -2483,6 +2483,31 @@ body.view-settings .settings-grid {
   border-color: var(--line);
 }
 
+.config-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.config-action-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.config-action-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.config-action-copy small {
+  max-width: 70ch;
+  color: var(--muted);
+}
+
 @media (max-width: 620px) {
   .config-user-row {
     grid-template-columns: 1fr 44px;
@@ -2490,6 +2515,11 @@ body.view-settings .settings-grid {
 
   .config-user-row label:first-child {
     grid-column: 1 / -1;
+  }
+
+  .config-action-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
