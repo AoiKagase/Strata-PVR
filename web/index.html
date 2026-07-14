@@ -470,10 +470,35 @@
             <span>終了時 hour.end</span>
             <input id="ruleHourEnd" type="number" min="1" max="24" step="1" inputmode="numeric" placeholder="1-24">
           </label>
-          <label>
-            <span>録画ファイル名</span>
-            <input id="ruleRecordedFormat" type="text" autocomplete="off" placeholder="<title>.m2ts">
-          </label>
+          <div class="filename-format-field">
+            <label>
+              <span>録画ファイル名</span>
+              <input id="ruleRecordedFormat" type="text" autocomplete="off" placeholder="<title>.m2ts" aria-describedby="ruleRecordedFormatHelp">
+            </label>
+            <div id="ruleRecordedFormatHelp" class="filename-format-help">
+              <p><code>&lt;...&gt;</code> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。</p>
+              <p class="filename-format-example">例: <code>&lt;title&gt;.m2ts</code> → <code>番組タイトル.m2ts</code></p>
+              <details>
+                <summary>使用できるタグ</summary>
+                <dl class="filename-format-token-list">
+                  <dt><code>&lt;title&gt;</code></dt><dd>番組タイトル</dd>
+                  <dt><code>&lt;fulltitle&gt;</code></dt><dd>完全な番組タイトル</dd>
+                  <dt><code>&lt;subtitle&gt;</code></dt><dd>サブタイトル</dd>
+                  <dt><code>&lt;date:...&gt;</code></dt><dd>番組開始日時（例: <code>&lt;date:yymmdd-HHMM&gt;</code>）</dd>
+                  <dt><code>&lt;id&gt;</code></dt><dd>番組 ID</dd>
+                  <dt><code>&lt;type&gt;</code></dt><dd>放送種別</dd>
+                  <dt><code>&lt;channel&gt;</code></dt><dd>チャンネル</dd>
+                  <dt><code>&lt;channel-id&gt;</code></dt><dd>チャンネル ID</dd>
+                  <dt><code>&lt;channel-sid&gt;</code></dt><dd>サービス ID（SID）</dd>
+                  <dt><code>&lt;channel-name&gt;</code></dt><dd>チャンネル名</dd>
+                  <dt><code>&lt;tuner&gt;</code></dt><dd>使用チューナー名</dd>
+                  <dt><code>&lt;episode&gt;</code></dt><dd>話数（例: <code>&lt;episode:03&gt;</code> で 3 桁にゼロ埋め）</dd>
+                  <dt><code>&lt;category&gt;</code></dt><dd>番組カテゴリ</dd>
+                </dl>
+                <p class="filename-format-note">日付の書式には <code>yyyy</code>、<code>mm</code>、<code>dd</code>、<code>HH</code>、<code>MM</code>、<code>ss</code> などを使えます。UTC で表示する場合は <code>&lt;date:UTC:...&gt;</code> とします。</p>
+              </details>
+            </div>
+          </div>
           <label class="checkbox-label">
             <span>無効</span>
             <input id="ruleDisabled" type="checkbox">
@@ -623,7 +648,32 @@
             <legend>録画</legend>
             <div class="config-form">
               <label><span>保存先</span><input id="strataRecordingDirectory" class="config-form-control" type="text" autocomplete="off" required></label>
-              <label><span>ファイル名形式</span><input id="strataFilenameFormat" class="config-form-control" type="text" autocomplete="off" required></label>
+              <div class="filename-format-field">
+                <label><span>ファイル名形式</span><input id="strataFilenameFormat" class="config-form-control" type="text" autocomplete="off" required aria-describedby="strataFilenameFormatHelp"></label>
+                <div id="strataFilenameFormatHelp" class="filename-format-help">
+                  <p><code>&lt;...&gt;</code> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。</p>
+                  <p class="filename-format-example">例: <code>&lt;title&gt;.m2ts</code> → <code>番組タイトル.m2ts</code></p>
+                  <details>
+                    <summary>使用できるタグ</summary>
+                    <dl class="filename-format-token-list">
+                      <dt><code>&lt;title&gt;</code></dt><dd>番組タイトル</dd>
+                      <dt><code>&lt;fulltitle&gt;</code></dt><dd>完全な番組タイトル</dd>
+                      <dt><code>&lt;subtitle&gt;</code></dt><dd>サブタイトル</dd>
+                      <dt><code>&lt;date:...&gt;</code></dt><dd>番組開始日時（例: <code>&lt;date:yymmdd-HHMM&gt;</code>）</dd>
+                      <dt><code>&lt;id&gt;</code></dt><dd>番組 ID</dd>
+                      <dt><code>&lt;type&gt;</code></dt><dd>放送種別</dd>
+                      <dt><code>&lt;channel&gt;</code></dt><dd>チャンネル</dd>
+                      <dt><code>&lt;channel-id&gt;</code></dt><dd>チャンネル ID</dd>
+                      <dt><code>&lt;channel-sid&gt;</code></dt><dd>サービス ID（SID）</dd>
+                      <dt><code>&lt;channel-name&gt;</code></dt><dd>チャンネル名</dd>
+                      <dt><code>&lt;tuner&gt;</code></dt><dd>使用チューナー名</dd>
+                      <dt><code>&lt;episode&gt;</code></dt><dd>話数（例: <code>&lt;episode:03&gt;</code> で 3 桁にゼロ埋め）</dd>
+                      <dt><code>&lt;category&gt;</code></dt><dd>番組カテゴリ</dd>
+                    </dl>
+                    <p class="filename-format-note">日付の書式には <code>yyyy</code>、<code>mm</code>、<code>dd</code>、<code>HH</code>、<code>MM</code>、<code>ss</code> などを使えます。UTC で表示する場合は <code>&lt;date:UTC:...&gt;</code> とします。</p>
+                  </details>
+                </div>
+              </div>
               <label><span>録画開始マージン（秒、負数可）</span><input id="strataRecordingStartMargin" class="config-form-control" type="number" step="1" inputmode="numeric" title="正数で番組開始時刻より前、負数で番組開始時刻より後に録画を開始します。" required></label>
               <label><span>録画終了マージン（秒、負数可）</span><input id="strataRecordingEndMargin" class="config-form-control" type="number" step="1" inputmode="numeric" title="正数で番組終了時刻より後、負数で番組終了時刻より前に録画を終了します。" required></label>
               <label><span>録画優先度</span><input id="strataRecordingPriority" class="config-form-control" type="number" step="1" inputmode="numeric"></label>

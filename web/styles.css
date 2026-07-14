@@ -2135,6 +2135,94 @@ summary:focus-visible,
   font-weight: 700;
 }
 
+.filename-format-field {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filename-format-field > label {
+  min-width: 0;
+}
+
+.filename-format-help {
+  display: grid;
+  gap: 6px;
+  max-width: 78ch;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.filename-format-help p {
+  margin: 0;
+}
+
+.filename-format-help code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-quiet);
+  color: var(--ink);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.filename-format-example {
+  color: var(--ink-soft);
+}
+
+.filename-format-help details {
+  margin-top: 2px;
+}
+
+.filename-format-help summary {
+  width: fit-content;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.filename-format-token-list {
+  display: grid;
+  grid-template-columns: minmax(130px, max-content) minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-quiet);
+}
+
+.filename-format-token-list dt,
+.filename-format-token-list dd {
+  margin: 0;
+}
+
+.filename-format-token-list dt {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.filename-format-token-list dd {
+  color: var(--muted);
+}
+
+.filename-format-note {
+  margin-top: 8px !important;
+}
+
+@media (max-width: 620px) {
+  .filename-format-token-list {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .filename-format-token-list dd {
+    margin-bottom: 5px;
+  }
+}
+
 .config-form .field-error {
   color: var(--error-strong);
   font-size: 12px;
