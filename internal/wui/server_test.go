@@ -687,6 +687,9 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 			`renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });`,
 			`openAdjustablePlayer(program.title || program.id || "録画済み", function (query)`,
 			`return recordedWatchURL(program, "mp4", query);`,
+			`image.loading = resource === "recording" ? "eager" : "lazy";`,
+			`var previewAttempts = 0;`,
+			`if (resource === "recording" && previewAttempts < 3)`,
 			`image.src = programPreviewURL(program, resource, "160x90") + (resource === "recording" ? "&_=" + Date.now() : "");`,
 			`row.classList.remove("with-preview");`,
 		},
@@ -2948,6 +2951,42 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 	}
 	if strings.Contains(joined, "-ss 97.5") || strings.Contains(joined, recordedPath) {
 		t.Fatalf("recording preview should use legacy tail pipe args: %s", joined)
+	}
+}
+
+func TestAPIRecordingPreviewRetriesWithLargerTail(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recording.m2ts")
+	body := strings.Repeat("a", int(recordingPreviewRetryTailBytes)+10)
+	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: -1}}, false); err != nil {
+		t.Fatal(err)
+	}
+	old := runFFmpegPreview
+	defer func() { runFFmpegPreview = old }()
+	calls := 0
+	runFFmpegPreview = func(_ context.Context, input io.Reader, _ ...string) ([]byte, error) {
+		calls++
+		data, err := io.ReadAll(input)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) != int(recordingPreviewRetryTailBytes) {
+			return nil, errors.New("tail did not include a decodable frame")
+		}
+		return []byte("retry-preview"), nil
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview", nil))
+	if res.Code != http.StatusOK || res.Body.String() != "retry-preview" {
+		t.Fatalf("retry recording preview status=%d body=%q", res.Code, res.Body.String())
+	}
+	if calls != 2 {
+		t.Fatalf("recording preview ffmpeg calls=%d, want 2", calls)
 	}
 }
 

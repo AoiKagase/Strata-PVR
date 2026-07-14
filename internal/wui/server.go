@@ -59,6 +59,7 @@ type Paths struct {
 
 const legacyRecordingPreviewTailBytes int64 = 3200000
 const defaultPreviewPositionSeconds = 60
+const recordingPreviewRetryTailBytes int64 = 12800000
 
 var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
@@ -286,12 +287,19 @@ type recordedSizeCache struct {
 // decodable transport-stream packets.  In that case the previous frame is a
 // better response than making the WUI remove its thumbnail.
 type recordingPreviewCache struct {
-	mu      sync.Mutex
-	entries map[string][]byte
+	mu       sync.Mutex
+	entries  map[string][]byte
+	inFlight map[string]*recordingPreviewFlight
+}
+
+type recordingPreviewFlight struct {
+	done   chan struct{}
+	output []byte
+	err    error
 }
 
 func newRecordingPreviewCache() *recordingPreviewCache {
-	return &recordingPreviewCache{entries: make(map[string][]byte)}
+	return &recordingPreviewCache{entries: make(map[string][]byte), inFlight: make(map[string]*recordingPreviewFlight)}
 }
 
 func (c *recordingPreviewCache) get(key string) ([]byte, bool) {
@@ -301,10 +309,32 @@ func (c *recordingPreviewCache) get(key string) ([]byte, bool) {
 	return output, ok
 }
 
-func (c *recordingPreviewCache) put(key string, output []byte) {
+func (c *recordingPreviewCache) run(ctx context.Context, key string, fn func() ([]byte, error)) ([]byte, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[key] = output
+	if flight, ok := c.inFlight[key]; ok {
+		c.mu.Unlock()
+		select {
+		case <-flight.done:
+			return flight.output, flight.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	flight := &recordingPreviewFlight{done: make(chan struct{})}
+	c.inFlight[key] = flight
+	c.mu.Unlock()
+
+	output, err := fn()
+	c.mu.Lock()
+	if err == nil && len(output) > 0 {
+		c.entries[key] = output
+	}
+	flight.output = output
+	flight.err = err
+	delete(c.inFlight, key)
+	close(flight.done)
+	c.mu.Unlock()
+	return output, err
 }
 
 func newRecordedSizeCache() *recordedSizeCache {
@@ -2740,7 +2770,14 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, co
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	output, err := s.runProgramPreview(ctx, recording, filePath, width, height, codec, r)
+	var output []byte
+	if recording {
+		output, err = s.recordingPreviews.run(ctx, cacheKey, func() ([]byte, error) {
+			return s.runProgramPreview(ctx, true, filePath, width, height, codec, r)
+		})
+	} else {
+		output, err = s.runProgramPreview(ctx, false, filePath, width, height, codec, r)
+	}
 	if err == nil && len(output) == 0 {
 		err = errors.New("previewer returned an empty image")
 	}
@@ -2754,9 +2791,6 @@ func (s *server) handleProgramPreview(w http.ResponseWriter, r *http.Request, co
 		}
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
-	}
-	if recording {
-		s.recordingPreviews.put(cacheKey, output)
 	}
 	if !recording && s.paths.Database != "" {
 		if err := s.storePreviewCache(r.Context(), cacheKey, id, filePath, info, codec, output); err != nil {
@@ -2950,44 +2984,75 @@ func (s *server) storePreviewCache(ctx context.Context, cacheKey, programID, sou
 
 func (s *server) runProgramPreview(ctx context.Context, recording bool, filePath, width, height, codec string, r *http.Request) ([]byte, error) {
 	if recording {
-		input, err := legacyRecordingPreviewInput(filePath)
-		if err != nil {
-			return nil, err
-		}
-		return runFFmpegPreview(ctx, input,
-			"-f", "mpegts",
-			"-r", "10",
-			"-i", "pipe:0",
-			"-ss", "1.5",
-			"-r", "10",
-			"-frames:v", "1",
-			"-f", "image2",
-			"-codec:v", codec,
-			"-an",
-			"-s", width+"x"+height,
-			"-map", "0:0",
-			"-y", "pipe:1",
-		)
+		return runRecordingPreview(ctx, filePath, width, height, codec)
 	}
 	pos := previewPosition(r)
 	return runFFmpegPreview(ctx, nil,
+		"-v", "error",
+		"-fflags", "+genpts+discardcorrupt",
+		"-err_detect", "ignore_err",
+		"-analyzeduration", "10000000",
+		"-probesize", "10000000",
 		"-f", "mpegts",
 		"-ss", pos,
 		"-r", "10",
 		"-i", filePath,
+		"-threads", "0",
 		"-ss", "1.5",
 		"-r", "10",
 		"-frames:v", "1",
-		"-c:v", codec,
+		"-codec:v", codec,
 		"-an",
 		"-f", "image2",
 		"-s", width+"x"+height,
-		"-map", "0:0",
+		"-map", "0:v:0",
 		"-y", "pipe:1",
 	)
 }
 
-func legacyRecordingPreviewInput(filePath string) (io.Reader, error) {
+func runRecordingPreview(ctx context.Context, filePath, width, height, codec string) ([]byte, error) {
+	var lastErr error
+	for _, tailBytes := range []int64{legacyRecordingPreviewTailBytes, recordingPreviewRetryTailBytes} {
+		input, err := recordingPreviewInput(filePath, tailBytes)
+		if err != nil {
+			return nil, err
+		}
+		output, err := runFFmpegPreview(ctx, input,
+			"-v", "error",
+			"-fflags", "+genpts+discardcorrupt",
+			"-err_detect", "ignore_err",
+			"-analyzeduration", "10000000",
+			"-probesize", "10000000",
+			"-f", "mpegts",
+			"-r", "10",
+			"-i", "pipe:0",
+			"-threads", "0",
+			"-ss", "1.5",
+			"-r", "10",
+			"-frames:v", "1",
+			"-codec:v", codec,
+			"-an",
+			"-f", "image2",
+			"-s", width+"x"+height,
+			"-map", "0:v:0",
+			"-y", "pipe:1",
+		)
+		if err == nil && len(output) > 0 {
+			return output, nil
+		}
+		if err == nil {
+			lastErr = errors.New("previewer returned an empty image")
+		} else {
+			lastErr = err
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+	return nil, lastErr
+}
+
+func recordingPreviewInput(filePath string, tailBytes int64) (io.Reader, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -2997,7 +3062,7 @@ func legacyRecordingPreviewInput(filePath string) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	start := info.Size() - legacyRecordingPreviewTailBytes
+	start := info.Size() - tailBytes
 	if start < 0 {
 		start = 0
 	}
@@ -3009,6 +3074,10 @@ func legacyRecordingPreviewInput(filePath string) (io.Reader, error) {
 		return nil, err
 	}
 	return bytes.NewReader(body), nil
+}
+
+func legacyRecordingPreviewInput(filePath string) (io.Reader, error) {
+	return recordingPreviewInput(filePath, legacyRecordingPreviewTailBytes)
 }
 
 func previewSize(r *http.Request) (string, string) {

@@ -2862,9 +2862,22 @@
     var image = document.createElement("img");
     image.className = "program-preview-image";
     image.alt = "";
-    image.loading = "lazy";
-    image.src = programPreviewURL(program, resource, "160x90") + (resource === "recording" ? "&_=" + Date.now() : "");
+    image.loading = resource === "recording" ? "eager" : "lazy";
+    var previewAttempts = 0;
+    var loadPreview = function () {
+      image.src = programPreviewURL(program, resource, "160x90") + (resource === "recording" ? "&_=" + Date.now() : "");
+    };
+    loadPreview();
     image.addEventListener("error", function () {
+      if (resource === "recording" && previewAttempts < 3) {
+        previewAttempts += 1;
+        window.setTimeout(function () {
+          if (image.isConnected) {
+            loadPreview();
+          }
+        }, previewAttempts * 1000);
+        return;
+      }
       var row = image.closest(".program-row");
       if (row) {
         if (layout === "tile") {
@@ -2921,15 +2934,25 @@
     root.hidden = false;
   }
 
-  function appendProgramDialogPreviewImage(root, resource, src) {
+  function appendProgramDialogPreviewImage(root, resource, src, retryURL) {
     var figure = document.createElement("figure");
     figure.className = "program-dialog-preview-figure";
     var image = document.createElement("img");
     image.className = "program-dialog-preview-image";
     image.src = src;
     image.alt = "";
-    image.loading = "lazy";
+    image.loading = resource === "recording" ? "eager" : "lazy";
+    var previewAttempts = 0;
     image.addEventListener("error", function () {
+      if (resource === "recording" && retryURL && previewAttempts < 3) {
+        previewAttempts += 1;
+        window.setTimeout(function () {
+          if (image.isConnected) {
+            image.src = retryURL + "&_=" + Date.now();
+          }
+        }, previewAttempts * 1000);
+        return;
+      }
       clearProgramDialogPreview(root);
     });
     var caption = document.createElement("figcaption");
@@ -2967,7 +2990,7 @@
 
     var previewURL = programPreviewURL(previewProgram, resource, "480x270") + (resource === "recording" ? "&_=" + Date.now() : "");
     if (resource === "recording") {
-      appendProgramDialogPreviewImage(root, resource, previewURL);
+      appendProgramDialogPreviewImage(root, resource, previewURL, programPreviewURL(previewProgram, resource, "480x270"));
       return;
     }
 
