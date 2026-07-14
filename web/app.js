@@ -5763,6 +5763,10 @@
     }
   }
 
+  function scrollToPageTop() {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }
+
   function bindSearchControls() {
     var fields = {
       query: "searchQuery",
@@ -5806,6 +5810,7 @@
         button.addEventListener("click", function () {
           state.searchPage = item.page();
           renderSearch();
+          scrollToPageTop();
         });
       });
     });
@@ -5852,6 +5857,7 @@
           if (firstRow && typeof firstRow.focus === "function") {
             firstRow.focus({ preventScroll: true });
           }
+          scrollToPageTop();
         });
       });
     });
