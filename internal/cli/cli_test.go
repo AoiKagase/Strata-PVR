@@ -480,16 +480,16 @@ func TestConvertLegacyConfigWarnsWhenListenersAreMerged(t *testing.T) {
 	}
 }
 
-func TestConvertLegacyConfigMapsRecordingMargins(t *testing.T) {
+func TestConvertLegacyConfigConvertsRecordingMarginsFromMilliseconds(t *testing.T) {
 	doc, _, err := convertLegacyConfig(&config.LegacyConfig{
-		RecordingStartMargin: 4,
-		RecordingEndMargin:   9,
+		RecordingStartMargin: 4000,
+		RecordingEndMargin:   -120000,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Recording.StartMargin != 4 || doc.Recording.EndMargin != 9 {
-		t.Fatalf("converted recording margins = %d/%d, want 4/9", doc.Recording.StartMargin, doc.Recording.EndMargin)
+	if doc.Recording.StartMargin != 4 || doc.Recording.EndMargin != -120 {
+		t.Fatalf("converted recording margins = %d/%d, want 4/-120", doc.Recording.StartMargin, doc.Recording.EndMargin)
 	}
 }
 

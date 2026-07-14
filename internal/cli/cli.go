@@ -461,8 +461,8 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 	doc.Mirakurun.ConflictedPriority = old.ConflictedPriority
 	doc.Recording.Directory = old.RecordedDir
 	doc.Recording.FilenameFormat = old.RecordedFormat
-	doc.Recording.StartMargin = old.RecordingStartMargin
-	doc.Recording.EndMargin = old.RecordingEndMargin
+	doc.Recording.StartMargin = legacyMarginSeconds(old.RecordingStartMargin)
+	doc.Recording.EndMargin = legacyMarginSeconds(old.RecordingEndMargin)
 	doc.Recording.LowSpace = config.LowSpaceSettings{
 		ThresholdMB: old.StorageLowSpaceThresholdMB, Action: old.StorageLowSpaceAction,
 	}
@@ -495,6 +495,12 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 		doc.Web.Authentication.Users = append(doc.Web.Authentication.Users, config.WebUser{Username: username, PasswordHash: hash})
 	}
 	return doc, warnings, nil
+}
+
+// Chinachu stores recording margins in milliseconds, while Strata stores them
+// in seconds. Legacy values are expected to be whole seconds in milliseconds.
+func legacyMarginSeconds(milliseconds int) int {
+	return milliseconds / 1000
 }
 
 func migrateLegacyJSONFiles(tempDir string) error {
