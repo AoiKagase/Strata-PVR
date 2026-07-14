@@ -454,8 +454,13 @@ func TestNativeDashboardListFilters(t *testing.T) {
 		filepath.Join("..", "..", "web", "index.html"): {
 			`id="reserveListQuery"`,
 			`id="reserveListCategory"`,
+			`id="reserveListType"`,
+			`<option value="manual">手動予約</option>`,
+			`<option value="auto">自動予約</option>`,
+			`<option value="skip">スキップ</option>`,
 			`id="reserveListSort"`,
 			`id="reserveListFilterReset"`,
+			`id="reserveListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true"`,
 			`id="recordedListQuery"`,
 			`id="recordedListCategory"`,
 			`id="recordedListSort"`,
@@ -482,7 +487,10 @@ func TestNativeDashboardListFilters(t *testing.T) {
 			`updateListCategoryOptions`,
 			`state.listFilters.rules.state`,
 			`state.listFilters.rules.sort`,
-			`bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort")`,
+			`bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort", "reserveListType")`,
+			`reservationType === "manual"`,
+			`reservationType === "auto"`,
+			`reservationType === "skip"`,
 			`bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort")`,
 			`reserveListSort`,
 			`recordedListSort`,
@@ -500,8 +508,11 @@ func TestNativeDashboardListFilters(t *testing.T) {
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.list-filter-controls`,
+			`.reservation-filter-controls`,
 			`.list-filter-summary`,
 			`.filter-clear-button`,
+			`input::placeholder`,
+			`.program-row.compact-actions .program-title-button`,
 		},
 	}
 	for path, wants := range files {
@@ -514,6 +525,28 @@ func TestNativeDashboardListFilters(t *testing.T) {
 			if !strings.Contains(source, want) {
 				t.Fatalf("%s missing %q", path, want)
 			}
+		}
+	}
+}
+
+func TestNativeDashboardLoadsProgramDataByView(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(body)
+	wants := []string{
+		`dashboard: ["recorded", "schedule/broadcasting"]`,
+		`schedule: ["schedule", "schedule/broadcasting"]`,
+		`search: ["schedule"]`,
+		`recorded: ["recorded"]`,
+		`var refreshPaths = ["status", "reserves", "recording"].concat(programDataPathsForView(view));`,
+		`var storageRequested = state.currentView === "status";`,
+		`loadProgramDataForView(state.currentView, previousView !== state.currentView);`,
+	}
+	for _, want := range wants {
+		if !strings.Contains(source, want) {
+			t.Fatalf("native dashboard program data loading missing %q", want)
 		}
 	}
 }
@@ -1182,6 +1215,7 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 			`item.classList.toggle("skip", Boolean(program.isSkip))`,
 			`録画中`,
 			`手動予約`,
+			`自動予約`,
 			`watch-recording-mp4`,
 			`card.classList.toggle("has-state"`,
 			`card.classList.toggle("recording"`,
@@ -1207,6 +1241,23 @@ func TestNativeDashboardMergesProgramRuntimeState(t *testing.T) {
 				t.Fatalf("%s missing %q", path, want)
 			}
 		}
+	}
+}
+
+func TestNativeDashboardReservationTypesRemainVisible(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(body)
+	if !strings.Contains(source, `program.isManualReserved ? "手動予約" : "自動予約"`) {
+		t.Fatal("reservation type labels are not explicit")
+	}
+	if !strings.Contains(source, `program.isManualReserved ? "manual-reserved" : "auto-reserved"`) {
+		t.Fatal("reservation type badge styles are not distinct")
+	}
+	if strings.Contains(source, `hideReservedBadge`) {
+		t.Fatal("reservation type badges can still be hidden")
 	}
 }
 

@@ -80,6 +80,12 @@
     rulesLoaded: false,
     configLoaded: false,
     storageLoaded: false,
+    programDataLoaded: {
+      recorded: false,
+      schedule: false,
+      "schedule/broadcasting": false
+    },
+    programDataRequests: {},
     viewDataRequests: {},
     viewDataErrors: {},
     hasLoaded: false,
@@ -199,7 +205,7 @@
     return {
       rules: { query: "", state: "", sort: "indexAsc" },
       recorded: { query: "", category: "", sort: "startDesc" },
-      reserves: { query: "", category: "", sort: "startAsc" },
+      reserves: { query: "", category: "", type: "", sort: "startAsc" },
       search: { query: "", category: "", type: "", title: "", description: "", programID: "", channelID: "", startHour: "", endHour: "" }
     };
   }
@@ -995,8 +1001,11 @@
     var labels = [];
     if (program && program.isRecording) {
       labels.push({ text: "録画中", type: "recording" });
-    } else if (program && program.isReserved && !options.hideReservedBadge) {
-      labels.push({ text: program.isManualReserved ? "手動予約" : "予約済み", type: "reserved" });
+    } else if (program && program.isReserved) {
+      labels.push({
+        text: program.isManualReserved ? "手動予約" : "自動予約",
+        type: program.isManualReserved ? "manual-reserved" : "auto-reserved"
+      });
     }
     if (program && program.isConflict) {
       labels.push({ text: "競合", type: "conflict" });
@@ -1033,8 +1042,18 @@
     var filter = state.listFilters[filterName] || {};
     var query = normalizeSearchText(filter.query);
     var category = filter.category || "";
+    var reservationType = filterName === "reserves" ? (filter.type || "") : "";
     return (items || []).filter(function (program) {
       if (category && programCategory(program) !== category) {
+        return false;
+      }
+      if (reservationType === "manual" && !program.isManualReserved) {
+        return false;
+      }
+      if (reservationType === "auto" && program.isManualReserved) {
+        return false;
+      }
+      if (reservationType === "skip" && (program.isManualReserved || !program.isSkip)) {
         return false;
       }
       return !query || normalizeSearchText(programSearchText(program)).indexOf(query) >= 0;
@@ -1323,6 +1342,85 @@
     return (hash.split("?", 1)[0] || "dashboard");
   }
 
+  function programDataPathsForView(view) {
+    var pathsByView = {
+      dashboard: ["recorded", "schedule/broadcasting"],
+      schedule: ["schedule", "schedule/broadcasting"],
+      search: ["schedule"],
+      recorded: ["recorded"]
+    };
+    return (pathsByView[view] || []).slice();
+  }
+
+  function requestProgramDataPath(path) {
+    if (path === "schedule/broadcasting") {
+      return api(path).then(function (value) {
+        return { path: path, value: value, loaded: true };
+      }, function () {
+        return { path: path, value: state.broadcasting, loaded: false };
+      });
+    }
+    return api(path).then(function (value) {
+      return { path: path, value: value, loaded: true };
+    });
+  }
+
+  function requestProgramData(paths) {
+    return Promise.all((paths || []).map(requestProgramDataPath));
+  }
+
+  function applyProgramData(results) {
+    (results || []).forEach(function (result) {
+      if (!result) {
+        return;
+      }
+      if (result.path === "status") {
+        state.status = result.value || {};
+      } else if (result.path === "reserves") {
+        state.reserves = result.value || [];
+      } else if (result.path === "recording") {
+        state.recording = result.value || [];
+      } else if (result.path === "recorded") {
+        state.recorded = result.value || [];
+      } else if (result.path === "schedule") {
+        state.schedule = result.value || [];
+      } else if (result.path === "schedule/broadcasting") {
+        state.broadcasting = Array.isArray(result.value) ? result.value : state.broadcasting;
+      }
+      if (Object.prototype.hasOwnProperty.call(state.programDataLoaded, result.path)) {
+        state.programDataLoaded[result.path] = Boolean(result.loaded);
+      }
+    });
+  }
+
+  function loadProgramDataForView(view, force) {
+    var paths = programDataPathsForView(view).filter(function (path) {
+      return force || !state.programDataLoaded[path];
+    });
+    if (!paths.length) {
+      return Promise.resolve();
+    }
+    if (state.programDataRequests[view]) {
+      return state.programDataRequests[view];
+    }
+    var version = refreshVersion;
+    setBusy("読み込み中");
+    var requestPromise = requestProgramData(paths).then(function (results) {
+      if (version !== refreshVersion) {
+        return;
+      }
+      applyProgramData(results);
+      state.lastError = null;
+      if (state.currentView === view) {
+        render();
+      }
+    }).catch(showError).finally(function () {
+      state.programDataRequests[view] = null;
+    });
+    state.programDataRequests[view] = requestPromise;
+    return requestPromise;
+  }
+
   function decodeHashValue(value) {
     try {
       return decodeURIComponent(String(value || "").replace(/\+/g, " "));
@@ -1567,6 +1665,7 @@
       } else if (state.currentView === "logs") {
         refreshLogs();
       }
+      loadProgramDataForView(state.currentView, previousView !== state.currentView);
     }
     if (state.currentView !== "status") {
       stopMetricsRefresh();
@@ -5390,8 +5489,8 @@
     updateRecordedViewModeControls();
 
     renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
-    renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
-    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+    renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { compactActions: true });
+    renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { compactActions: true });
     renderList("recordedList", recordedNewestFirst, "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
     renderList("recordedListPage", pagedRecorded, "条件に一致する録画済み番組はありません", state.recordedPageSize, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded", layout: state.recordedViewMode, listClassName: recordedViewListClass() });
     renderOnAirList();
@@ -5412,7 +5511,7 @@
 
     if (state.currentView === "dashboard") {
       renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
-      renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+      renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { compactActions: true });
       renderOnAirList();
       return;
     }
@@ -5428,7 +5527,7 @@
       var filteredReserves = sortedPrograms(filteredPrograms(state.reserves, "reserves"), "reserves");
       updateListCategoryOptions("reserveListCategory", state.reserves, "reserves");
       updateListFilterSummary("reserveListFilterSummary", filteredReserves.length, state.reserves.length);
-      renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { hideReservedBadge: true, compactActions: true });
+      renderList("reserveListPage", filteredReserves, "条件に一致する予約はありません", 100, ["skip", "unskip", "unreserve"], { compactActions: true });
       return;
     }
     if (state.currentView === "status") {
@@ -5565,25 +5664,13 @@
     state.lastError = null;
     setBusy("読み込み中");
     renderInitialLoadingState();
-    Promise.all([
-      api("status"),
-      api("reserves"),
-      api("recording"),
-      api("recorded"),
-      api("schedule"),
-      api("schedule/broadcasting").catch(function () {
-        return null;
-      })
-    ]).then(function (result) {
+    var view = state.currentView;
+    var refreshPaths = ["status", "reserves", "recording"].concat(programDataPathsForView(view));
+    return requestProgramData(refreshPaths).then(function (result) {
       if (version !== refreshVersion) {
         return;
       }
-      state.status = result[0] || {};
-      state.reserves = result[1] || [];
-      state.recording = result[2] || [];
-      state.recorded = result[3] || [];
-      state.schedule = result[4] || [];
-      state.broadcasting = Array.isArray(result[5]) ? result[5] : null;
+      applyProgramData(result);
       state.hasLoaded = true;
       state.lastError = null;
       render();
@@ -5604,6 +5691,9 @@
       if (state.currentView === "status") {
         refreshMetrics();
       }
+      if (state.hasLoaded) {
+        loadProgramDataForView(state.currentView, state.currentView !== view);
+      }
       if (refreshQueued) {
         refreshQueued = false;
         refresh();
@@ -5617,30 +5707,29 @@
     }
     var version = refreshVersion;
     operationalRefreshInFlight = true;
+    var refreshPaths = ["status", "reserves", "recording"];
+    if (state.currentView === "dashboard" || state.currentView === "schedule") {
+      refreshPaths.push("schedule/broadcasting");
+    }
+    var storageRequested = state.currentView === "status";
     Promise.all([
-      api("status"),
-      api("reserves"),
-      api("recording"),
-      api("schedule/broadcasting").catch(function () {
-        return state.broadcasting;
-      }),
-      api("storage").then(function (storage) {
+      requestProgramData(refreshPaths),
+      storageRequested ? api("storage").then(function (storage) {
         return { value: storage, error: null };
       }, function (error) {
         return { value: state.storage, error: error };
-      })
+      }) : Promise.resolve(null)
     ]).then(function (result) {
       if (version !== refreshVersion) {
         return;
       }
-      state.status = result[0] || {};
-      state.reserves = result[1] || [];
-      state.recording = result[2] || [];
-      state.broadcasting = Array.isArray(result[3]) ? result[3] : state.broadcasting;
-      var storageResult = result[4] || {};
-      state.storage = storageResult.value || null;
-      state.storageLoaded = !storageResult.error;
-      state.viewDataErrors.status = storageResult.error || null;
+      applyProgramData(result[0]);
+      var storageResult = result[1];
+      if (storageRequested && storageResult) {
+        state.storage = storageResult.value || null;
+        state.storageLoaded = !storageResult.error;
+        state.viewDataErrors.status = storageResult.error || null;
+      }
       state.lastError = null;
       if (document.visibilityState !== "hidden") {
         renderOperationalData();
@@ -5709,10 +5798,11 @@
     }).catch(showError);
   }
 
-  function bindListFilter(filterName, queryID, categoryID, sortID) {
+  function bindListFilter(filterName, queryID, categoryID, sortID, typeID) {
     var query = byId(queryID);
     var category = byId(categoryID);
     var sort = byId(sortID);
+    var type = byId(typeID);
     var current = state.listFilters[filterName] || {};
     var renderFiltered = debounce(render, 120);
     if (query) {
@@ -5751,6 +5841,18 @@
         render();
       });
     }
+    if (type) {
+      type.value = current.type || "";
+      if (current.type && type.value !== current.type) {
+        type.value = "";
+      }
+      state.listFilters[filterName].type = type.value;
+      type.addEventListener("change", function () {
+        state.listFilters[filterName].type = type.value;
+        saveListFilters();
+        render();
+      });
+    }
   }
 
   function resetListFilterControls(filterName, ids, renderFn) {
@@ -5762,6 +5864,7 @@
     [
       { id: ids.query, value: defaults.query || "" },
       { id: ids.category, value: defaults.category || defaults.state || "" },
+      { id: ids.type, value: defaults.type || "" },
       { id: ids.sort, value: defaults.sort || "" }
     ].forEach(function (item) {
       var control = byId(item.id);
@@ -5943,13 +6046,14 @@
       recordedCleanupButton.addEventListener("click", cleanupRecorded);
     }
     bindRecordedViewMode();
-    bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort");
+    bindListFilter("reserves", "reserveListQuery", "reserveListCategory", "reserveListSort", "reserveListType");
     bindListFilter("recorded", "recordedListQuery", "recordedListCategory", "recordedListSort");
     bindRecordedPagination();
     resetListFilter("reserves", {
       button: "reserveListFilterReset",
       category: "reserveListCategory",
       query: "reserveListQuery",
+      type: "reserveListType",
       sort: "reserveListSort"
     });
     resetListFilter("recorded", {

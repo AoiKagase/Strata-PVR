@@ -282,7 +282,7 @@
           <p>手動予約、自動予約、スキップ状態を確認します。</p>
         </div>
       </div>
-      <div class="list-filter-controls" aria-label="予約フィルタ">
+      <div class="list-filter-controls reservation-filter-controls" aria-label="予約フィルタ">
         <label class="control-field" for="reserveListQuery">
           <span>検索</span>
           <input id="reserveListQuery" type="search" autocomplete="off" placeholder="タイトル、説明、チャンネル">
@@ -291,6 +291,15 @@
             <span>ジャンル</span>
             <select id="reserveListCategory">
               <option value="">全ジャンル</option>
+            </select>
+          </label>
+          <label class="control-field" for="reserveListType">
+            <span>予約種別</span>
+            <select id="reserveListType">
+              <option value="">すべて</option>
+              <option value="manual">手動予約</option>
+              <option value="auto">自動予約</option>
+              <option value="skip">スキップ</option>
             </select>
           </label>
           <label class="control-field" for="reserveListSort">
@@ -304,7 +313,7 @@
             </select>
           </label>
           <button id="reserveListFilterReset" class="filter-clear-button" type="button">クリア</button>
-          <span id="reserveListFilterSummary" class="list-filter-summary">0件</span>
+          <span id="reserveListFilterSummary" class="list-filter-summary" role="status" aria-live="polite" aria-atomic="true">0件</span>
         </div>
       <div id="reserveListPage" class="list empty">予約はありません</div>
     </section>

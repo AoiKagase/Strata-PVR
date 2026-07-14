@@ -1229,6 +1229,18 @@ summary:focus-visible,
   line-height: 1.2;
 }
 
+.program-state-badge.manual-reserved {
+  border-color: var(--reserved);
+  background: var(--reserved-soft);
+  color: var(--reserved-strong);
+}
+
+.program-state-badge.auto-reserved {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success-strong);
+}
+
 .program-state-badge.recording {
   border-color: var(--error);
   background: var(--error-soft);
@@ -2264,6 +2276,11 @@ input {
   font-size: 13px;
 }
 
+input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
 input[type="checkbox"] {
   width: auto;
 }
@@ -2671,6 +2688,10 @@ body.view-settings .settings-grid {
   gap: 10px;
   align-items: end;
   margin: 0 0 12px;
+}
+
+.reservation-filter-controls {
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(140px, 200px)) auto auto;
 }
 
 .filter-clear-button {
@@ -3083,7 +3104,8 @@ body.view-settings .settings-grid {
     min-height: 44px;
   }
 
-  .program-title-button {
+  .program-title-button,
+  .program-row.compact-actions .program-title-button {
     min-height: 44px;
   }
 
@@ -3353,6 +3375,10 @@ body.view-schedule .schedule-zoom-controls {
   input:not([type="checkbox"]),
   textarea,
   .main-nav a {
+    min-height: 44px;
+  }
+
+  .program-row.compact-actions .program-title-button {
     min-height: 44px;
   }
 
