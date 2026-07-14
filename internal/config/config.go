@@ -157,6 +157,23 @@ func ParseLegacy(b []byte) (*LegacyConfig, error) {
 	if err := json.Unmarshal(b, cfg); err != nil {
 		return nil, err
 	}
+	// Chinachu beta named recording margins operRecOffsetStart/End and stored
+	// them in milliseconds. Accept the later aliases as well, but prefer the
+	// original keys when both forms are present. Pointers preserve an explicit
+	// zero value.
+	var offsets struct {
+		Start *int `json:"operRecOffsetStart"`
+		End   *int `json:"operRecOffsetEnd"`
+	}
+	if err := json.Unmarshal(b, &offsets); err != nil {
+		return nil, err
+	}
+	if offsets.Start != nil {
+		cfg.RecordingStartMargin = *offsets.Start
+	}
+	if offsets.End != nil {
+		cfg.RecordingEndMargin = *offsets.End
+	}
 	return cfg, nil
 }
 
@@ -287,8 +304,8 @@ func defaultLegacyConfig() *LegacyConfig {
 		WUIHost:                    "0.0.0.0",
 		WUIOpenPort:                20772,
 		RecordedFormat:             "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
-		RecordingStartMargin:       15,
-		RecordingEndMargin:         0,
+		RecordingStartMargin:       5000,
+		RecordingEndMargin:         -8000,
 		RecordingPriority:          2,
 		ConflictedPriority:         1,
 		StorageLowSpaceThresholdMB: 3000,

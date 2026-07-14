@@ -71,7 +71,7 @@ migrate/
 | `mirakurunPath` / `schedulerMirakurunPath` | `mirakurun.url` |
 | `recordingPriority`、`conflictedPriority` | `mirakurun.*Priority` |
 | `recordedDir`、`recordedFormat` | `recording.directory`、`recording.filenameFormat` |
-| `recordingStartMargin`、`recordingEndMargin`（旧Chinachuはミリ秒） | `recording.startMargin`、`recording.endMargin`（秒） |
+| `operRecOffsetStart`、`operRecOffsetEnd`（旧Chinachuはミリ秒。`recordingStartMargin`、`recordingEndMargin` も互換入力として受理） | `recording.startMargin`、`recording.endMargin`（秒） |
 | 空き容量閾値と `remove` / `stop` | `recording.lowSpace` |
 | 認証付きまたは公開WUI | 認証ON/OFFを持つ単一の `web` リスナー |
 | `wuiUsers` の平文認証情報 | Argon2id のパスワードハッシュ |

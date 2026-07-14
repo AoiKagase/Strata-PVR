@@ -38,8 +38,7 @@ type completionRollbackKey struct {
 }
 
 type pendingCompletionRollback struct {
-	program      legacy.Program
-	removeOutput bool
+	program legacy.Program
 }
 
 var pendingCompletionRollbacks = struct {
@@ -151,6 +150,7 @@ func startPendingRecordings(ctx context.Context, paths Paths, cfg *config.Config
 	retryPendingRecordingRemovals(ctx, paths.Database)
 	recordingStateMu.Lock()
 	retryPendingCompletionRollbacks(ctx, paths.Database)
+	retryPendingCompletions(ctx, paths.Database)
 	recordingStateMu.Unlock()
 	retryPendingReservationDeletes(ctx, paths.Database)
 	startBefore := now.Add(recordingStartMargin(cfg)).UnixMilli()
@@ -283,10 +283,6 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 	err = programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed)
 	recordingStateMu.Unlock()
 	if err != nil {
-		rollbackErr := rollbackCompletedRecording(context.WithoutCancel(ctx), paths.Database, completed)
-		if rollbackErr != nil {
-			err = errors.Join(err, rollbackErr)
-		}
 		_ = logging.AppendLine(paths.Log, "ERROR: complete recording %s: %v", completed.ID, err)
 		return
 	}
@@ -303,21 +299,20 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
+	recordingStateMu.Lock()
+	retryPendingCompletions(context.Background(), paths.Database)
+	recordingStateMu.Unlock()
 	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
 	if err != nil {
 		return err
 	}
+	pending := make([]legacy.Program, 0, len(recording))
 	for _, program := range recording {
-		if program.Recorded == "" {
-			continue
-		}
-		for _, path := range []string{filepath.FromSlash(program.Recorded), filepath.FromSlash(program.Recorded) + ".part"} {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return err
-			}
+		if program.Recorded != "" && program.PID == 0 && programstore.CompletionClaimed(program) {
+			pending = append(pending, program)
 		}
 	}
-	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, []legacy.Program{}); err != nil {
+	if err := programstore.Write(context.Background(), paths.Database, programstore.Recording, pending); err != nil {
 		return err
 	}
 	recordedDir := cfg.RecordedDir
@@ -367,6 +362,7 @@ func acquireProcessLock(pidPath string) (*system.ProcessLock, error) {
 
 func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source StreamSource, now time.Time) (Result, error) {
 	retryPendingRecordingRemovals(ctx, paths.Database)
+	retryPendingCompletions(ctx, paths.Database)
 	retryPendingReservationDeletes(ctx, paths.Database)
 	if paths.Database != "" {
 		db, err := database.Open(ctx, paths.Database)
@@ -442,10 +438,6 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 
 		recorded = mergeRecordedProgram(recorded, completed)
 		if err := programstore.Complete(context.WithoutCancel(ctx), paths.Database, completed); err != nil {
-			rollbackErr := rollbackCompletedRecording(context.WithoutCancel(ctx), paths.Database, completed)
-			if rollbackErr != nil {
-				err = errors.Join(err, rollbackErr)
-			}
 			return result, err
 		}
 		if err := logCollectionWrite(paths, programstore.Recording); err != nil {
@@ -473,24 +465,6 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 	return result, nil
 }
 
-func rollbackCompletedRecording(ctx context.Context, databasePath string, program legacy.Program) error {
-	var rollbackErr error
-	if databasePath != ":memory:" {
-		if err := programstore.Remove(ctx, databasePath, programstore.Recording, program.ID); err != nil {
-			rollbackErr = errors.Join(rollbackErr, err)
-			if err := programstore.ClearCompletionClaim(ctx, databasePath, program.ID); err != nil {
-				rollbackErr = errors.Join(rollbackErr, err)
-			}
-			queueCompletionRollback(databasePath, program)
-		}
-	}
-	if err := removeCompletedOutput(program); err != nil {
-		rollbackErr = errors.Join(rollbackErr, err)
-		queueCompletionRollback(databasePath, program)
-	}
-	return rollbackErr
-}
-
 func rollbackCompletionClaim(ctx context.Context, databasePath string, program legacy.Program) error {
 	if databasePath == ":memory:" {
 		return nil
@@ -505,15 +479,6 @@ func rollbackCompletionClaim(ctx context.Context, databasePath string, program l
 		queueCompletionClaimRollback(databasePath, program)
 		return rollbackErr
 	}
-}
-
-func queueCompletionRollback(databasePath string, program legacy.Program) {
-	if databasePath == ":memory:" || databasePath == "" {
-		return
-	}
-	pendingCompletionRollbacks.Lock()
-	pendingCompletionRollbacks.programs[completionRollbackKey{databasePath: databasePath, programID: program.ID}] = pendingCompletionRollback{program: program, removeOutput: true}
-	pendingCompletionRollbacks.Unlock()
 }
 
 func queueCompletionClaimRollback(databasePath string, program legacy.Program) {
@@ -544,11 +509,6 @@ func retryPendingCompletionRollbacks(ctx context.Context, databasePath string) {
 			continue
 		}
 		if !found {
-			if entry.removeOutput {
-				if err := removeCompletedOutput(program); err != nil {
-					continue
-				}
-			}
 			pendingCompletionRollbacks.Lock()
 			delete(pendingCompletionRollbacks.programs, key)
 			pendingCompletionRollbacks.Unlock()
@@ -565,14 +525,25 @@ func retryPendingCompletionRollbacks(ctx context.Context, databasePath string) {
 		if err := programstore.Remove(ctx, key.databasePath, programstore.Recording, key.programID); err != nil {
 			continue
 		}
-		if entry.removeOutput {
-			if err := removeCompletedOutput(program); err != nil {
-				continue
-			}
-		}
 		pendingCompletionRollbacks.Lock()
 		delete(pendingCompletionRollbacks.programs, key)
 		pendingCompletionRollbacks.Unlock()
+	}
+}
+
+func retryPendingCompletions(ctx context.Context, databasePath string) {
+	if databasePath == "" || databasePath == ":memory:" {
+		return
+	}
+	recording, err := programstore.Read(ctx, databasePath, programstore.Recording)
+	if err != nil {
+		return
+	}
+	for _, program := range recording {
+		if program.Recorded == "" || program.PID != 0 || !programstore.CompletionClaimed(program) {
+			continue
+		}
+		_ = programstore.Complete(context.WithoutCancel(ctx), databasePath, program)
 	}
 }
 
@@ -662,17 +633,6 @@ func cleanupRecordedReservations(ctx context.Context, databasePath string, recor
 	return nil
 }
 
-func removeCompletedOutput(program legacy.Program) error {
-	if program.Recorded == "" {
-		return nil
-	}
-	err := os.Remove(filepath.FromSlash(program.Recorded))
-	if os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
 func shouldStart(program legacy.Program, recordingIDs map[string]struct{}, now time.Time) bool {
 	return shouldStartWithMargin(program, recordingIDs, now, recordStartMargin)
 }
@@ -701,14 +661,15 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	defer cancel()
 	endReached := atomic.Bool{}
 	var endTimer *time.Timer
-	endAt := time.UnixMilli(program.End).Add(recordingEndMargin(cfg))
+	endMargin := recordingEndMargin(cfg)
+	endAt := time.UnixMilli(program.End).Add(endMargin)
 	if endAt.After(time.Now()) {
 		endTimer = time.AfterFunc(time.Until(endAt), func() {
 			endReached.Store(true)
 			cancel()
 		})
 		defer endTimer.Stop()
-	} else if recordingEndMargin(cfg) < 0 {
+	} else if endMargin != 0 {
 		endReached.Store(true)
 		cancel()
 	}
@@ -754,7 +715,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 		"isScrambling": false,
 	})
 	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
-	if err := updateRecordingProgram(recordCtx, databasePath, program); err != nil {
+	if err := updateRecordingProgram(context.WithoutCancel(recordCtx), databasePath, program); err != nil {
 		return program, err
 	}
 	if logPath != "" {

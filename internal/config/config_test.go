@@ -37,6 +37,26 @@ func TestLoadLegacyRecordingMargins(t *testing.T) {
 	}
 }
 
+func TestLoadLegacyOperRecOffsets(t *testing.T) {
+	cfg, err := ParseLegacy([]byte(`{"operRecOffsetStart":0,"operRecOffsetEnd":-8000}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != 0 || cfg.RecordingEndMargin != -8000 {
+		t.Fatalf("legacy operRec offsets = %d/%d, want 0/-8000", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
+	}
+}
+
+func TestLoadLegacyOperRecOffsetDefaults(t *testing.T) {
+	cfg, err := ParseLegacy([]byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RecordingStartMargin != 5000 || cfg.RecordingEndMargin != -8000 {
+		t.Fatalf("legacy operRec offset defaults = %d/%d, want 5000/-8000", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
+	}
+}
+
 func TestSampleConfigLoads(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "config.sample.json"))
 	if err != nil {

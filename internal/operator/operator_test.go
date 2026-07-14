@@ -262,6 +262,52 @@ func TestRecordProgramHonorsNegativeEndMargin(t *testing.T) {
 	}
 }
 
+func TestRecordProgramStopsImmediatelyWhenEndMarginAlreadyElapsed(t *testing.T) {
+	dir := t.TempDir()
+	streamer := &endMarginStreamer{closed: make(chan struct{})}
+	cfg := &config.Config{RecordedDir: dir, RecordedFormat: "<id>.m2ts", RecordingEndMargin: 1}
+	program := legacy.Program{ID: "1", Start: time.Now().Add(-time.Minute).UnixMilli(), End: time.Now().Add(-2 * time.Second).UnixMilli()}
+	started := time.Now()
+	if _, err := recordProgram(context.Background(), cfg, streamer, program); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("recording with elapsed end margin stopped after %s", elapsed)
+	}
+}
+
+func TestEndMarginCompletionTransitionsToRecordedAndKeepsOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{
+		Database: filepath.Join(dir, "data", "strata.db"),
+		Log:      filepath.Join(dir, "log", "operator"),
+	})
+	program := legacy.Program{
+		ID:      "margin",
+		Start:   time.Now().Add(-time.Minute).UnixMilli(),
+		End:     time.Now().Add(100 * time.Millisecond).UnixMilli(),
+		Channel: legacy.Channel{Type: "GR", Channel: "27", Name: "Service"},
+	}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	finishRecording(context.Background(), paths.runtime(), cfg, &endMarginStreamer{closed: make(chan struct{})}, program)
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].ID != program.ID {
+		t.Fatalf("end-margin recording was not promoted: %#v", recorded)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.RecordedDir, "margin.m2ts")); err != nil {
+		t.Fatalf("end-margin output was not retained: %v", err)
+	}
+}
+
 func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Unix(1000, 0)
@@ -462,7 +508,7 @@ func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T
 	}
 }
 
-func TestInitializeRuntimeStateRemovesStaleActiveRecordingFiles(t *testing.T) {
+func TestInitializeRuntimeStatePreservesStaleActiveRecordingFiles(t *testing.T) {
 	dir := t.TempDir()
 	finalPath := filepath.Join(dir, "recorded", "stale.m2ts")
 	partPath := finalPath + ".part"
@@ -489,8 +535,8 @@ func TestInitializeRuntimeStateRemovesStaleActiveRecordingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{finalPath, partPath} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("stale active recording file %s still exists: %v", path, err)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("stale active recording file %s was removed: %v", path, err)
 		}
 	}
 	var recording []legacy.Program
@@ -1386,7 +1432,7 @@ func TestFinishRecordingMissingActiveRowKeepsReservation(t *testing.T) {
 	}
 }
 
-func TestFinishRecordingCompleteFailureRemovesActiveAndOutput(t *testing.T) {
+func TestFinishRecordingCompleteFailurePreservesOutputAndRetries(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
 		t.Fatal(err)
@@ -1430,8 +1476,8 @@ func TestFinishRecordingCompleteFailureRemovesActiveAndOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(active) != 0 {
-		t.Fatalf("active recording was left after completion failure: %#v", active)
+	if len(active) != 1 || !programstore.CompletionClaimed(active[0]) || active[0].PID != 0 {
+		t.Fatalf("retryable completion state was not retained: %#v", active)
 	}
 	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
 	if err != nil {
@@ -1448,12 +1494,35 @@ func TestFinishRecordingCompleteFailureRemovesActiveAndOutput(t *testing.T) {
 		t.Fatalf("reservation was not retained: %#v", reserves)
 	}
 	finalPath := filepath.Join(cfg.RecordedDir, "cfail.m2ts")
-	if _, err := os.Stat(finalPath); !os.IsNotExist(err) {
-		t.Fatalf("failed completion output still exists: %v", err)
+	if data, err := os.ReadFile(finalPath); err != nil || string(data) != "ts" {
+		t.Fatalf("failed completion output was not retained: data=%q err=%v", data, err)
+	}
+
+	db, err = database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recorded_insert"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	retryPendingCompletions(context.Background(), paths.Database)
+	recorded, err = programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].ID != program.ID {
+		t.Fatalf("pending completion was not promoted: %#v", recorded)
+	}
+	if _, err := os.Stat(finalPath); err != nil {
+		t.Fatalf("completed output was removed during retry: %v", err)
 	}
 }
 
-func TestPendingCompletionRollbackRetriesAfterDatabaseRecovers(t *testing.T) {
+func TestRetryPendingCompletionsWaitsForDatabaseRecovery(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths{Database: filepath.Join(dir, "data", "strata.db")}
 	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
@@ -1478,41 +1547,32 @@ func TestPendingCompletionRollbackRetriesAfterDatabaseRecovers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recording_delete
-		BEFORE DELETE ON program_collections
-		WHEN OLD.collection = 'recording'
-		BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;`)
-	if err == nil {
-		_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recording_update
-			BEFORE UPDATE ON program_collections
-			WHEN OLD.collection = 'recording'
-			BEGIN SELECT RAISE(ABORT, 'injected update failure'); END;`)
-	}
+	_, err = db.ExecContext(context.Background(), `CREATE TRIGGER fail_recorded_insert
+		BEFORE INSERT ON program_collections
+		WHEN NEW.collection = 'recorded'
+		BEGIN SELECT RAISE(ABORT, 'injected completion failure'); END;`)
 	if closeErr := db.Close(); err != nil {
 		t.Fatal(err)
 	} else if closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	if err := rollbackCompletedRecording(context.Background(), paths.Database, program); err == nil {
-		t.Fatal("rollback unexpectedly succeeded while database trigger was active")
+	retryPendingCompletions(context.Background(), paths.Database)
+	if _, err := os.Stat(program.Recorded); err != nil {
+		t.Fatalf("pending output was removed after failed retry: %v", err)
 	}
 
 	db, err = database.Open(context.Background(), paths.Database)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recording_delete"); err != nil {
-		db.Close()
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recording_update"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "DROP TRIGGER fail_recorded_insert"); err != nil {
 		db.Close()
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	retryPendingCompletionRollbacks(context.Background(), paths.Database)
+	retryPendingCompletions(context.Background(), paths.Database)
 	active, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
 	if err != nil {
 		t.Fatal(err)
@@ -1520,25 +1580,29 @@ func TestPendingCompletionRollbackRetriesAfterDatabaseRecovers(t *testing.T) {
 	if len(active) != 0 {
 		t.Fatalf("pending completion rollback did not remove active row: %#v", active)
 	}
-	if _, err := os.Stat(program.Recorded); !os.IsNotExist(err) {
-		t.Fatalf("pending completion rollback left output: %v", err)
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 1 || recorded[0].ID != program.ID {
+		t.Fatalf("pending completion was not recorded after recovery: %#v", recorded)
+	}
+	if _, err := os.Stat(program.Recorded); err != nil {
+		t.Fatalf("pending completion retry removed output: %v", err)
 	}
 }
 
-func TestPendingCompletionRollbackDoesNotDeleteNewRecording(t *testing.T) {
+func TestRetryPendingCompletionsIgnoresActiveRecording(t *testing.T) {
 	dir := t.TempDir()
 	databasePath := filepath.Join(dir, "data", "strata.db")
 	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	old := legacy.Program{ID: "retry", Recorded: filepath.Join(dir, "recorded", "retry.m2ts"), PID: 0}
-	queueCompletionRollback(databasePath, old)
-	current := old
-	current.PID = -1
+	current := legacy.Program{ID: "retry", Recorded: filepath.Join(dir, "recorded", "retry.m2ts"), PID: -1}
 	if err := programstore.Upsert(context.Background(), databasePath, programstore.Recording, current); err != nil {
 		t.Fatal(err)
 	}
-	retryPendingCompletionRollbacks(context.Background(), databasePath)
+	retryPendingCompletions(context.Background(), databasePath)
 	active, err := programstore.Read(context.Background(), databasePath, programstore.Recording)
 	if err != nil {
 		t.Fatal(err)

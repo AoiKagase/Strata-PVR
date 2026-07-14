@@ -493,6 +493,20 @@ func TestConvertLegacyConfigConvertsRecordingMarginsFromMilliseconds(t *testing.
 	}
 }
 
+func TestConvertLegacyConfigReadsOperRecOffsets(t *testing.T) {
+	old, err := config.ParseLegacy([]byte(`{"operRecOffsetStart":5000,"operRecOffsetEnd":-8000}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _, err := convertLegacyConfig(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Recording.StartMargin != 5 || doc.Recording.EndMargin != -8 {
+		t.Fatalf("converted operRec offsets = %d/%d, want 5/-8", doc.Recording.StartMargin, doc.Recording.EndMargin)
+	}
+}
+
 func mustReadCLIFile(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)
