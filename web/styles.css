@@ -3281,6 +3281,29 @@ body.view-schedule .schedule-zoom-controls {
     padding: 0 12px;
   }
 
+  /* Keep the compact schedule header in a stable order at tablet widths. */
+  body.view-schedule .schedule-menu-button {
+    order: 0;
+    flex: 0 0 44px;
+    margin-right: 8px;
+  }
+
+  body.view-schedule .schedule-status-summary {
+    order: 1;
+  }
+
+  body.view-schedule .schedule-filter-button {
+    order: 2;
+    flex: 0 0 44px;
+    margin-left: auto;
+  }
+
+  body.view-schedule .management-menu {
+    order: 3;
+    flex: 0 0 auto;
+    margin-left: 8px;
+  }
+
   body.view-schedule .main-nav-drawer {
     position: fixed;
     top: 0;
