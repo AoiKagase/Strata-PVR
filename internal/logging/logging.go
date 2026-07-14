@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,7 +33,51 @@ type Record struct {
 	Fields []Field
 }
 
+// RotationConfig controls size-based log rotation. MaxBytes <= 0 disables
+// rotation. When rotation is enabled, MaxFiles is the number of rotated
+// copies to retain (path.1 is the newest copy).
+type RotationConfig struct {
+	MaxBytes int64
+	MaxFiles int
+}
+
+const (
+	DefaultRotationMaxBytes = 10 * 1024 * 1024
+	DefaultRotationMaxFiles = 5
+)
+
 var now = time.Now
+
+var (
+	rotationMu     sync.RWMutex
+	rotationConfig = RotationConfig{
+		MaxBytes: DefaultRotationMaxBytes,
+		MaxFiles: DefaultRotationMaxFiles,
+	}
+	pathLocks sync.Map // map[string]*sync.Mutex
+)
+
+// SetRotationConfig changes the process-wide log rotation policy. A zero
+// MaxBytes value disables rotation. It is intended for applications and
+// tests that need a policy other than the defaults.
+func SetRotationConfig(config RotationConfig) error {
+	if config.MaxBytes < 0 {
+		return fmt.Errorf("log rotation max bytes must not be negative")
+	}
+	if config.MaxBytes > 0 && config.MaxFiles < 1 {
+		return fmt.Errorf("log rotation max files must be at least 1 when rotation is enabled")
+	}
+	rotationMu.Lock()
+	rotationConfig = config
+	rotationMu.Unlock()
+	return nil
+}
+
+func currentRotationConfig() RotationConfig {
+	rotationMu.RLock()
+	defer rotationMu.RUnlock()
+	return rotationConfig
+}
 
 // AppendEvent writes one structured record. The record is deliberately kept
 // line-oriented so the WUI can continue to stream log files efficiently.
@@ -74,11 +119,19 @@ func appendRecord(path string, record Record) error {
 	if path == "" {
 		return nil
 	}
+
+	line := formatRecord(record)
+	lock := pathLock(path)
+	lock.Lock()
+	defer lock.Unlock()
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	if err := rotateIfNeeded(path, int64(len(line)), currentRotationConfig()); err != nil {
+		return err
+	}
 
-	line := formatRecord(record)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
@@ -89,6 +142,52 @@ func appendRecord(path string, record Record) error {
 		return writeErr
 	}
 	return closeErr
+}
+
+func pathLock(path string) *sync.Mutex {
+	lock := &sync.Mutex{}
+	actual, _ := pathLocks.LoadOrStore(path, lock)
+	return actual.(*sync.Mutex)
+}
+
+func rotateIfNeeded(path string, incomingBytes int64, config RotationConfig) error {
+	if config.MaxBytes <= 0 || config.MaxFiles < 1 {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Size() == 0 || (info.Size() <= config.MaxBytes && incomingBytes <= config.MaxBytes-info.Size()) {
+		return nil
+	}
+
+	for index := config.MaxFiles - 1; index >= 1; index-- {
+		if err := renameReplacing(rotationPath(path, index), rotationPath(path, index+1)); err != nil {
+			return err
+		}
+	}
+	return renameReplacing(path, rotationPath(path, 1))
+}
+
+func rotationPath(path string, index int) string {
+	return path + "." + strconv.Itoa(index)
+}
+
+func renameReplacing(source, destination string) error {
+	if _, err := os.Stat(source); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := os.Remove(destination); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(source, destination)
 }
 
 func formatRecord(record Record) string {

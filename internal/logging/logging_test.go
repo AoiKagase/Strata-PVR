@@ -48,3 +48,45 @@ func TestAppendLineEmptyPathDoesNotCreateFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAppendLineRotatesBySizeAndRetainsConfiguredCopies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "log", "events")
+	oldConfig := currentRotationConfig()
+	if err := SetRotationConfig(RotationConfig{MaxBytes: 1, MaxFiles: 2}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = SetRotationConfig(oldConfig) })
+
+	for _, message := range []string{"first", "second", "third"} {
+		if err := AppendLine(path, "%s", message); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertFileContains(t, path, "third")
+	assertFileContains(t, path+".1", "second")
+	assertFileContains(t, path+".2", "first")
+	if _, err := os.Stat(path + ".3"); !os.IsNotExist(err) {
+		t.Fatalf("unexpected third rotated copy: %v", err)
+	}
+}
+
+func TestSetRotationConfigRejectsInvalidValues(t *testing.T) {
+	if err := SetRotationConfig(RotationConfig{MaxBytes: -1, MaxFiles: 1}); err == nil {
+		t.Fatal("negative max bytes should be rejected")
+	}
+	if err := SetRotationConfig(RotationConfig{MaxBytes: 1, MaxFiles: 0}); err == nil {
+		t.Fatal("zero max files should be rejected when rotation is enabled")
+	}
+}
+
+func assertFileContains(t *testing.T, path, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("%s does not contain %q: %s", path, want, data)
+	}
+}

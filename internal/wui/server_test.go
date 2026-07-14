@@ -2708,7 +2708,7 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 	}
 }
 
-func TestAPIRecordedPreviewDefaultsToThirtySeconds(t *testing.T) {
+func TestAPIRecordedPreviewDefaultsToOneMinute(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recorded.m2ts")
@@ -2738,8 +2738,8 @@ func TestAPIRecordedPreviewDefaultsToThirtySeconds(t *testing.T) {
 		t.Fatalf("recorded preview status=%d body=%q", res.Code, res.Body.String())
 	}
 	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "-ss 28.5") || !strings.Contains(joined, "-ss 1.5") {
-		t.Fatalf("recorded preview should target 30 seconds: %s", joined)
+	if !strings.Contains(joined, "-ss 58.5") || !strings.Contains(joined, "-ss 1.5") {
+		t.Fatalf("recorded preview should target 1 minute: %s", joined)
 	}
 }
 

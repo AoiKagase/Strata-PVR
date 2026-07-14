@@ -58,7 +58,7 @@ type Paths struct {
 }
 
 const legacyRecordingPreviewTailBytes int64 = 3200000
-const defaultPreviewPositionSeconds = 30
+const defaultPreviewPositionSeconds = 60
 
 var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
