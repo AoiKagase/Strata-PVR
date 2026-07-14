@@ -2708,6 +2708,41 @@ func TestAPIRecordedPreviewUsesPersistentCache(t *testing.T) {
 	}
 }
 
+func TestAPIRecordedPreviewDefaultsToThirtySeconds(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "recorded", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	old := runFFmpegPreview
+	var gotArgs []string
+	runFFmpegPreview = func(_ context.Context, input io.Reader, args ...string) ([]byte, error) {
+		if input != nil {
+			t.Fatal("recorded preview should not use a pipe input")
+		}
+		gotArgs = append([]string(nil), args...)
+		return []byte("preview-image"), nil
+	}
+	defer func() { runFFmpegPreview = old }()
+
+	handler := newTestHandler(t, paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/recorded/preview", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
+		t.Fatalf("recorded preview status=%d body=%q", res.Code, res.Body.String())
+	}
+	joined := strings.Join(gotArgs, " ")
+	if !strings.Contains(joined, "-ss 28.5") || !strings.Contains(joined, "-ss 1.5") {
+		t.Fatalf("recorded preview should target 30 seconds: %s", joined)
+	}
+}
+
 func TestNewHandlerRemovesOrphanPreviewImages(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

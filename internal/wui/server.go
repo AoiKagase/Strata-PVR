@@ -58,6 +58,7 @@ type Paths struct {
 }
 
 const legacyRecordingPreviewTailBytes int64 = 3200000
+const defaultPreviewPositionSeconds = 30
 
 var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
@@ -2979,7 +2980,7 @@ func previewPosition(r *http.Request) string {
 	pos := r.URL.Query().Get("pos")
 	n, err := strconv.Atoi(pos)
 	if err != nil {
-		n = 5
+		n = defaultPreviewPositionSeconds
 	}
 	return strconv.FormatFloat(float64(n)-1.5, 'f', -1, 64)
 }
