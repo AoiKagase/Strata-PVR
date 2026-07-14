@@ -2908,18 +2908,22 @@ func TestAPIDeletesPreviewCache(t *testing.T) {
 	}
 }
 
-func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
+func TestAPIRecordingPreviewUsesReliableTailInput(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recording.m2ts")
-	body := strings.Repeat("a", int(legacyRecordingPreviewTailBytes)+10)
+	body := strings.Repeat("a", int(recordingPreviewTailBytes)+10)
 	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	old := runFFmpegPreview
 	var gotInput string
 	var gotArgs []string
-	runFFmpegPreview = func(_ context.Context, input io.Reader, args ...string) ([]byte, error) {
+	var timeout time.Duration
+	runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
+		if deadline, ok := ctx.Deadline(); ok {
+			timeout = time.Until(deadline)
+		}
 		data, err := io.ReadAll(input)
 		if err != nil {
 			return nil, err
@@ -2940,8 +2944,11 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 	if res.Code != http.StatusOK || res.Body.String() != "preview-image" {
 		t.Fatalf("recording preview status=%d body=%q", res.Code, res.Body.String())
 	}
-	if len(gotInput) != int(legacyRecordingPreviewTailBytes) || gotInput != body[10:] {
+	if len(gotInput) != int(recordingPreviewTailBytes) || gotInput != body[10:] {
 		t.Fatalf("recording preview input length=%d", len(gotInput))
+	}
+	if timeout < 8*time.Second {
+		t.Fatalf("recording preview timeout=%v, want enough time for ffmpeg analysis", timeout)
 	}
 	joined := strings.Join(gotArgs, " ")
 	for _, want := range []string{"-f mpegts", "-i pipe:0", "-ss 1.5", "-codec:v png", "-s 480x270"} {
@@ -2951,42 +2958,6 @@ func TestAPIRecordingPreviewUsesLegacyTailInput(t *testing.T) {
 	}
 	if strings.Contains(joined, "-ss 97.5") || strings.Contains(joined, recordedPath) {
 		t.Fatalf("recording preview should use legacy tail pipe args: %s", joined)
-	}
-}
-
-func TestAPIRecordingPreviewRetriesWithLargerTail(t *testing.T) {
-	dir := t.TempDir()
-	paths := testPaths(dir)
-	recordedPath := filepath.Join(dir, "recording.m2ts")
-	body := strings.Repeat("a", int(recordingPreviewRetryTailBytes)+10)
-	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "recording", Recorded: filepath.ToSlash(recordedPath), PID: -1}}, false); err != nil {
-		t.Fatal(err)
-	}
-	old := runFFmpegPreview
-	defer func() { runFFmpegPreview = old }()
-	calls := 0
-	runFFmpegPreview = func(_ context.Context, input io.Reader, _ ...string) ([]byte, error) {
-		calls++
-		data, err := io.ReadAll(input)
-		if err != nil {
-			return nil, err
-		}
-		if len(data) != int(recordingPreviewRetryTailBytes) {
-			return nil, errors.New("tail did not include a decodable frame")
-		}
-		return []byte("retry-preview"), nil
-	}
-	handler := newTestHandler(t, paths, &config.Config{})
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/recording/recording/preview", nil))
-	if res.Code != http.StatusOK || res.Body.String() != "retry-preview" {
-		t.Fatalf("retry recording preview status=%d body=%q", res.Code, res.Body.String())
-	}
-	if calls != 2 {
-		t.Fatalf("recording preview ffmpeg calls=%d, want 2", calls)
 	}
 }
 
@@ -3223,11 +3194,12 @@ func TestAPIRecordingWatchRequiresPID(t *testing.T) {
 	}
 }
 
-func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
+func TestAPIRecordingWatchMP4UsesGeneratedGrowingInput(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	recordedPath := filepath.Join(dir, "recording.m2ts")
-	if err := os.WriteFile(recordedPath, []byte("live"), 0o644); err != nil {
+	body := "old!live" + strings.Repeat("x", int(recordingWatchInitialBytes)-len("live"))
+	if err := os.WriteFile(recordedPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{{ID: "abc", Title: "Live", Recorded: filepath.ToSlash(recordedPath), PID: 123}}, false); err != nil {
@@ -3237,10 +3209,8 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	var gotInput string
 	var gotArgs []string
 	ffmpegStarted := make(chan struct{})
-	allowInputRead := make(chan struct{})
 	runFFmpegStream = func(_ context.Context, input io.Reader, args ...string) (io.ReadCloser, func() error, error) {
 		close(ffmpegStarted)
-		<-allowInputRead
 		buf := make([]byte, 4)
 		if _, err := io.ReadFull(input, buf); err != nil {
 			return nil, nil, err
@@ -3263,19 +3233,15 @@ func TestAPIRecordingWatchMP4UsesGrowingLiveInput(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("recording watch did not start ffmpeg")
 	}
-	if err := os.WriteFile(recordedPath, []byte("livefollow"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	close(allowInputRead)
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("recording watch did not follow appended data")
+		t.Fatal("recording watch did not read the generated file")
 	}
 	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
-	if gotInput != "foll" {
+	if gotInput != "live" {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
