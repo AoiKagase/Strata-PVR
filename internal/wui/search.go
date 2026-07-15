@@ -12,6 +12,7 @@ import (
 )
 
 type programSearchQuery struct {
+	Query       string
 	Title       string
 	Description string
 	Category    string
@@ -20,6 +21,13 @@ type programSearchQuery struct {
 	ChannelID   string
 	StartHour   *int
 	EndHour     *int
+}
+
+type programSearchPage struct {
+	Items      []legacy.Program `json:"items"`
+	Total      int              `json:"total"`
+	Categories []string         `json:"categories"`
+	Channels   []legacy.Channel `json:"channels"`
 }
 
 func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -38,12 +46,29 @@ func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	writePrettyJSON(w, http.StatusOK, searchPrograms(schedules, query, time.Now()))
+	now := time.Now()
+	programs := searchPrograms(schedules, query, now)
+	limit, offset, paged, err := parseSearchPagination(r)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
+	if !paged {
+		writePrettyJSON(w, http.StatusOK, programs)
+		return
+	}
+	start := min(offset, len(programs))
+	end := min(start+limit, len(programs))
+	categories, channels := searchFacets(schedules, now)
+	writeCompactJSON(w, http.StatusOK, programSearchPage{
+		Items: programs[start:end], Total: len(programs), Categories: categories, Channels: channels,
+	})
 }
 
 func parseProgramSearchQuery(r *http.Request) (programSearchQuery, error) {
 	values := r.URL.Query()
 	query := programSearchQuery{
+		Query:       values.Get("query"),
 		Title:       values.Get("title"),
 		Description: firstQueryValue(values, "description", "desc"),
 		Category:    firstQueryValue(values, "category", "cat"),
@@ -59,6 +84,27 @@ func parseProgramSearchQuery(r *http.Request) (programSearchQuery, error) {
 		return programSearchQuery{}, err
 	}
 	return query, nil
+}
+
+func parseSearchPagination(r *http.Request) (limit int, offset int, paged bool, err error) {
+	values := r.URL.Query()
+	limitValue := values.Get("limit")
+	if limitValue == "" {
+		return 0, 0, false, nil
+	}
+	limit, err = strconv.Atoi(limitValue)
+	if err != nil || limit < 1 || limit > 200 {
+		return 0, 0, false, strconv.ErrSyntax
+	}
+	offsetValue := values.Get("offset")
+	if offsetValue == "" {
+		return limit, 0, true, nil
+	}
+	offset, err = strconv.Atoi(offsetValue)
+	if err != nil || offset < 0 {
+		return 0, 0, false, strconv.ErrSyntax
+	}
+	return limit, offset, true, nil
 }
 
 func firstQueryValue(values url.Values, names ...string) string {
@@ -122,6 +168,11 @@ func matchesProgramSearch(program legacy.Program, channel legacy.Channel, query 
 	if query.Category != "" && program.Category != query.Category {
 		return false
 	}
+	if query.Query != "" && !searchContains(strings.Join([]string{
+		program.ID, programTitle(program), programDescription(program), program.Category, programChannel.Name,
+	}, " "), query.Query) {
+		return false
+	}
 	if query.Title != "" && !searchContains(programTitle(program), query.Title) {
 		return false
 	}
@@ -129,6 +180,39 @@ func matchesProgramSearch(program legacy.Program, channel legacy.Channel, query 
 		return false
 	}
 	return matchesProgramSearchHours(program, query.StartHour, query.EndHour)
+}
+
+func searchFacets(schedules []legacy.ChannelSchedule, now time.Time) ([]string, []legacy.Channel) {
+	nowMS := now.UnixMilli()
+	categories := map[string]struct{}{}
+	channels := make([]legacy.Channel, 0, len(schedules))
+	for _, schedule := range schedules {
+		hasFutureProgram := false
+		for _, program := range schedule.Programs {
+			if program.End < nowMS {
+				continue
+			}
+			hasFutureProgram = true
+			if program.Category != "" {
+				categories[program.Category] = struct{}{}
+			}
+		}
+		if hasFutureProgram {
+			channels = append(channels, schedule.Channel)
+		}
+	}
+	categoryList := make([]string, 0, len(categories))
+	for category := range categories {
+		categoryList = append(categoryList, category)
+	}
+	sort.Strings(categoryList)
+	sort.SliceStable(channels, func(i, j int) bool {
+		if channels[i].N == channels[j].N {
+			return channels[i].ID < channels[j].ID
+		}
+		return channels[i].N < channels[j].N
+	})
+	return categoryList, channels
 }
 
 func programTitle(program legacy.Program) string {

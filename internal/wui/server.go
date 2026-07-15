@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1921,6 +1922,23 @@ func (s *server) handleRecorded(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
+	}
+	if r.Method != http.MethodPut && r.URL.Query().Get("limit") != "" {
+		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+		if err != nil || limit < 1 || limit > 200 {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		recorded = append([]legacy.Program(nil), recorded...)
+		sort.SliceStable(recorded, func(i, j int) bool {
+			if recorded[i].Start == recorded[j].Start {
+				return recorded[i].ID > recorded[j].ID
+			}
+			return recorded[i].Start > recorded[j].Start
+		})
+		if len(recorded) > limit {
+			recorded = recorded[:limit]
+		}
 	}
 	if r.Method == http.MethodPut {
 		result, err := s.runRecordedCleanup(recorded, true)

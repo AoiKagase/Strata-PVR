@@ -37,6 +37,7 @@
   var metricsRefreshTimer = null;
   var refreshQueued = false;
   var refreshVersion = 0;
+  var searchRequestVersion = 0;
   var operationalRefreshInFlight = false;
   var metricsRefreshInFlight = false;
   var realtimeSourceID = "wui-" + Date.now() + "-" + Math.random().toString(36).slice(2);
@@ -72,6 +73,12 @@
     scheduleGuideScrollToCurrentTime: false,
     listFilters: loadListFilters(),
     searchPage: 1,
+    searchItems: [],
+    searchTotal: 0,
+    searchCategories: [],
+    searchChannels: [],
+    searchLoaded: false,
+    searchRequest: null,
     recordedPage: 1,
     recordedPageSize: loadRecordedPageSize(),
     recordedViewMode: loadRecordedViewMode(),
@@ -82,6 +89,7 @@
     storageLoaded: false,
     programDataLoaded: {
       recorded: false,
+      "recorded/recent": false,
       schedule: false,
       "schedule/broadcasting": false
     },
@@ -1344,15 +1352,20 @@
 
   function programDataPathsForView(view) {
     var pathsByView = {
-      dashboard: ["recorded", "schedule/broadcasting"],
+      dashboard: ["recorded/recent", "schedule/broadcasting"],
       schedule: ["schedule", "schedule/broadcasting"],
-      search: ["schedule"],
+      search: [],
       recorded: ["recorded"]
     };
     return (pathsByView[view] || []).slice();
   }
 
   function requestProgramDataPath(path) {
+    if (path === "recorded/recent") {
+      return api("recorded?limit=8").then(function (value) {
+        return { path: path, value: value, loaded: true };
+      });
+    }
     if (path === "schedule/broadcasting") {
       return api(path).then(function (value) {
         return { path: path, value: value, loaded: true };
@@ -1381,6 +1394,8 @@
       } else if (result.path === "recording") {
         state.recording = result.value || [];
       } else if (result.path === "recorded") {
+        state.recorded = result.value || [];
+      } else if (result.path === "recorded/recent") {
         state.recorded = result.value || [];
       } else if (result.path === "schedule") {
         state.schedule = result.value || [];
@@ -1668,6 +1683,9 @@
         renderOperationalData();
       } else if (state.currentView === "search") {
         renderSearch();
+        if (!state.searchLoaded) {
+          loadSearchPage();
+        }
       } else if (state.currentView === "rules") {
         renderRules();
         renderRuleFormState();
@@ -1678,7 +1696,7 @@
       } else if (state.currentView === "logs") {
         refreshLogs();
       }
-      loadProgramDataForView(state.currentView, previousView !== state.currentView);
+      loadProgramDataForView(state.currentView, false);
     }
     if (state.currentView !== "status") {
       stopMetricsRefresh();
@@ -3446,67 +3464,62 @@
 
   var searchPageSize = 50;
 
-  function searchResults() {
+  function searchRequestPath() {
     var filter = state.listFilters.search || defaultListFilter("search");
-    var query = normalizeSearchText(filter.query);
-    var title = normalizeSearchText(filter.title);
-    var description = normalizeSearchText(filter.description);
-    var now = Date.now();
-    var results = [];
-    (state.schedule || []).forEach(function (channel) {
-      (channel.programs || []).forEach(function (source) {
-        if (!source || (source.end || 0) < now) {
-          return;
-        }
-        var program = cloneProgram(source);
-        if (!program.channel) {
-          program.channel = channel;
-        } else if (typeof program.channel === "object") {
-          program.channel = cloneProgram(program.channel);
-          if (!program.channel.id && channel.id) {
-            program.channel.id = channel.id;
-          }
-          if (!program.channel.name && channel.name) {
-            program.channel.name = channel.name;
-          }
-          if (!program.channel.type && channel.type) {
-            program.channel.type = channel.type;
-          }
-        }
-        var haystack = normalizeSearchText([
-          program.id, programTitle(program), program.title, program.fullTitle,
-          program.detail, program.description, programCategory(program), channelName(program)
-        ].join(" "));
-        if (query && haystack.indexOf(query) < 0) {
-          return;
-        }
-        if (title && normalizeSearchText(programTitle(program)).indexOf(title) < 0) {
-          return;
-        }
-        if (description && normalizeSearchText(program.detail || program.description || "").indexOf(description) < 0) {
-          return;
-        }
-        if (filter.category && programCategory(program) !== filter.category) {
-          return;
-        }
-        if (filter.type && programChannelType(program) !== filter.type) {
-          return;
-        }
-        if (filter.programID && String(program.id || "") !== String(filter.programID)) {
-          return;
-        }
-        if (filter.channelID && programChannelID(program) !== String(filter.channelID)) {
-          return;
-        }
-        if (!matchesSearchHours(program, filter.startHour, filter.endHour)) {
-          return;
-        }
-        results.push(program);
-      });
+    var params = [
+      ["query", filter.query],
+      ["title", filter.title],
+      ["description", filter.description],
+      ["category", filter.category],
+      ["type", filter.type],
+      ["programID", filter.programID],
+      ["channelID", filter.channelID],
+      ["startHour", filter.startHour],
+      ["endHour", filter.endHour],
+      ["limit", searchPageSize],
+      ["offset", Math.max(0, (state.searchPage - 1) * searchPageSize)]
+    ].filter(function (item) {
+      return item[1] !== undefined && item[1] !== null && item[1] !== "";
+    }).map(function (item) {
+      return encodeURIComponent(item[0]) + "=" + encodeURIComponent(String(item[1]));
     });
-    return results.sort(function (a, b) {
-      return (a.start || 0) - (b.start || 0);
+    return "search?" + params.join("&");
+  }
+
+  function loadSearchPage() {
+    var requestVersion = ++searchRequestVersion;
+    var list = byId("searchList");
+    if (list) {
+      list.setAttribute("aria-busy", "true");
+    }
+    var requestPromise = api(searchRequestPath()).then(function (result) {
+      if (requestVersion !== searchRequestVersion) {
+        return;
+      }
+      result = result || {};
+      var total = Math.max(0, Number(result.total) || 0);
+      var pageCount = Math.max(1, Math.ceil(total / searchPageSize));
+      var nextPage = Math.max(1, Math.min(pageCount, Number(state.searchPage) || 1));
+      if (nextPage !== state.searchPage) {
+        state.searchPage = nextPage;
+        return loadSearchPage();
+      }
+      state.searchItems = Array.isArray(result.items) ? result.items : [];
+      state.searchTotal = total;
+      state.searchCategories = Array.isArray(result.categories) ? result.categories : [];
+      state.searchChannels = Array.isArray(result.channels) ? result.channels : [];
+      state.searchLoaded = true;
+      renderSearch();
+    }).catch(showError).finally(function () {
+      if (requestVersion === searchRequestVersion) {
+        state.searchRequest = null;
+        if (list) {
+          list.setAttribute("aria-busy", "false");
+        }
+      }
     });
+    state.searchRequest = requestPromise;
+    return requestPromise;
   }
 
   function matchesSearchHours(program, startHour, endHour) {
@@ -3529,20 +3542,12 @@
     return !(startRule > start || endRule < end);
   }
 
-  function renderSearchFilterOptions(results) {
-    var categories = {};
-    (state.schedule || []).forEach(function (channel) {
-      (channel.programs || []).forEach(function (program) {
-        if (program && program.category) {
-          categories[String(program.category)] = true;
-        }
-      });
-    });
+  function renderSearchFilterOptions() {
     var category = byId("searchCategory");
     if (category) {
       var currentCategory = (state.listFilters.search || {}).category || "";
       category.innerHTML = "<option value=\"\">全ジャンル</option>";
-      Object.keys(categories).sort().forEach(function (value) {
+      state.searchCategories.forEach(function (value) {
         var option = document.createElement("option");
         option.value = value;
         option.textContent = value;
@@ -3557,10 +3562,19 @@
     if (type) {
       type.value = (state.listFilters.search || {}).type || "";
     }
-    renderChannelSelectOptions(byId("searchChannelID"), [
-      (state.listFilters.search || {}).channelID || ""
-    ], "全チャンネル", false);
-    var count = results.length;
+    var channel = byId("searchChannelID");
+    if (channel) {
+      var currentChannel = (state.listFilters.search || {}).channelID || "";
+      channel.innerHTML = "<option value=\"\">全チャンネル</option>";
+      state.searchChannels.forEach(function (value) {
+        var option = document.createElement("option");
+        option.value = value.id || "";
+        option.textContent = scheduleChannelName(value) || value.id || "不明なチャンネル";
+        channel.appendChild(option);
+      });
+      channel.value = currentChannel;
+    }
+    var count = state.searchTotal;
     var pageCount = Math.max(1, Math.ceil(count / searchPageSize));
     state.searchPage = Math.max(1, Math.min(pageCount, Number(state.searchPage) || 1));
     var start = count ? (state.searchPage - 1) * searchPageSize + 1 : 0;
@@ -3582,10 +3596,8 @@
   }
 
   function renderSearch() {
-    var results = searchResults();
-    renderSearchFilterOptions(results);
-    var start = (state.searchPage - 1) * searchPageSize;
-    renderList("searchList", results.slice(start, start + searchPageSize), "条件に一致する番組はありません", searchPageSize, ["reserve", "skip", "unskip", "create-rule-from-program"]);
+    renderSearchFilterOptions();
+    renderList("searchList", state.searchItems, state.searchLoaded ? "条件に一致する番組はありません" : "番組を読み込んでいます", searchPageSize, ["reserve", "skip", "unskip", "create-rule-from-program"]);
     var filter = state.listFilters.search || defaultListFilter("search");
     [
       ["searchQuery", filter.query],
@@ -3969,7 +3981,7 @@
     var help = document.createElement("p");
     help.id = "scheduleGuideHelp";
     help.className = "screen-reader-only";
-    help.textContent = "番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組へ移動し、Enterキーで詳細を開きます。";
+    help.textContent = "番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組表へ移動し、矢印キーで番組を選び、Enterキーで詳細を開きます。タッチ操作では番組一覧も利用できます。";
     root.appendChild(help);
     var scroll = document.createElement("div");
     scroll.className = "schedule-guide-scroll";
@@ -3984,7 +3996,7 @@
 
     function renderVisibleScheduleLanes() {
       var headerHeight = 76;
-      var overscan = Math.max(720, Math.round(scroll.clientHeight * 0.75));
+      var overscan = Math.max(320, Math.round(scroll.clientHeight * 0.35));
       var visibleTop = Math.max(0, scroll.scrollTop - headerHeight);
       var visibleBottom = visibleTop + Math.max(scroll.clientHeight, 360);
       var nextWindowStart = Math.max(0, visibleTop - overscan);
@@ -3994,8 +4006,20 @@
       }
       virtualWindowStart = nextWindowStart;
       virtualWindowEnd = nextWindowEnd;
-      virtualLanes.forEach(function (record) {
+      var horizontalOverscan = Math.max(264, Math.round(scroll.clientWidth * 0.2));
+      var horizontalStart = Math.max(0, scroll.scrollLeft - horizontalOverscan);
+      var horizontalEnd = scroll.scrollLeft + scroll.clientWidth + horizontalOverscan;
+      var laneWindows = virtualLanes.map(function (record) {
+        var left = record.lane.offsetLeft;
+        return { record: record, left: left, right: left + record.lane.offsetWidth };
+      });
+      laneWindows.forEach(function (window) {
+        var record = window.record;
         var lane = record.lane;
+        if (window.right < horizontalStart || window.left > horizontalEnd) {
+          lane.innerHTML = "";
+          return;
+        }
         var programs = record.group.programs;
         var low = 0;
         var high = programs.length;
@@ -4017,7 +4041,7 @@
             break;
           }
           if (bottom >= nextWindowStart) {
-            lane.appendChild(renderScheduleCard(program, firstStart, minuteHeight));
+            lane.appendChild(renderScheduleCard(program, firstStart, minuteHeight, record.lane.dataset.scheduleChannelIndex));
           }
         }
         var now = Date.now();
@@ -4028,6 +4052,7 @@
           lane.appendChild(line);
         }
       });
+      ensureScheduleRovingTabStop(scroll);
     }
 
     function queueVisibleScheduleLanes() {
@@ -4100,11 +4125,12 @@
     }
     grid.appendChild(timeRail);
 
-    channelGroups.forEach(function (group) {
+    channelGroups.forEach(function (group, channelIndex) {
       var lane = document.createElement("div");
       lane.className = "schedule-channel-lane";
       lane.setAttribute("role", "group");
       lane.setAttribute("aria-label", (group.name || group.id || "チャンネル") + "の番組");
+      lane.dataset.scheduleChannelIndex = String(channelIndex);
       lane.style.height = guideHeight + "px";
       virtualLanes.push({ lane: lane, group: group });
       grid.appendChild(lane);
@@ -4188,7 +4214,73 @@
     return "";
   }
 
-  function renderScheduleCard(program, timelineStart, minuteHeight) {
+  function scheduleCards(root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(".schedule-card"));
+  }
+
+  function updateScheduleRovingSelection(card, focus) {
+    if (!card) {
+      return;
+    }
+    var scroll = card.closest(".schedule-guide-scroll") || document;
+    var programID = card.dataset.programId || "";
+    state.activeProgramID = programID;
+    scheduleCards(scroll).forEach(function (item) {
+      var active = item === card;
+      item.tabIndex = active ? 0 : -1;
+      item.classList.toggle("selected", active);
+    });
+    if (focus) {
+      card.focus({ preventScroll: true });
+      card.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
+  function ensureScheduleRovingTabStop(scroll) {
+    var cards = scheduleCards(scroll);
+    if (!cards.length) {
+      return;
+    }
+    var current = cards.filter(function (card) {
+      return Boolean(state.activeProgramID && card.dataset.programId === state.activeProgramID);
+    })[0] || cards[0];
+    cards.forEach(function (card) {
+      card.tabIndex = card === current ? 0 : -1;
+      card.classList.toggle("selected", card.dataset.programId === state.activeProgramID);
+    });
+  }
+
+  function adjacentScheduleCard(card, key) {
+    var scroll = card.closest(".schedule-guide-scroll");
+    var cards = scheduleCards(scroll);
+    var channelIndex = Number(card.dataset.channelIndex);
+    var start = Number(card.dataset.start);
+    var sameChannel = cards.filter(function (item) {
+      return Number(item.dataset.channelIndex) === channelIndex;
+    }).sort(function (a, b) {
+      return Number(a.dataset.start) - Number(b.dataset.start);
+    });
+    if (key === "Home") {
+      return sameChannel[0] || null;
+    }
+    if (key === "End") {
+      return sameChannel[sameChannel.length - 1] || null;
+    }
+    if (key === "ArrowUp" || key === "ArrowDown") {
+      var vertical = sameChannel.filter(function (item) {
+        return key === "ArrowUp" ? Number(item.dataset.start) < start : Number(item.dataset.start) > start;
+      });
+      return key === "ArrowUp" ? vertical[vertical.length - 1] || null : vertical[0] || null;
+    }
+    var nextChannel = channelIndex + (key === "ArrowLeft" ? -1 : 1);
+    return cards.filter(function (item) {
+      return Number(item.dataset.channelIndex) === nextChannel;
+    }).sort(function (a, b) {
+      return Math.abs(Number(a.dataset.start) - start) - Math.abs(Number(b.dataset.start) - start);
+    })[0] || null;
+  }
+
+  function renderScheduleCard(program, timelineStart, minuteHeight, channelIndex) {
     program = decorateProgramState(program);
     var card = document.createElement("article");
     var stateLabel = programStateLabelText(program);
@@ -4209,8 +4301,11 @@
     card.classList.toggle("very-short", durationMinutes < 8);
     card.classList.toggle("selected", isActiveProgram(program));
     card.title = [programFullTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
-    card.tabIndex = 0;
+    card.tabIndex = -1;
     card.setAttribute("role", "button");
+    card.dataset.programId = program.id || "";
+    card.dataset.start = String(program.start || 0);
+    card.dataset.channelIndex = String(channelIndex || "0");
     card.setAttribute("aria-label", [
       programFullTitle(program),
       formatTime(program.start) + "から" + formatTime(end),
@@ -4243,12 +4338,22 @@
     card.appendChild(title);
     card.appendChild(meta);
     card.addEventListener("click", function () {
+      updateScheduleRovingSelection(card, false);
       openProgramDialog(program);
+    });
+    card.addEventListener("focus", function () {
+      updateScheduleRovingSelection(card, false);
     });
     card.addEventListener("keydown", function (event) {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         openProgramDialog(program);
+      } else if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End") {
+        var next = adjacentScheduleCard(card, event.key);
+        if (next) {
+          event.preventDefault();
+          updateScheduleRovingSelection(next, true);
+        }
       }
     });
     return card;
@@ -5816,7 +5921,12 @@
         refreshMetrics();
       }
       if (state.hasLoaded) {
-        loadProgramDataForView(state.currentView, state.currentView !== view);
+        if (state.currentView === "search") {
+          state.searchLoaded = false;
+          loadSearchPage();
+        } else {
+          loadProgramDataForView(state.currentView, state.currentView !== view);
+        }
       }
       if (refreshQueued) {
         refreshQueued = false;
@@ -5835,7 +5945,9 @@
     if (state.currentView === "dashboard" || state.currentView === "schedule") {
       refreshPaths.push("schedule/broadcasting");
     }
-    if (state.currentView === "dashboard" || state.currentView === "recorded") {
+    if (state.currentView === "dashboard") {
+      refreshPaths.push("recorded/recent");
+    } else if (state.currentView === "recorded") {
       refreshPaths.push("recorded");
     }
     var storageRequested = state.currentView === "status";
@@ -6040,6 +6152,7 @@
       startHour: "searchStartHour",
       endHour: "searchEndHour"
     };
+    var loadFilteredSearch = debounce(loadSearchPage, 180);
     Object.keys(fields).forEach(function (key) {
       var control = byId(fields[key]);
       if (!control) {
@@ -6048,8 +6161,14 @@
       control.addEventListener(control.tagName === "SELECT" ? "change" : "input", function () {
         state.listFilters.search[key] = control.value.trim ? control.value.trim() : control.value;
         state.searchPage = 1;
+        state.searchLoaded = false;
         saveListFilters();
         renderSearch();
+        if (control.tagName === "SELECT") {
+          loadSearchPage();
+        } else {
+          loadFilteredSearch();
+        }
       });
     });
     var reset = byId("searchFilterReset");
@@ -6057,20 +6176,23 @@
       reset.addEventListener("click", function () {
         state.listFilters.search = defaultListFilter("search");
         state.searchPage = 1;
+        state.searchLoaded = false;
         saveListFilters();
         renderSearch();
+        loadSearchPage();
       });
     }
     [
       { action: "first", page: function () { return 1; } },
       { action: "prev", page: function () { return state.searchPage - 1; } },
       { action: "next", page: function () { return state.searchPage + 1; } },
-      { action: "last", page: function () { return Math.max(1, Math.ceil(searchResults().length / searchPageSize)); } }
+      { action: "last", page: function () { return Math.max(1, Math.ceil(state.searchTotal / searchPageSize)); } }
     ].forEach(function (item) {
       document.querySelectorAll("[data-search-page-control='" + item.action + "']").forEach(function (button) {
         button.addEventListener("click", function () {
           state.searchPage = item.page();
           renderSearch();
+          loadSearchPage();
           scrollToPageTop();
         });
       });

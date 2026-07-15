@@ -3270,11 +3270,119 @@ body.view-schedule .schedule-zoom-controls {
   background: var(--schedule-surface);
 }
 
+@media (min-width: 761px) and (max-width: 1600px) {
+  body.view-schedule .main-nav {
+    overflow-x: visible;
+  }
+
+  body.view-schedule .schedule-status-summary {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  body.view-schedule .schedule-status-summary > span:not(.schedule-status-pill) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.view-schedule .schedule-filter-button {
+    display: inline-flex;
+    order: 2;
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin-left: auto;
+    border-color: var(--schedule-line);
+    background: var(--panel);
+    color: var(--ink);
+  }
+
+  body.view-schedule.schedule-filter-open .schedule-filter-button {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  body.view-schedule .schedule-nav-controls {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: clamp(14px, 3vw, 40px);
+    z-index: 18;
+    align-items: center;
+    width: min(1040px, calc(100vw - 28px));
+    max-width: calc(100vw - 28px);
+    grid-template-columns: auto minmax(130px, 1fr) auto minmax(130px, 1fr) auto minmax(130px, 1fr);
+    gap: 10px 8px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--schedule-line);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: var(--schedule-surface);
+    box-shadow: 0 5px 8px var(--shadow-ui);
+    white-space: normal;
+  }
+
+  body.view-schedule.schedule-filter-open .schedule-nav-controls {
+    display: grid;
+  }
+
+  body.view-schedule .schedule-nav-controls select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.view-schedule .management-menu {
+    order: 3;
+    margin-left: 0;
+  }
+}
+
 @media (max-width: 520px) {
   body.view-schedule .main-nav {
     z-index: 36;
     min-height: 48px;
+    overflow-x: visible;
     padding: 0 8px;
+  }
+
+  body.view-schedule .schedule-menu-button {
+    order: 0;
+  }
+
+  body.view-schedule .schedule-status-summary {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border-right: 0;
+    gap: 4px;
+  }
+
+  body.view-schedule .schedule-status-pill {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.view-schedule #scheduleRecordingSummary,
+  body.view-schedule #scheduleReserveSummary,
+  body.view-schedule #scheduleConflictSummary {
+    display: none;
+  }
+
+  body.view-schedule .schedule-filter-button {
+    order: 2;
+  }
+
+  body.view-schedule .management-menu {
+    order: 3;
+    margin-left: 0;
   }
 
   body.view-schedule .main-nav-drawer {

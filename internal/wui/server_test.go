@@ -598,18 +598,21 @@ func TestNativeDashboardLoadsProgramDataByView(t *testing.T) {
 	}
 	source := string(body)
 	wants := []string{
-		`dashboard: ["recorded", "schedule/broadcasting"]`,
+		`dashboard: ["recorded/recent", "schedule/broadcasting"]`,
 		`schedule: ["schedule", "schedule/broadcasting"]`,
-		`search: ["schedule"]`,
+		`search: []`,
 		`recorded: ["recorded"]`,
+		`api("recorded?limit=8")`,
+		`return "search?" + params.join("&");`,
+		`state.searchItems = Array.isArray(result.items) ? result.items : [];`,
 		`var refreshPaths = ["status", "reserves", "recording"].concat(programDataPathsForView(view));`,
-		`if (state.currentView === "dashboard" || state.currentView === "recorded") {`,
-		`refreshPaths.push("recorded");`,
+		`refreshPaths.push("recorded/recent");`,
+		`} else if (state.currentView === "recorded") {`,
 		`renderList("recordedList", sortedPrograms(state.recorded, "recorded")`,
 		`renderFilteredListView("recorded");`,
 		`state.currentView === "reserves" || state.currentView === "recorded"`,
 		`var storageRequested = state.currentView === "status";`,
-		`loadProgramDataForView(state.currentView, previousView !== state.currentView);`,
+		`loadProgramDataForView(state.currentView, false);`,
 	}
 	for _, want := range wants {
 		if !strings.Contains(source, want) {
@@ -1200,6 +1203,11 @@ func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
 			`focusAdjacentRow`,
 			`addEventListener("dblclick"`,
 			`event.key === "Enter" || event.key === " "`,
+			`function ensureScheduleRovingTabStop(scroll)`,
+			`function adjacentScheduleCard(card, key)`,
+			`card.tabIndex = -1`,
+			`event.key === "ArrowRight"`,
+			`矢印キーで番組を選び`,
 			`initKeyboardShortcuts();`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
@@ -1999,6 +2007,27 @@ func TestAPISearchUsesStrataRouteAndLegacyFilters(t *testing.T) {
 		t.Fatalf("unexpected search result: %#v", programs)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/search?query=%E8%AA%AC%E6%98%8E&limit=1&offset=0", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("paged search status = %d body=%s", res.Code, res.Body.String())
+	}
+	var page programSearchPage
+	if err := json.Unmarshal(res.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != "wanted" || len(page.Categories) != 2 || len(page.Channels) != 1 {
+		t.Fatalf("unexpected paged search result: %#v", page)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/search?limit=201", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("invalid search limit status = %d", res.Code)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/search?start=invalid", nil)
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -2011,6 +2040,33 @@ func TestAPISearchUsesStrataRouteAndLegacyFilters(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusMethodNotAllowed || res.Header().Get("Allow") != "HEAD, GET" {
 		t.Fatalf("search method status=%d allow=%q", res.Code, res.Header().Get("Allow"))
+	}
+}
+
+func TestAPIRecordedLimitReturnsNewest(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recorded := []legacy.Program{
+		{ID: "old", Start: 100, End: 200},
+		{ID: "newest", Start: 300, End: 400},
+		{ID: "middle", Start: 200, End: 300},
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded?limit=2", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("recorded limit status = %d body=%s", res.Code, res.Body.String())
+	}
+	var got []legacy.Program
+	if err := json.Unmarshal(res.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "newest" || got[1].ID != "middle" {
+		t.Fatalf("unexpected limited recorded list: %#v", got)
 	}
 }
 
