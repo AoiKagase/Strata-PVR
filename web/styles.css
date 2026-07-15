@@ -123,6 +123,97 @@
   --topbar-height: 120px;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: oklch(14% 0.014 235);
+    --ink: oklch(94% 0.01 230);
+    --ink-soft: oklch(82% 0.018 225);
+    --muted: oklch(72% 0.018 225);
+    --line: oklch(32% 0.018 230);
+    --line-strong: oklch(42% 0.025 225);
+    --line-soft: oklch(27% 0.016 230);
+    --panel: oklch(20% 0.014 235);
+    --panel-strong: oklch(24% 0.018 230);
+    --panel-schedule: oklch(18% 0.018 230);
+    --surface-control: oklch(25% 0.018 230);
+    --surface-control-soft: oklch(22% 0.016 230);
+    --surface-quiet: oklch(19% 0.014 230);
+    --surface-muted: oklch(29% 0.018 230);
+    --surface-disabled: oklch(24% 0.012 230);
+    --schedule-surface: oklch(18% 0.02 225);
+    --schedule-line: oklch(38% 0.026 225);
+    --schedule-grid: oklch(16% 0.014 230);
+    --schedule-grid-head: oklch(25% 0.024 225);
+    --schedule-grid-rail: oklch(19% 0.016 230);
+    --schedule-grid-line: oklch(28% 0.018 230);
+    --schedule-grid-major: oklch(38% 0.025 225 / 0.9);
+    --brand: oklch(18% 0.024 235);
+    --brand-strong: oklch(12% 0.02 235);
+    --accent: oklch(70% 0.105 225);
+    --accent-strong: oklch(82% 0.075 220);
+    --accent-ink: oklch(15% 0.025 235);
+    --accent-soft: oklch(27% 0.045 225);
+    --success: oklch(70% 0.095 160);
+    --success-strong: oklch(82% 0.07 160);
+    --success-soft: oklch(25% 0.035 160);
+    --warn: oklch(76% 0.115 78);
+    --warn-strong: oklch(86% 0.08 78);
+    --warn-soft: oklch(27% 0.045 78);
+    --error: oklch(69% 0.15 28);
+    --error-strong: oklch(82% 0.105 28);
+    --error-soft: oklch(25% 0.055 28);
+    --accent-line: oklch(61% 0.07 170);
+    --accent-hover-surface: oklch(27% 0.03 170);
+    --overlay-ink: oklch(6% 0.018 230 / 0.62);
+    --danger: oklch(54% 0.16 28);
+    --danger-strong: oklch(47% 0.15 28);
+    --chart-axis: oklch(68% 0.025 215);
+    --chart-grid: oklch(34% 0.02 215);
+    --chart-recorded: oklch(70% 0.1 190);
+    --chart-used: oklch(66% 0.07 200);
+    --chart-free: oklch(31% 0.025 205);
+    --chart-memory: oklch(74% 0.13 75);
+    --ink-secondary: oklch(74% 0.025 225);
+    --focus-ring: oklch(76% 0.1 165);
+    --schedule-scroll-surface: oklch(28% 0.025 225);
+    --shadow-ui: oklch(4% 0.018 230 / 0.42);
+    --shadow-drawer: oklch(4% 0.018 230 / 0.54);
+    --schedule-backdrop: oklch(4% 0.018 230 / 0.62);
+    --topbar-glow: oklch(70% 0.105 225 / 0.16);
+    --nav-surface: oklch(18% 0.016 235);
+    --view-head-surface: linear-gradient(90deg, var(--panel) 0, var(--panel) 62%, var(--panel-schedule) 100%);
+    --schedule-summary-ink: oklch(82% 0.02 225);
+    --schedule-card-line: oklch(43% 0.035 225);
+    --schedule-card-hover: oklch(28% 0.03 225);
+    --schedule-selected-ring: oklch(72% 0.1 225 / 0.32);
+    --recording-ring: oklch(69% 0.15 28 / 0.26);
+    --reserved-ring: oklch(70% 0.105 225 / 0.24);
+    --conflict-ring: oklch(76% 0.115 78 / 0.28);
+    --skip-state-line: oklch(58% 0.018 235);
+    --skip-state-surface: oklch(31% 0.018 235);
+    --category-anime-line: oklch(58% 0.07 292);
+    --category-anime-surface: oklch(24% 0.035 292);
+    --category-movie-line: oklch(62% 0.075 72);
+    --category-movie-surface: oklch(25% 0.038 72);
+    --category-news-line: oklch(58% 0.07 245);
+    --category-news-surface: oklch(23% 0.035 245);
+    --category-sports-line: oklch(58% 0.065 145);
+    --category-sports-surface: oklch(23% 0.035 145);
+    --category-drama-line: oklch(58% 0.07 10);
+    --category-drama-surface: oklch(24% 0.038 10);
+    --category-music-line: oklch(58% 0.065 265);
+    --category-music-surface: oklch(23% 0.035 265);
+    --category-information-line: oklch(58% 0.06 185);
+    --category-information-surface: oklch(23% 0.035 185);
+    --category-variety-line: oklch(62% 0.065 95);
+    --category-variety-surface: oklch(25% 0.038 95);
+    --category-neutral-line: oklch(46% 0.025 235);
+    --category-neutral-surface: oklch(22% 0.02 235);
+    --console-muted: oklch(78% 0.016 230);
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -946,14 +1037,14 @@ summary:focus-visible,
   padding-right: 10px;
   padding-left: 10px;
   border-radius: 6px;
-  background: color-mix(in oklch, var(--error-soft) 42%, white);
+  background: color-mix(in oklch, var(--error-soft) 42%, var(--panel));
 }
 
 .recorded-preview-warning {
   justify-self: start;
   width: fit-content;
   padding: 2px 7px;
-  border: 1px solid color-mix(in oklch, var(--error-strong) 30%, white);
+  border: 1px solid color-mix(in oklch, var(--error-strong) 30%, var(--panel));
   border-radius: 999px;
   background: var(--error-soft);
   color: var(--error-strong);
@@ -1750,7 +1841,7 @@ summary:focus-visible,
   padding: 6px;
   border: 1px solid var(--schedule-line);
   border-radius: 6px;
-  background: var(--surface-white);
+  background: var(--surface-control);
 }
 
 .action-menu-panel .small-button {
@@ -1829,7 +1920,7 @@ summary:focus-visible,
 
 .program-dialog-alert {
   padding: 10px 12px;
-  border: 1px solid color-mix(in oklch, var(--error-strong) 34%, white);
+  border: 1px solid color-mix(in oklch, var(--error-strong) 34%, var(--panel));
   border-radius: 6px;
   background: var(--error-soft);
   color: var(--error-strong);
@@ -2079,7 +2170,7 @@ summary:focus-visible,
 .danger-button {
   border-color: var(--danger-strong);
   background: var(--danger);
-  color: var(--surface-white);
+  color: var(--danger-ink);
 }
 
 .danger-button:hover {
@@ -3076,6 +3167,8 @@ body.view-settings .settings-grid {
 
   body.view-schedule .schedule-menu-button {
     order: 0;
+    position: relative;
+    z-index: 37;
   }
 
   body.view-schedule .schedule-filter-button {
@@ -3400,7 +3493,7 @@ body.view-schedule .schedule-zoom-controls {
     transform: translateX(-100%);
     transition: transform 180ms ease-out;
     overflow-y: auto;
-    padding: 12px;
+    padding: 60px 12px 12px;
     border-right: 1px solid var(--schedule-line);
     background: var(--schedule-surface);
     box-shadow: 5px 0 8px var(--shadow-drawer);
@@ -3519,9 +3612,49 @@ body.view-schedule .schedule-zoom-controls {
 }
 
 @media (pointer: coarse), (max-width: 760px) {
+  body.view-schedule .schedule-list-alternative {
+    position: fixed;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px));
+    z-index: 12;
+    width: min(360px, calc(100vw - 24px));
+    max-height: calc(100dvh - 128px);
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 4px 8px var(--shadow-ui);
+  }
+
+  body.view-schedule .schedule-list-alternative[open] {
+    top: max(64px, calc(env(safe-area-inset-top) + 64px));
+    display: flex;
+    flex-direction: column;
+    max-height: none;
+  }
+
   .schedule-list-alternative summary,
   .schedule-touch-programs .program-title-button {
     min-height: 44px;
+  }
+
+  body.view-schedule .schedule-list-alternative summary {
+    flex: 0 0 auto;
+    padding: 0 12px;
+    background: var(--surface-control-soft);
+  }
+
+  body.view-schedule .schedule-list-alternative[open] summary {
+    border-bottom: 1px solid var(--line);
+  }
+
+  body.view-schedule .schedule-list-alternative .schedule-touch-programs {
+    min-height: 0;
+    margin: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 12px 12px;
   }
 
   .schedule-touch-programs .program-row {
@@ -3543,6 +3676,8 @@ body.view-schedule .schedule-zoom-controls {
     order: 0;
     flex: 0 0 44px;
     margin-right: 8px;
+    position: relative;
+    z-index: 37;
   }
 
   body.view-schedule .schedule-status-summary {
@@ -3576,7 +3711,7 @@ body.view-schedule .schedule-zoom-controls {
     transform: translateX(-100%);
     transition: transform 180ms ease-out;
     overflow-y: auto;
-    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    padding: max(64px, calc(env(safe-area-inset-top) + 64px)) 14px max(14px, env(safe-area-inset-bottom));
     border-right: 1px solid var(--schedule-line);
     background: var(--schedule-surface);
     box-shadow: 5px 0 8px var(--shadow-drawer);
