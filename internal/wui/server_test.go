@@ -603,6 +603,10 @@ func TestNativeDashboardLoadsProgramDataByView(t *testing.T) {
 		`search: ["schedule"]`,
 		`recorded: ["recorded"]`,
 		`var refreshPaths = ["status", "reserves", "recording"].concat(programDataPathsForView(view));`,
+		`if (state.currentView === "dashboard" || state.currentView === "recorded") {`,
+		`refreshPaths.push("recorded");`,
+		`renderList("recordedList", sortedPrograms(state.recorded, "recorded")`,
+		`renderFilteredListView("recorded");`,
 		`var storageRequested = state.currentView === "status";`,
 		`loadProgramDataForView(state.currentView, previousView !== state.currentView);`,
 	}

@@ -5634,6 +5634,7 @@
     if (state.currentView === "dashboard") {
       renderList("recordingList", activeRecordingPrograms(), "録画中の番組はありません", 8, ["watch-recording-mp4", "stop"], { preview: true, previewResource: "recording" });
       renderList("reserveList", state.reserves, "予約はありません", 8, ["skip", "unskip", "unreserve"], { compactActions: true });
+      renderList("recordedList", sortedPrograms(state.recorded, "recorded"), "録画済み番組はありません", 8, ["watch-mp4", "download", "xspf", "delete-recorded"], { preview: true, previewResource: "recorded" });
       renderOnAirList();
       return;
     }
@@ -5647,6 +5648,10 @@
     }
     if (state.currentView === "reserves") {
       renderFilteredListView("reserves");
+      return;
+    }
+    if (state.currentView === "recorded") {
+      renderFilteredListView("recorded");
       return;
     }
     if (state.currentView === "status") {
@@ -5829,6 +5834,9 @@
     var refreshPaths = ["status", "reserves", "recording"];
     if (state.currentView === "dashboard" || state.currentView === "schedule") {
       refreshPaths.push("schedule/broadcasting");
+    }
+    if (state.currentView === "dashboard" || state.currentView === "recorded") {
+      refreshPaths.push("recorded");
     }
     var storageRequested = state.currentView === "status";
     Promise.all([
