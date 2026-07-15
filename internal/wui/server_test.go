@@ -481,7 +481,7 @@ func TestNativeDashboardTextAssetsSupportDeflate(t *testing.T) {
 	if err := zr.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(decompressed, []byte("renderScheduleTouchList")) {
+	if !bytes.Contains(decompressed, []byte("renderScheduleListAlternative")) {
 		t.Fatal("deflated app.js body missing schedule touch list implementation")
 	}
 	if compressedSize >= len(decompressed) {
@@ -726,8 +726,11 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`lastOperationalAnnouncement`,
 		`var operationalAnnouncement = [`,
 		`announce(operationalAnnouncement);`,
-		`function renderScheduleTouchList(root, channelGroups)`,
+		`function renderScheduleListAlternative(root, channelGroups)`,
 		`summary.textContent = "番組を一覧で操作（" + programs.length + "件）";`,
+		`scroll.setAttribute("aria-describedby", help.id);`,
+		`lane.setAttribute("role", "group");`,
+		`formatTime(program.start) + "から" + formatTime(end)`,
 	} {
 		if !strings.Contains(string(app), want) {
 			t.Fatalf("web/app.js missing accessibility hardening marker %q", want)
@@ -743,9 +746,29 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`.schedule-nav-controls button.icon-button`,
 		`.schedule-zoom-controls button`,
 		`.schedule-touch-programs .program-title-button`,
+		`.schedule-card-time,`,
+		`.schedule-card .program-flag-badge`,
 	} {
 		if !strings.Contains(string(styles), want) {
 			t.Fatalf("web/styles.css missing accessibility hardening marker %q", want)
+		}
+	}
+}
+
+func TestNativeDashboardSchedulesStickyOffsetMeasurement(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(app)
+	for _, want := range []string{
+		`var stickyOffsetSyncFrame = 0;`,
+		`function queueStickyOffsetSync()`,
+		`window.addEventListener("resize", queueStickyOffsetSync);`,
+		`window.addEventListener("orientationchange", queueStickyOffsetSync);`,
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("web/app.js missing resize scheduling marker %q", want)
 		}
 	}
 }
@@ -843,9 +866,11 @@ func TestNativeDashboardShowsRecordingPreviewImages(t *testing.T) {
 func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {
-			`function playerWindowURL(url, meta)`,
+			`function playerWindowURL(url, meta, subtitles)`,
+			`params.set("subtitles", subtitles);`,
 			`return "/player.html?" + params.toString();`,
-			`openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "");`,
+			`subtitleURL = playerSubtitleSourceBuilder(cloneQuery(query || {}));`,
+			`openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "", subtitleURL);`,
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.player-shell:fullscreen .player-controls`,
@@ -854,9 +879,12 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 			`.player-shell:fullscreen .player-controls:focus-within`,
 		},
 		filepath.Join("..", "..", "web", "player.html"): {
-			`<video id="externalPlayer" controls autoplay playsinline>`,
+			`<video id="externalPlayer" controls autoplay playsinline aria-label="視聴プレイヤー">`,
+			`<track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語" default>`,
 			`var src = params.get("src");`,
+			`var subtitles = params.get("subtitles");`,
 			`video.src = new URL(src, window.location.href).toString();`,
+			`subtitleTrack.src = new URL(subtitles, window.location.href).toString();`,
 		},
 	}
 	for path, wants := range files {

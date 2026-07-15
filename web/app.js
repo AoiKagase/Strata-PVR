@@ -1471,12 +1471,21 @@
     document.documentElement.style.setProperty("--topbar-height", height + "px");
   }
 
-  function isMobileScheduleLayout() {
-    return window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
+  var stickyOffsetSyncFrame = 0;
+
+  function queueStickyOffsetSync() {
+    if (stickyOffsetSyncFrame) {
+      return;
+    }
+    var sync = function () {
+      stickyOffsetSyncFrame = 0;
+      syncStickyOffsets();
+    };
+    stickyOffsetSyncFrame = window.requestAnimationFrame ? window.requestAnimationFrame(sync) : window.setTimeout(sync, 0);
   }
 
-  function usesTouchScheduleLayout() {
-    return isMobileScheduleLayout() || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  function isMobileScheduleLayout() {
+    return window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
   }
 
   function setScheduleMenuOpen(open) {
@@ -2138,11 +2147,14 @@
     window.location.href = url;
   }
 
-  function playerWindowURL(url, meta) {
+  function playerWindowURL(url, meta, subtitles) {
     var params = new URLSearchParams();
     params.set("src", url);
     if (meta) {
       params.set("title", meta);
+    }
+    if (subtitles) {
+      params.set("subtitles", subtitles);
     }
     return "/player.html?" + params.toString();
   }
@@ -2377,7 +2389,15 @@
     var openLink = byId("playerOpenLink");
     if (openLink) {
       var metaNode = byId("playerDialogMeta");
-      openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "");
+      var subtitleURL = "";
+      if (playerSubtitleSourceBuilder) {
+        try {
+          subtitleURL = playerSubtitleSourceBuilder(cloneQuery(query || {}));
+        } catch (error) {
+          subtitleURL = "";
+        }
+      }
+      openLink.href = playerWindowURL(url, metaNode ? metaNode.textContent : "", subtitleURL);
     }
     if (!video) {
       return;
@@ -3745,13 +3765,10 @@
       return;
     }
     renderScheduleGuide(root, channelGroups);
-    renderScheduleTouchList(root, channelGroups);
+    renderScheduleListAlternative(root, channelGroups);
   }
 
-  function renderScheduleTouchList(root, channelGroups) {
-    if (!usesTouchScheduleLayout()) {
-      return;
-    }
+  function renderScheduleListAlternative(root, channelGroups) {
     var programs = [];
     channelGroups.forEach(function (group) {
       group.programs.forEach(function (program) {
@@ -3766,7 +3783,7 @@
     }
 
     var details = document.createElement("details");
-    details.className = "schedule-touch-list";
+    details.className = "schedule-list-alternative";
     var summary = document.createElement("summary");
     summary.textContent = "番組を一覧で操作（" + programs.length + "件）";
     details.appendChild(summary);
@@ -3949,10 +3966,16 @@
     var guideHeight = Math.max(360, Math.round(totalMinutes * minuteHeight));
 
     root.className = "schedule-guide";
+    var help = document.createElement("p");
+    help.id = "scheduleGuideHelp";
+    help.className = "screen-reader-only";
+    help.textContent = "番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組へ移動し、Enterキーで詳細を開きます。";
+    root.appendChild(help);
     var scroll = document.createElement("div");
     scroll.className = "schedule-guide-scroll";
     scroll.setAttribute("role", "region");
     scroll.setAttribute("aria-label", "番組表");
+    scroll.setAttribute("aria-describedby", help.id);
     scroll.tabIndex = 0;
     var virtualLanes = [];
     var virtualRenderFrame = 0;
@@ -4080,6 +4103,8 @@
     channelGroups.forEach(function (group) {
       var lane = document.createElement("div");
       lane.className = "schedule-channel-lane";
+      lane.setAttribute("role", "group");
+      lane.setAttribute("aria-label", (group.name || group.id || "チャンネル") + "の番組");
       lane.style.height = guideHeight + "px";
       virtualLanes.push({ lane: lane, group: group });
       grid.appendChild(lane);
@@ -4186,7 +4211,15 @@
     card.title = [programFullTitle(program), program.detail || program.description || ""].filter(Boolean).join("\n");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", [programFullTitle(program), programFlagNames(program).join(" "), stateLabel, "の詳細を開く"].filter(Boolean).join(" "));
+    card.setAttribute("aria-label", [
+      programFullTitle(program),
+      formatTime(program.start) + "から" + formatTime(end),
+      channelName(program),
+      program.category || "未分類",
+      programFlagNames(program).join(" "),
+      stateLabel,
+      "の詳細を開く"
+    ].filter(Boolean).join(" "));
 
     var time = document.createElement("span");
     time.className = "schedule-card-time";
@@ -6102,8 +6135,8 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     syncStickyOffsets();
-    window.addEventListener("resize", syncStickyOffsets);
-    window.addEventListener("orientationchange", syncStickyOffsets);
+    window.addEventListener("resize", queueStickyOffsetSync);
+    window.addEventListener("orientationchange", queueStickyOffsetSync);
     var previousMobileScheduleLayout = isMobileScheduleLayout();
     window.addEventListener("resize", function () {
       var mobileScheduleLayout = isMobileScheduleLayout();

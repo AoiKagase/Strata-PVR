@@ -127,7 +127,9 @@
     <h1 id="title">視聴</h1>
   </header>
   <main>
-    <video id="externalPlayer" controls autoplay playsinline></video>
+    <video id="externalPlayer" controls autoplay playsinline aria-label="視聴プレイヤー">
+      <track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語" default>
+    </video>
     <div class="message" id="message" role="status" aria-live="polite" hidden>
       <p id="messageText">再生 URL が指定されていません。</p>
       <button id="retryButton" type="button" hidden>再試行</button>
@@ -137,9 +139,11 @@
     (function () {
       var params = new URLSearchParams(window.location.search);
       var src = params.get("src");
+      var subtitles = params.get("subtitles");
       var title = params.get("title") || "視聴";
       var titleNode = document.getElementById("title");
       var video = document.getElementById("externalPlayer");
+      var subtitleTrack = document.getElementById("subtitleTrack");
       var message = document.getElementById("message");
       var messageText = document.getElementById("messageText");
       var retryButton = document.getElementById("retryButton");
@@ -161,6 +165,15 @@
         }
         try {
           video.src = new URL(src, window.location.href).toString();
+          if (subtitles) {
+            try {
+              subtitleTrack.src = new URL(subtitles, window.location.href).toString();
+            } catch (error) {
+              subtitleTrack.removeAttribute("src");
+            }
+          } else {
+            subtitleTrack.removeAttribute("src");
+          }
           resolvedSrc = video.src;
           video.hidden = false;
           message.hidden = true;

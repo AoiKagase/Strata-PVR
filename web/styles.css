@@ -403,8 +403,24 @@ body {
   line-height: 1;
 }
 
-.schedule-touch-list {
-  display: none;
+.schedule-list-alternative {
+  display: block;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.schedule-list-alternative summary {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.schedule-list-alternative .program-title-button {
+  min-height: 36px;
 }
 
 .schedule-zoom-label {
@@ -1397,9 +1413,10 @@ summary:focus-visible,
 }
 
 .schedule-channel-head .channel-actions button {
-  min-height: 24px;
+  min-width: 44px;
+  min-height: 32px;
   padding: 0 8px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .schedule-time-rail {
@@ -1418,7 +1435,7 @@ summary:focus-visible,
   padding: 0 4px;
   border-top: 1px solid var(--schedule-grid-line);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 18px;
 }
@@ -1557,8 +1574,8 @@ summary:focus-visible,
 .schedule-card-meta {
   overflow: hidden;
   color: var(--ink-soft);
-  font-size: 9px;
-  line-height: 1.08;
+  font-size: 11px;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1572,7 +1589,7 @@ summary:focus-visible,
   border-radius: 3px;
   background: var(--reserved-strong);
   color: var(--schedule-state-ink);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.1;
   overflow: hidden;
@@ -1603,8 +1620,8 @@ summary:focus-visible,
   align-items: flex-start;
   gap: 3px;
   overflow: hidden;
-  font-size: 10px;
-  line-height: 1.08;
+  font-size: 12px;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
@@ -1618,7 +1635,7 @@ summary:focus-visible,
   min-height: 14px;
   padding: 0 3px;
   border-radius: 2px;
-  font-size: 8px !important;
+  font-size: 10px !important;
 }
 
 .schedule-card.short strong {
@@ -1643,13 +1660,13 @@ summary:focus-visible,
 
 .schedule-guide-grid[data-schedule-zoom="wide"] .schedule-card.short strong,
 .schedule-guide-grid[data-schedule-zoom="standard"] .schedule-card.short strong {
-  font-size: 9px;
-  line-height: 1;
+  font-size: 11px;
+  line-height: 1.1;
 }
 
 .schedule-guide-grid[data-schedule-zoom="detail"] .schedule-card.short strong,
 .schedule-guide-grid[data-schedule-zoom="precise"] .schedule-card.short strong {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .channel-actions {
@@ -3394,13 +3411,7 @@ body.view-schedule .schedule-zoom-controls {
 }
 
 @media (pointer: coarse), (max-width: 760px) {
-  .schedule-touch-list {
-    display: block;
-    margin-top: 12px;
-    border-top: 1px solid var(--line);
-  }
-
-  .schedule-touch-list summary,
+  .schedule-list-alternative summary,
   .schedule-touch-programs .program-title-button {
     min-height: 44px;
   }
@@ -3410,14 +3421,6 @@ body.view-schedule .schedule-zoom-controls {
     contain-intrinsic-size: 58px;
   }
 
-  .schedule-touch-list summary {
-    display: flex;
-    align-items: center;
-    color: var(--accent-strong);
-    font-size: 14px;
-    font-weight: 800;
-    cursor: pointer;
-  }
 }
 
 @media (min-width: 521px) and (max-width: 760px) {
