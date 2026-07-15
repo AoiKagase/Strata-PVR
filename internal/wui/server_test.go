@@ -607,6 +607,7 @@ func TestNativeDashboardLoadsProgramDataByView(t *testing.T) {
 		`refreshPaths.push("recorded");`,
 		`renderList("recordedList", sortedPrograms(state.recorded, "recorded")`,
 		`renderFilteredListView("recorded");`,
+		`state.currentView === "reserves" || state.currentView === "recorded"`,
 		`var storageRequested = state.currentView === "status";`,
 		`loadProgramDataForView(state.currentView, previousView !== state.currentView);`,
 	}

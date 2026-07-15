@@ -1664,7 +1664,7 @@
         renderStatus();
         loadViewData("status");
         startMetricsRefresh();
-      } else if (state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves") {
+      } else if (state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves" || state.currentView === "recorded") {
         renderOperationalData();
       } else if (state.currentView === "search") {
         renderSearch();
