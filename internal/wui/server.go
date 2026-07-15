@@ -1,6 +1,7 @@
 package wui
 
 import (
+	"bufio"
 	"bytes"
 	"compress/zlib"
 	"context"
@@ -688,6 +689,12 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func (s *server) withAccessLog(next http.Handler) http.Handler {
@@ -3410,10 +3417,46 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 	defer output.Close()
 	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, output)
+	_, _ = copyLiveWebVTT(w, output)
 	if err := wait(); err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
 	}
+}
+
+func copyLiveWebVTT(w http.ResponseWriter, source io.Reader) (int64, error) {
+	n, err := io.WriteString(w, "WEBVTT\n\n")
+	written := int64(n)
+	if err != nil {
+		return written, err
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	reader := bufio.NewReader(source)
+	line, err := reader.ReadString('\n')
+	if err != nil && len(line) == 0 {
+		return written, err
+	}
+	if strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(line), "\ufeff"), "WEBVTT") {
+		for {
+			line, err = reader.ReadString('\n')
+			if strings.TrimRight(line, "\r\n") == "" {
+				break
+			}
+			if err != nil {
+				return written, err
+			}
+		}
+	} else {
+		count, writeErr := io.WriteString(w, line)
+		written += int64(count)
+		if writeErr != nil {
+			return written, writeErr
+		}
+	}
+	count, copyErr := io.Copy(w, reader)
+	return written + count, copyErr
 }
 
 func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool) {

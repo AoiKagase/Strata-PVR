@@ -3672,6 +3672,9 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	if res.Code != http.StatusOK || res.Body.String() != "WEBVTT\n\n" {
 		t.Fatalf("subtitle status=%d body=%q", res.Code, res.Body.String())
 	}
+	if !res.Flushed {
+		t.Fatal("live subtitle response was not flushed")
+	}
 	if got := res.Header().Get("Content-Type"); got != "text/vtt; charset=utf-8" {
 		t.Fatalf("subtitle content-type = %q", got)
 	}
@@ -3691,6 +3694,28 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 			t.Fatalf("subtitle ffmpeg args missing %q: %s", want, joined)
 		}
 	}
+}
+
+func TestCopyLiveWebVTTFlushesHeaderBeforeReadingFFmpeg(t *testing.T) {
+	res := httptest.NewRecorder()
+	reader := readerFunc(func([]byte) (int, error) {
+		if got := res.Body.String(); got != "WEBVTT\n\n" {
+			t.Fatalf("body before ffmpeg output = %q", got)
+		}
+		if !res.Flushed {
+			t.Fatal("WebVTT header was not flushed before reading ffmpeg output")
+		}
+		return 0, io.EOF
+	})
+	if _, err := copyLiveWebVTT(res, reader); err != io.EOF {
+		t.Fatalf("copyLiveWebVTT error = %v", err)
+	}
+}
+
+type readerFunc func([]byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) {
+	return f(p)
 }
 
 func TestAPIChannelWatchMP4KeepsLegacyLiveBitrateArgs(t *testing.T) {
