@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -134,7 +135,7 @@ func UpdateFound(ctx context.Context, databasePath, collection, programID string
 		return false, err
 	}
 	defer release()
-	return database.UpdateProgramDocument(ctx, db, collection, programID, func(document json.RawMessage) (json.RawMessage, error) {
+	apply := func(document json.RawMessage) (json.RawMessage, error) {
 		var current legacy.Program
 		if err := json.Unmarshal(document, &current); err != nil {
 			return nil, err
@@ -144,7 +145,26 @@ func UpdateFound(ctx context.Context, databasePath, collection, programID string
 			return nil, err
 		}
 		return json.Marshal(updated)
-	})
+	}
+	for attempt := 0; ; attempt++ {
+		found, err := database.UpdateProgramDocument(ctx, db, collection, programID, apply)
+		if err == nil || !isDatabaseBusy(err) || attempt == 4 {
+			return found, err
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(time.Duration(attempt+1) * 10 * time.Millisecond):
+		}
+	}
+}
+
+// SQLite can reject a read transaction's later write with SQLITE_BUSY_SNAPSHOT
+// when a different process (for example WUI) commits in between. Retrying the
+// complete read-modify-write transaction obtains a fresh snapshot.
+func isDatabaseBusy(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "database is locked") || strings.Contains(message, "sqlite_busy")
 }
 
 func SetAbort(ctx context.Context, databasePath, collection, programID string, abort bool) error {

@@ -339,28 +339,47 @@ func TestStartPendingRecordingsStartsOverlappingReservations(t *testing.T) {
 		Recorded:  filepath.Join(dir, "data", "recorded.json"),
 		Log:       filepath.Join(dir, "log", "operator"),
 	})
+	db, err := database.Open(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := database.WithHandle(context.Background(), db)
 	reserves := []legacy.Program{
 		{ID: "a", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR"}},
-		{ID: "b", Start: now.UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR"}},
+		{ID: "b", Start: now.Add(30 * time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR"}},
 	}
-	if err := reservationstore.Write(context.Background(), paths.Database, reserves); err != nil {
+	if err := reservationstore.Write(ctx, paths.Database, reserves); err != nil {
 		t.Fatal(err)
 	}
 	release := make(chan struct{})
 	streamer := &concurrentStreamer{started: make(chan int64, 2), release: release}
 	var recordings sync.WaitGroup
-	if err := startPendingRecordings(context.Background(), paths.runtime(), &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}, streamer, now, &recordings); err != nil {
+	if err := startPendingRecordings(ctx, paths.runtime(), &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}, streamer, now, &recordings); err != nil {
 		t.Fatal(err)
 	}
-	for range reserves {
-		select {
-		case <-streamer.started:
-		case <-time.After(time.Second):
-			t.Fatal("overlapping recording did not start")
-		}
+	select {
+	case <-streamer.started:
+	case <-time.After(time.Second):
+		t.Fatal("initial recording did not start")
+	}
+	if err := startPendingRecordings(ctx, paths.runtime(), &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}, streamer, now.Add(30*time.Minute), &recordings); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-streamer.started:
+	case <-time.After(time.Second):
+		t.Fatal("later overlapping recording did not start")
 	}
 	close(release)
 	recordings.Wait()
+	recorded, err := programstore.Read(ctx, paths.Database, programstore.Recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != len(reserves) {
+		t.Fatalf("recorded %d overlapping reservations, want %d: %#v", len(recorded), len(reserves), recorded)
+	}
 }
 
 func TestStartPendingRecordingsSkipsElapsedNegativeEndMargin(t *testing.T) {

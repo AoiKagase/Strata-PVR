@@ -729,7 +729,14 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 		"isScrambling": false,
 	})
 	setProgramRawJSON(&program, "command", fmt.Sprintf("mirakurun type=%s priority=%d", program.Channel.Type, priority))
-	if err := updateRecordingProgram(context.WithoutCancel(recordCtx), databasePath, program); err != nil {
+	// Multiple recordings can reach a state transition at the same instant.
+	// Keep the read-modify-write transaction below single-writer: otherwise a
+	// second SQLite connection may fail with SQLITE_BUSY_SNAPSHOT after it has
+	// read the previous version of the recording row.
+	recordingStateMu.Lock()
+	err = updateRecordingProgram(context.WithoutCancel(recordCtx), databasePath, program)
+	recordingStateMu.Unlock()
+	if err != nil {
 		return program, err
 	}
 	if logPath != "" {
@@ -776,7 +783,9 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 		return program, context.Canceled
 	}
 	if databasePath != ":memory:" {
+		recordingStateMu.Lock()
 		claimed, claimToken, err := programstore.ClaimCompletionWithToken(context.WithoutCancel(recordCtx), databasePath, program)
+		recordingStateMu.Unlock()
 		if err != nil {
 			return program, err
 		}
