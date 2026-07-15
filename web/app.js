@@ -2535,9 +2535,30 @@
     if (!track) {
       return;
     }
+    if (track.track) {
+      track.track.addEventListener("cuechange", function () {
+        removeStaleLiveSubtitleCues(track);
+      });
+    }
     track.addEventListener("error", function () {
       if (track.getAttribute("src")) {
         setPlayerStatus("字幕を読み込めませんでした。FFmpegにlibaribcaptionまたはlibaribb24を含むビルドが必要です。");
+      }
+    });
+  }
+
+  function removeStaleLiveSubtitleCues(track) {
+    var source = track && track.getAttribute("src");
+    var textTrack = track && track.track;
+    var activeCues = textTrack && textTrack.activeCues;
+    if (!source || !/\/api\/channel\/[^/]+\/subtitles\.vtt(?:\?|$)/.test(source) || !activeCues || activeCues.length < 2) {
+      return;
+    }
+    Array.prototype.slice.call(activeCues, 0, -1).forEach(function (cue) {
+      try {
+        textTrack.removeCue(cue);
+      } catch (error) {
+        // The cue may already have expired while the active cue list was copied.
       }
     });
   }

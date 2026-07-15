@@ -158,6 +158,22 @@
         retryButton.hidden = !canRetry;
       }
 
+      function removeStaleLiveSubtitleCues() {
+        var source = subtitleTrack.getAttribute("src");
+        var textTrack = subtitleTrack.track;
+        var activeCues = textTrack && textTrack.activeCues;
+        if (!source || !/\/api\/channel\/[^/]+\/subtitles\.vtt(?:\?|$)/.test(source) || !activeCues || activeCues.length < 2) {
+          return;
+        }
+        Array.prototype.slice.call(activeCues, 0, -1).forEach(function (cue) {
+          try {
+            textTrack.removeCue(cue);
+          } catch (error) {
+            // The cue may already have expired while the active cue list was copied.
+          }
+        });
+      }
+
       function loadVideo() {
         if (!src) {
           showMessage("再生 URL が指定されていません。", false);
@@ -188,6 +204,7 @@
       }
 
       retryButton.addEventListener("click", loadVideo);
+      subtitleTrack.track.addEventListener("cuechange", removeStaleLiveSubtitleCues);
       video.addEventListener("error", function () {
         showMessage("再生に失敗しました。録画状態と WUI ログを確認して再試行してください。", true);
       });

@@ -4547,8 +4547,10 @@ func TestStaticServingUsesEmbeddedAssetsWithoutExternalDirectory(t *testing.T) {
 	}{
 		{path: "/", contentType: "text/html; charset=utf-8", contains: "<!doctype html"},
 		{path: "/index.html", contentType: "text/html; charset=utf-8", contains: "playerSubtitleTrack"},
+		{path: "/player.html", contentType: "text/html; charset=utf-8", contains: "removeStaleLiveSubtitleCues"},
 		{path: "/styles.css", contentType: "text/css; charset=utf-8", contains: "--"},
 		{path: "/app.js", contentType: "application/javascript", contains: "playerSubtitleSourceBuilder"},
+		{path: "/app.js", contentType: "application/javascript", contains: "removeStaleLiveSubtitleCues"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, test.path, nil)
 		res := httptest.NewRecorder()
