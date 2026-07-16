@@ -1290,7 +1290,7 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 				writePretty(stdout, target)
 				return nil
 			}
-			if err := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, true); err != nil {
+			if err := programstore.StopByUser(context.Background(), p.database, target.ID); err != nil {
 				if errors.Is(err, programstore.ErrProgramFinalizing) {
 					fmt.Fprintln(stdout, "stop:")
 					writePretty(stdout, target)
@@ -1300,17 +1300,10 @@ func stopRecording(p paths, args []string, stdout io.Writer) error {
 				return err
 			}
 			target.Abort = true
-			if !recording[i].IsManualReserved {
-				if err := markReserveSkip(p, recording[i].ID); err != nil {
-					if rollbackErr := programstore.SetAbort(context.Background(), p.database, programstore.Recording, target.ID, false); rollbackErr != nil {
-						err = errors.Join(err, rollbackErr)
-					}
-					return err
-				}
-			}
+			target.AbortReason = programstore.AbortReasonUser
 			fmt.Fprintln(stdout, "stop:")
 			writePretty(stdout, target)
-			fmt.Fprintln(stdout, "録画を停止しました。 ")
+			fmt.Fprintln(stdout, "録画を停止しました。途中までの録画は保存され、予約は終了します。")
 			return nil
 		}
 	}

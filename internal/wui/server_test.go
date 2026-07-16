@@ -1126,6 +1126,8 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 			`restoreFocus(confirmDialogReturnFocus)`,
 			`actionConfirmOptions("DELETE"`,
 			`録画停止の確認`,
+			`途中までの録画を保存し、予約を終了しますか？`,
+			`labels.push({ text: "途中終了", type: "aborted" });`,
 			`録画済み削除の確認`,
 			`設定保存の確認`,
 			`ルール追加の確認`,
@@ -1135,6 +1137,7 @@ func TestNativeDashboardConfirmDialog(t *testing.T) {
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.confirm-dialog .program-dialog-actions`,
 			`.danger-button`,
+			`.program-state-badge.aborted`,
 		},
 	}
 	for path, wants := range files {
@@ -2150,7 +2153,7 @@ func TestAPIRecordingDeleteSkipsReserveAndAborts(t *testing.T) {
 	}
 }
 
-func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
+func TestAPIRecordingDeleteSkipsManualReserveAndAborts(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	program := legacy.Program{ID: "manual", IsManualReserved: true}
@@ -2171,15 +2174,15 @@ func TestAPIRecordingDeleteKeepsManualReserveUnskipped(t *testing.T) {
 	if err := storage.ReadJSON(paths.Recording, &recording, "[]"); err != nil {
 		t.Fatal(err)
 	}
-	if len(recording) != 1 || !recording[0].Abort {
+	if len(recording) != 1 || !recording[0].Abort || recording[0].AbortReason != programstore.AbortReasonUser {
 		t.Fatalf("manual recording was not aborted: %#v", recording)
 	}
 	var reserves []legacy.Program
 	if err := storage.ReadJSON(paths.Reserves, &reserves, "[]"); err != nil {
 		t.Fatal(err)
 	}
-	if len(reserves) != 1 || reserves[0].IsSkip {
-		t.Fatalf("manual reserve should not be skipped: %#v", reserves)
+	if len(reserves) != 1 || !reserves[0].IsSkip {
+		t.Fatalf("manual reserve was not skipped: %#v", reserves)
 	}
 }
 

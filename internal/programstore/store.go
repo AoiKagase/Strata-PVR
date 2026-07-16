@@ -173,8 +173,50 @@ func SetAbort(ctx context.Context, databasePath, collection, programID string, a
 			return program, ErrProgramFinalizing
 		}
 		program.Abort = abort
+		program.AbortReason = ""
 		return program, nil
 	})
+}
+
+const AbortReasonUser = "user"
+
+// StopByUser atomically marks a recording as explicitly stopped and skips the
+// corresponding reservation, regardless of whether it is manual or automatic.
+func StopByUser(ctx context.Context, databasePath, programID string) error {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	defer release()
+	found, err := database.StopRecordingAndSkipReservation(ctx, db, programID,
+		func(document json.RawMessage) (json.RawMessage, error) {
+			var program legacy.Program
+			if err := json.Unmarshal(document, &program); err != nil {
+				return nil, err
+			}
+			if CompletionClaimed(program) {
+				return nil, ErrProgramFinalizing
+			}
+			program.Abort = true
+			program.AbortReason = AbortReasonUser
+			return json.Marshal(program)
+		},
+		func(document json.RawMessage) (json.RawMessage, error) {
+			var reserve legacy.Program
+			if err := json.Unmarshal(document, &reserve); err != nil {
+				return nil, err
+			}
+			reserve.IsSkip = true
+			return json.Marshal(reserve)
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%w: %s", ErrProgramNotFound, programID)
+	}
+	return nil
 }
 
 func ClaimCompletion(ctx context.Context, databasePath string, program legacy.Program) (bool, error) {
@@ -185,7 +227,7 @@ func ClaimCompletion(ctx context.Context, databasePath string, program legacy.Pr
 func ClaimCompletionWithToken(ctx context.Context, databasePath string, program legacy.Program) (bool, string, error) {
 	claimToken := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(atomic.AddUint64(&completionClaimSequence, 1), 10)
 	claimed, err := UpdateFound(ctx, databasePath, Recording, program.ID, func(current legacy.Program) (legacy.Program, error) {
-		if current.Abort {
+		if current.Abort && current.AbortReason != AbortReasonUser {
 			return current, ErrProgramAborted
 		}
 		if CompletionClaimed(current) {

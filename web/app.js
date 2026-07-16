@@ -1021,6 +1021,9 @@
     if (program && program.isSkip) {
       labels.push({ text: "スキップ", type: "skip" });
     }
+    if (program && program.abortReason === "user") {
+      labels.push({ text: "途中終了", type: "aborted" });
+    }
     return labels;
   }
 
@@ -2852,7 +2855,7 @@
         }));
       } else if (name === "stop" && program.isRecording) {
         row.appendChild(actionButton("停止", "録画を停止", function () {
-          runAction("recording/" + encodeURIComponent(program.id), "DELETE", "この録画を停止しますか？", actionConfirmOptions("DELETE", "この録画を停止しますか？", program, "録画停止の確認"));
+          runAction("recording/" + encodeURIComponent(program.id), "DELETE", "途中までの録画を保存し、予約を終了しますか？", actionConfirmOptions("DELETE", "途中までの録画を保存し、予約を終了しますか？", program, "録画停止の確認"));
         }));
       } else if (name === "watch-recording-mp4" && program.isRecording) {
         row.appendChild(actionButton("視聴", "録画中の番組を視聴", function () {

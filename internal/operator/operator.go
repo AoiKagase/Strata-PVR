@@ -29,6 +29,8 @@ const recordStartMargin = 15 * time.Second
 
 var getDiskUsage = system.GetDiskUsage
 
+var errUserStoppedWithoutData = errors.New("recording stopped by user before data was written")
+
 // recordingStateMu serializes short SQLite mutations made by concurrently
 // running recordings. Streams themselves remain independent; only their
 // state transitions need exclusive database access.
@@ -302,6 +304,15 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 		}
 		_ = logCollectionWrite(paths, programstore.Recording)
 		recordingStateMu.Unlock()
+		if errors.Is(err, errUserStoppedWithoutData) {
+			if _, deleteErr := reservationstore.Delete(context.WithoutCancel(ctx), paths.Database, program.ID); deleteErr != nil {
+				queueReservationDelete(paths.Database, program.ID)
+				_ = logging.AppendLine(paths.Log, "ERROR: remove stopped reserve %s: %v", program.ID, deleteErr)
+				return
+			}
+			_ = logging.AppendLine(paths.Log, "STOP: %s (no data)", operatorProgramLogLine(program))
+			return
+		}
 		_ = logging.AppendLine(paths.Log, "ERROR: recording %s: %v", program.ID, err)
 		return
 	}
@@ -320,6 +331,10 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 		return
 	}
 	_ = logging.AppendLine(paths.Log, "WRITE: %s (reserves)", paths.Database)
+	if completed.AbortReason == programstore.AbortReasonUser {
+		_ = logging.AppendLine(paths.Log, "STOP: %s (partial)", operatorProgramLogLine(completed))
+		return
+	}
 	_ = logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title)
 	_ = logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed))
 }
@@ -777,15 +792,18 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err != nil {
 		return program, err
 	}
-	if _, err := io.Copy(out, stream); err != nil {
-		if recordCtx.Err() != nil && !endReached.Load() {
-			out.Close()
+	_, copyErr := io.Copy(out, stream)
+	userStopped, err := userStopRequested(recordCtx, databasePath, program.ID)
+	if err != nil {
+		out.Close()
+		return program, err
+	}
+	if copyErr != nil && !endReached.Load() && !userStopped {
+		out.Close()
+		if recordCtx.Err() != nil {
 			return program, recordCtx.Err()
 		}
-		if !endReached.Load() {
-			out.Close()
-			return program, err
-		}
+		return program, copyErr
 	}
 	if err := out.Sync(); err != nil {
 		out.Close()
@@ -794,14 +812,22 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	if err := out.Close(); err != nil {
 		return program, err
 	}
-	if recordCtx.Err() != nil && !endReached.Load() {
+	if userStopped {
+		info, err := os.Stat(partPath)
+		if err != nil {
+			return program, err
+		}
+		if info.Size() == 0 {
+			return program, errUserStoppedWithoutData
+		}
+	} else if recordCtx.Err() != nil && !endReached.Load() {
 		return program, recordCtx.Err()
 	}
 	abortRequested, err := recordingAbortRequested(recordCtx, databasePath, program.ID)
 	if err != nil {
 		return program, err
 	}
-	if abortRequested {
+	if abortRequested && !userStopped {
 		return program, context.Canceled
 	}
 	if databasePath != ":memory:" {
@@ -895,6 +921,20 @@ func recordingAbortRequested(ctx context.Context, databasePath, programID string
 		return false, programstore.ErrProgramNotFound
 	}
 	return program.Abort, nil
+}
+
+func userStopRequested(ctx context.Context, databasePath, programID string) (bool, error) {
+	if databasePath == ":memory:" {
+		return false, nil
+	}
+	program, found, err := programstore.ReadByID(context.WithoutCancel(ctx), databasePath, programstore.Recording, programID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, programstore.ErrProgramNotFound
+	}
+	return program.Abort && program.AbortReason == programstore.AbortReasonUser, nil
 }
 
 func closeStreamOnContext(ctx context.Context, stream io.Closer) func() {

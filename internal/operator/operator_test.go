@@ -1047,6 +1047,67 @@ func TestRunOnceStopsWhenRecordingAbortIsSet(t *testing.T) {
 	}
 }
 
+func TestRecordProgramKeepsPartialOutputAfterUserStop(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{Database: filepath.Join(dir, "data", "strata.db")})
+	program := legacy.Program{ID: "userstop", Start: 1000, End: 3600000, Abort: true, AbortReason: programstore.AbortReasonUser, Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	completed, err := recordProgramWithLog(context.Background(), paths.Database, paths.Log, cfg, &fakeStreamer{body: "partial"}, program)
+	if err != nil {
+		t.Fatalf("recording error = %v", err)
+	}
+	if completed.AbortReason != programstore.AbortReasonUser {
+		t.Fatalf("abort reason = %q", completed.AbortReason)
+	}
+	finalPath := filepath.Join(cfg.RecordedDir, "userstop.m2ts")
+	data, err := os.ReadFile(finalPath)
+	if err != nil || string(data) != "partial" {
+		t.Fatalf("partial output = %q, %v", data, err)
+	}
+	if _, err := os.Stat(finalPath + ".part"); !os.IsNotExist(err) {
+		t.Fatalf("temporary partial output remains: %v", err)
+	}
+}
+
+func TestFinishRecordingPromotesUserStoppedPartialAndRemovesReservation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	paths := seedOperatorTestDatabase(t, testPaths{Database: filepath.Join(dir, "data", "strata.db"), Log: filepath.Join(dir, "operator.log")})
+	program := legacy.Program{ID: "partialstop", Start: 1000, End: 3600000, Abort: true, AbortReason: programstore.AbortReasonUser, Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, program); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservationstore.Upsert(context.Background(), paths.Database, program); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{RecordedDir: filepath.Join(dir, "recorded"), RecordedFormat: "<id>.m2ts"}
+	finishRecording(context.Background(), paths.runtime(), cfg, &fakeStreamer{body: "partial"}, program)
+	recording, err := programstore.Read(context.Background(), paths.Database, programstore.Recording)
+	if err != nil || len(recording) != 0 {
+		t.Fatalf("recording = %#v, %v", recording, err)
+	}
+	recorded, err := programstore.Read(context.Background(), paths.Database, programstore.Recorded)
+	if err != nil || len(recorded) != 1 || recorded[0].AbortReason != programstore.AbortReasonUser {
+		t.Fatalf("recorded = %#v, %v", recorded, err)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil || len(reserves) != 0 {
+		t.Fatalf("reserves = %#v, %v", reserves, err)
+	}
+	data, err := os.ReadFile(filepath.Join(cfg.RecordedDir, "partialstop.m2ts"))
+	if err != nil || string(data) != "partial" {
+		t.Fatalf("partial output = %q, %v", data, err)
+	}
+}
+
 func TestRecordProgramRejectsAbortSetAtEOFBeforePromotion(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths{

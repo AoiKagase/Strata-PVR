@@ -1365,9 +1365,15 @@ summary:focus-visible,
 }
 
 .program-state-badge.skip {
-  border-color: var(--skip-state-line);
-  background: var(--surface-disabled);
-  color: var(--ink-soft);
+	border-color: var(--skip-state-line);
+	background: var(--surface-disabled);
+	color: var(--ink-soft);
+}
+
+.program-state-badge.aborted {
+	border-color: var(--warn);
+	background: var(--warn-soft);
+	color: var(--warn-strong);
 }
 
 .inline-channel-row {

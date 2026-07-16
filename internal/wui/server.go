@@ -2104,33 +2104,13 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 	case http.MethodGet, http.MethodHead:
 		writePrettyJSON(w, http.StatusOK, recording)
 	case http.MethodDelete:
-		if err := programstore.SetAbort(r.Context(), s.paths.Database, programstore.Recording, id, true); err != nil {
+		if err := programstore.StopByUser(r.Context(), s.paths.Database, id); err != nil {
 			if errors.Is(err, programstore.ErrProgramFinalizing) {
 				legacyHTTPError(w, r, http.StatusConflict)
 				return
 			}
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
-		}
-		if !recording.IsManualReserved {
-			reserves, err := reservationstore.Read(r.Context(), s.paths.Database)
-			if err != nil {
-				if rollbackErr := programstore.SetAbort(context.WithoutCancel(r.Context()), s.paths.Database, programstore.Recording, id, false); rollbackErr != nil {
-					err = errors.Join(err, rollbackErr)
-				}
-				legacyHTTPError(w, r, http.StatusInternalServerError)
-				return
-			}
-			if reserveIndex := findProgram(reserves, id); reserveIndex != -1 {
-				reserves[reserveIndex].IsSkip = true
-				if err := reservationstore.Upsert(r.Context(), s.paths.Database, reserves[reserveIndex]); err != nil {
-					if rollbackErr := programstore.SetAbort(context.WithoutCancel(r.Context()), s.paths.Database, programstore.Recording, id, false); rollbackErr != nil {
-						err = errors.Join(err, rollbackErr)
-					}
-					legacyHTTPError(w, r, http.StatusInternalServerError)
-					return
-				}
-			}
 		}
 		writeCompactJSON(w, http.StatusOK, map[string]any{})
 	default:

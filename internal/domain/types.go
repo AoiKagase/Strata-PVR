@@ -98,6 +98,7 @@ type Program struct {
 	RecordedFormat   string                     `json:"recordedFormat,omitempty"`
 	Recorded         string                     `json:"recorded,omitempty"`
 	Abort            bool                       `json:"abort,omitempty"`
+	AbortReason      string                     `json:"abortReason,omitempty"`
 	OneSeg           bool                       `json:"1seg,omitempty"`
 	PID              int                        `json:"pid,omitempty"`
 	Raw              map[string]json.RawMessage `json:"-"`
@@ -203,6 +204,7 @@ func programJSONKeys() []string {
 		"recordedFormat",
 		"recorded",
 		"abort",
+		"abortReason",
 		"1seg",
 		"pid",
 	}

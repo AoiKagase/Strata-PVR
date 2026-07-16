@@ -154,6 +154,55 @@ func UpdateProgramDocument(ctx context.Context, db *sql.DB, collection, programI
 	return true, nil
 }
 
+// StopRecordingAndSkipReservation atomically marks an active recording as
+// stopped and prevents its reservation from being started again.
+func StopRecordingAndSkipReservation(ctx context.Context, db *sql.DB, programID string, updateRecording, updateReservation func(json.RawMessage) (json.RawMessage, error)) (bool, error) {
+	if programID == "" || updateRecording == nil || updateReservation == nil {
+		return false, fmt.Errorf("stop recording: invalid program")
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	defer tx.Rollback()
+	var recording string
+	if err := tx.QueryRowContext(ctx, `SELECT document_json FROM program_collections WHERE collection = 'recording' AND program_id = ?`, programID).Scan(&recording); err == sql.ErrNoRows {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	updatedRecording, err := updateRecording(json.RawMessage(recording))
+	if err != nil || !json.Valid(updatedRecording) {
+		if err == nil {
+			err = fmt.Errorf("invalid recording document")
+		}
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE program_collections SET document_json = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE collection = 'recording' AND program_id = ?`, string(updatedRecording), programID); err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	var reservation string
+	if err := tx.QueryRowContext(ctx, `SELECT document_json FROM reservations WHERE program_id = ?`, programID).Scan(&reservation); err == sql.ErrNoRows {
+		return true, tx.Commit()
+	} else if err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	updatedReservation, err := updateReservation(json.RawMessage(reservation))
+	if err != nil || !json.Valid(updatedReservation) {
+		if err == nil {
+			err = fmt.Errorf("invalid reservation document")
+		}
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE reservations SET document_json = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE program_id = ?`, string(updatedReservation), programID); err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("stop recording: %w", err)
+	}
+	return true, nil
+}
+
 func DeleteProgram(ctx context.Context, db *sql.DB, collection, programID string) error {
 	if !validProgramCollection(collection) || programID == "" {
 		return fmt.Errorf("delete %s: invalid program", collection)
