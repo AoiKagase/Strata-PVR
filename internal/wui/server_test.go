@@ -736,7 +736,9 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`var operationalAnnouncement = [`,
 		`announce(operationalAnnouncement);`,
 		`function renderScheduleListAlternative(root, channelGroups)`,
-		`summary.textContent = "番組を一覧で操作（" + programs.length + "件）";`,
+		`summary.textContent = "番組一覧（" + programs.length + "件）";`,
+		`searchControls.setAttribute("aria-label", "番組一覧を検索");`,
+		`list.addEventListener("scroll", function () {`,
 		`scroll.setAttribute("aria-describedby", help.id);`,
 		`lane.setAttribute("role", "group");`,
 		`formatTime(program.start) + "から" + formatTime(end)`,
@@ -755,6 +757,7 @@ func TestNativeDashboardAccessibilityHardening(t *testing.T) {
 		`.schedule-nav-controls button.icon-button`,
 		`.schedule-zoom-controls button`,
 		`.schedule-touch-programs .program-title-button`,
+		`body.view-schedule.schedule-list-open .schedule-zoom-controls`,
 		`.schedule-card-time,`,
 		`.schedule-card .program-flag-badge`,
 	} {

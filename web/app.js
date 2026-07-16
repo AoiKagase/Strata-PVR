@@ -3798,6 +3798,7 @@
     renderScheduleFilterOptions(channels);
     syncScheduleFilterControls();
     syncScheduleZoomControls();
+    document.body.classList.remove("schedule-list-open");
     root.innerHTML = "";
     if (!channelGroups.length) {
       renderScheduleEmpty(root, channels);
@@ -3824,13 +3825,35 @@
     var details = document.createElement("details");
     details.className = "schedule-list-alternative";
     var summary = document.createElement("summary");
-    summary.textContent = "番組を一覧で操作（" + programs.length + "件）";
+    summary.textContent = "番組一覧（" + programs.length + "件）";
     details.appendChild(summary);
+
+    var searchControls = document.createElement("div");
+    searchControls.className = "schedule-list-search";
+    searchControls.setAttribute("aria-label", "番組一覧を検索");
+    var searchField = document.createElement("label");
+    searchField.className = "control-field";
+    var searchLabel = document.createElement("span");
+    searchLabel.textContent = "一覧を検索";
+    var searchInput = document.createElement("input");
+    searchInput.type = "search";
+    searchInput.autocomplete = "off";
+    searchInput.placeholder = "タイトル、説明、チャンネル";
+    searchField.appendChild(searchLabel);
+    searchField.appendChild(searchInput);
+    var resultSummary = document.createElement("span");
+    resultSummary.className = "schedule-list-search-summary";
+    resultSummary.setAttribute("role", "status");
+    resultSummary.setAttribute("aria-live", "polite");
+    searchControls.appendChild(searchField);
+    searchControls.appendChild(resultSummary);
+    details.appendChild(searchControls);
 
     var list = document.createElement("div");
     list.className = "list schedule-touch-programs";
     list.setAttribute("aria-busy", "false");
     details.appendChild(list);
+    var filtered = programs;
     var renderedCount = 0;
     var renderPending = false;
 
@@ -3842,31 +3865,49 @@
       }
       list.setAttribute("aria-busy", "true");
       var fragment = document.createDocumentFragment();
-      var end = Math.min(programs.length, renderedCount + 40);
+      var end = Math.min(filtered.length, renderedCount + 40);
       while (renderedCount < end) {
-        fragment.appendChild(renderProgramRow(programs[renderedCount], [], true, {}));
+        fragment.appendChild(renderProgramRow(filtered[renderedCount], [], true, {}));
         renderedCount += 1;
       }
       list.appendChild(fragment);
-      if (renderedCount < programs.length) {
-        renderPending = true;
-        if (window.requestAnimationFrame) {
-          window.requestAnimationFrame(renderProgramChunk);
-        } else {
-          window.setTimeout(renderProgramChunk, 0);
-        }
-        return;
-      }
-      details.dataset.loaded = "true";
       list.setAttribute("aria-busy", "false");
     }
 
+    function resetList() {
+      var query = normalizeSearchText(searchInput.value);
+      filtered = programs.filter(function (program) {
+        return !query || normalizeSearchText(programSearchText(program)).indexOf(query) >= 0;
+      });
+      renderedCount = 0;
+      list.innerHTML = "";
+      list.scrollTop = 0;
+      resultSummary.textContent = filtered.length + "件";
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "schedule-list-empty";
+        empty.textContent = "一致する番組はありません";
+        list.appendChild(empty);
+        return;
+      }
+      renderProgramChunk();
+    }
+
     details.addEventListener("toggle", function () {
+      document.body.classList.toggle("schedule-list-open", details.open);
       if (!details.open) {
         list.setAttribute("aria-busy", "false");
         return;
       }
-      if (details.dataset.loaded === "true" || renderPending) {
+      resetList();
+    });
+    searchInput.addEventListener("input", function () {
+      if (details.open) {
+        resetList();
+      }
+    });
+    list.addEventListener("scroll", function () {
+      if (renderPending || renderedCount >= filtered.length || list.scrollTop + list.clientHeight < list.scrollHeight - 160) {
         return;
       }
       renderPending = true;

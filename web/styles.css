@@ -3621,7 +3621,7 @@ body.view-schedule .schedule-zoom-controls {
   body.view-schedule .schedule-list-alternative {
     position: fixed;
     right: max(12px, env(safe-area-inset-right));
-    bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px));
+    bottom: max(72px, calc(env(safe-area-inset-bottom) + 72px));
     z-index: 12;
     width: min(360px, calc(100vw - 24px));
     max-height: calc(100dvh - 128px);
@@ -3655,6 +3655,29 @@ body.view-schedule .schedule-zoom-controls {
     border-bottom: 1px solid var(--line);
   }
 
+  body.view-schedule .schedule-list-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    flex: 0 0 auto;
+    gap: 8px;
+    align-items: end;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  body.view-schedule .schedule-list-search .control-field {
+    min-width: 0;
+  }
+
+  .schedule-list-search-summary {
+    padding-bottom: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
   body.view-schedule .schedule-list-alternative .schedule-touch-programs {
     min-height: 0;
     margin: 0;
@@ -3663,9 +3686,19 @@ body.view-schedule .schedule-zoom-controls {
     padding: 4px 12px 12px;
   }
 
+  .schedule-list-empty {
+    margin: 12px 0;
+    color: var(--muted);
+  }
+
   .schedule-touch-programs .program-row {
     content-visibility: auto;
     contain-intrinsic-size: 58px;
+  }
+
+  body.view-schedule.schedule-list-open .schedule-zoom-controls {
+    visibility: hidden;
+    pointer-events: none;
   }
 
 }
