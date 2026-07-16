@@ -3617,7 +3617,8 @@ body.view-schedule .schedule-zoom-controls {
   }
 }
 
-@media (pointer: coarse), (max-width: 760px) {
+/* A large touch-enabled PC still uses the desktop schedule layout. */
+@media (max-width: 760px) {
   body.view-schedule .schedule-list-alternative {
     position: fixed;
     right: max(12px, env(safe-area-inset-right));
