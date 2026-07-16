@@ -31,6 +31,10 @@ var genreTable = map[int]string{
 
 func BuildSchedule(cfg *config.Config, services []mirakurun.Service, programs []mirakurun.Program) []legacy.ChannelSchedule {
 	services = filterAndOrderServices(cfg, append([]mirakurun.Service(nil), services...))
+	return buildSchedule(services, programs)
+}
+
+func buildSchedule(services []mirakurun.Service, programs []mirakurun.Program) []legacy.ChannelSchedule {
 	channels := make([]legacy.ChannelSchedule, 0, len(services))
 	for i, service := range services {
 		channel := legacy.ChannelSchedule{

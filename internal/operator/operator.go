@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -706,7 +707,10 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 		format = program.RecordedFormat
 	}
 	relativeName := legacy.FormatRecordedName(program, format)
-	finalPath := filepath.Join(cfg.RecordedDir, filepath.FromSlash(relativeName))
+	finalPath, err := recordingOutputPath(cfg.RecordedDir, relativeName)
+	if err != nil {
+		return program, err
+	}
 	if logPath != "" {
 		if err := logging.AppendLine(logPath, "RECORD: %s", operatorProgramLogLine(program)); err != nil {
 			return program, err
@@ -810,6 +814,25 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	renamed = true
 	program.PID = 0
 	return program, nil
+}
+
+func recordingOutputPath(recordingDir, relativeName string) (string, error) {
+	if relativeName == "" || filepath.IsAbs(relativeName) || filepath.VolumeName(relativeName) != "" {
+		return "", fmt.Errorf("invalid recording filename %q", relativeName)
+	}
+	base, err := filepath.Abs(recordingDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve recording directory: %w", err)
+	}
+	path, err := filepath.Abs(filepath.Join(base, filepath.FromSlash(relativeName)))
+	if err != nil {
+		return "", fmt.Errorf("resolve recording filename: %w", err)
+	}
+	rel, err := filepath.Rel(base, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("recording filename escapes recording directory: %q", relativeName)
+	}
+	return path, nil
 }
 
 func recordingStartMargin(cfg *config.Config) time.Duration {

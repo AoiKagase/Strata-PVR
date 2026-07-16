@@ -119,7 +119,7 @@ func TestRecordingMarginsUseDefaultsAndMapToRuntimeConfig(t *testing.T) {
 		t.Fatalf("recording margins = %d/%d, want 7/11", cfg.RecordingStartMargin, cfg.RecordingEndMargin)
 	}
 
-	withoutStart := []byte(`{"schema":"strata/config","version":1,"mirakurun":{"url":"http://127.0.0.1:40772"},"recording":{"directory":"./recorded/","filenameFormat":"<id>.m2ts","lowSpace":{"thresholdMB":0,"action":"remove"}},"web":{"listenAddress":"0.0.0.0","port":20772,"authentication":{"enabled":false}},"services":{}}`)
+	withoutStart := []byte(`{"schema":"strata/config","version":1,"mirakurun":{"url":"http://127.0.0.1:40772"},"recording":{"directory":"./recorded/","filenameFormat":"<id>.m2ts","lowSpace":{"thresholdMB":0,"action":"remove"}},"web":{"listenAddress":"127.0.0.1","port":20772,"authentication":{"enabled":false}},"services":{}}`)
 	cfg, err = Parse(withoutStart)
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +174,24 @@ func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing
 	}
 	if cfg.WUIPort != 20772 || cfg.WUIAuthenticationEnabled {
 		t.Fatalf("unexpected unauthenticated listener mapping: %#v", cfg)
+	}
+}
+
+func TestParseRejectsUnauthenticatedNonLoopbackListener(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Web.ListenAddress = "0.0.0.0"
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse(b); err == nil {
+		t.Fatal("unauthenticated public listener should be rejected")
+	}
+}
+
+func TestDefaultDocumentUsesLoopbackListener(t *testing.T) {
+	if got := DefaultDocument().Web.ListenAddress; got != "127.0.0.1" {
+		t.Fatalf("default listen address = %q", got)
 	}
 }
 

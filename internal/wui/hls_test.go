@@ -2,8 +2,10 @@ package wui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +53,21 @@ func TestHLSSessionManagerClosesUnusedLiveInput(t *testing.T) {
 	}
 	if !input.closed {
 		t.Fatal("unused live input was not closed")
+	}
+}
+
+func TestHLSSessionManagerRejectsNewSessionAtCapacity(t *testing.T) {
+	m := newHLSSessionManager(Paths{})
+	for i := 0; i < maxHLSSessions; i++ {
+		m.sessions[strconv.Itoa(i)] = &hlsSession{}
+	}
+	input := &testHLSReadCloser{Reader: strings.NewReader("unused")}
+	_, err := m.getOrStartStream(channelHLSKey("new"), input, "540p", hlsPresets["540p"], 0, 0, "")
+	if !errors.Is(err, errHLSSessionCapacity) {
+		t.Fatalf("error = %v, want capacity error", err)
+	}
+	if !input.closed {
+		t.Fatal("capacity-rejected live input was not closed")
 	}
 }
 

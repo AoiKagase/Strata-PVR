@@ -24,19 +24,19 @@ func FormatRecordedName(program Program, format string) string {
 		}
 		switch {
 		case key == "id":
-			return program.ID
+			return StripFilename(program.ID)
 		case key == "type":
-			return program.Channel.Type
+			return StripFilename(program.Channel.Type)
 		case key == "channel":
-			return program.Channel.Channel
+			return StripFilename(program.Channel.Channel)
 		case key == "channel-id":
-			return program.Channel.ID
+			return StripFilename(program.Channel.ID)
 		case key == "channel-sid":
 			return strconv.FormatInt(program.Channel.SID, 10)
 		case key == "channel-name":
 			return StripFilename(program.Channel.Name)
 		case key == "tuner":
-			return rawTunerName(program)
+			return StripFilename(rawTunerName(program))
 		case key == "title":
 			return StripFilename(program.Title)
 		case key == "fulltitle":
@@ -44,7 +44,7 @@ func FormatRecordedName(program Program, format string) string {
 		case key == "subtitle":
 			return StripFilename(program.SubTitle)
 		case key == "category":
-			return program.Category
+			return StripFilename(program.Category)
 		default:
 			if strings.HasPrefix(key, "episode:") {
 				widthText := strings.TrimPrefix(key, "episode:")

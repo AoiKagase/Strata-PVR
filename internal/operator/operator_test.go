@@ -591,6 +591,19 @@ func TestInitializeRuntimeStateClearsRecordingAndCreatesRecordedDir(t *testing.T
 	}
 }
 
+func TestRecordingOutputPathRejectsEscapes(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"../escape.m2ts", filepath.Join(dir, "absolute.m2ts"), `C:\\escape.m2ts`} {
+		if _, err := recordingOutputPath(dir, name); err == nil {
+			t.Fatalf("recordingOutputPath(%q) succeeded", name)
+		}
+	}
+	path, err := recordingOutputPath(dir, filepath.Join("nested", "recording.m2ts"))
+	if err != nil || !strings.HasPrefix(path, dir) {
+		t.Fatalf("safe recording path = %q, %v", path, err)
+	}
+}
+
 func TestInitializeRuntimeStatePreservesStaleActiveRecordingFiles(t *testing.T) {
 	dir := t.TempDir()
 	finalPath := filepath.Join(dir, "recorded", "stale.m2ts")

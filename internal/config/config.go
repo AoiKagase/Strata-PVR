@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 )
 
@@ -248,6 +249,9 @@ func loadDocument(b []byte) (*Config, error) {
 		}
 		cfg.WUIAccounts = doc.Web.Authentication.Users
 	}
+	if !isLoopbackAddress(doc.Web.ListenAddress) && !doc.Web.Authentication.Enabled {
+		return nil, fmt.Errorf("web.authentication must be enabled when web.listenAddress is not loopback")
+	}
 	cfg.ExcludeServices = doc.Services.Excluded
 	cfg.ServiceOrder = doc.Services.Order
 	cfg.NormalizationForm = doc.Advanced.NormalizationForm
@@ -272,7 +276,7 @@ func DefaultDocument() Document {
 			EndMargin:      0,
 			LowSpace:       LowSpaceSettings{ThresholdMB: 3000, Action: "remove"},
 		},
-		Web:          WebSettings{ListenAddress: "0.0.0.0", Port: 20772},
+		Web:          WebSettings{ListenAddress: "127.0.0.1", Port: 20772},
 		PreviewCache: PreviewCacheSettings{MaxAgeDays: 30, MaxSizeMB: 1024},
 	}
 }
@@ -281,7 +285,7 @@ func defaultConfig() *Config {
 	return &Config{
 		MirakurunPath:              "http://127.0.0.1:40772",
 		RecordedDir:                "./recorded/",
-		WUIHost:                    "0.0.0.0",
+		WUIHost:                    "127.0.0.1",
 		WUIPort:                    20772,
 		RecordedFormat:             "[<date:yymmdd-HHMM>][<type><channel>][<channel-name>]<title>.m2ts",
 		RecordingStartMargin:       15,
@@ -291,6 +295,14 @@ func defaultConfig() *Config {
 		StorageLowSpaceThresholdMB: 3000,
 		StorageLowSpaceAction:      "remove",
 	}
+}
+
+func isLoopbackAddress(address string) bool {
+	if address == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(address)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (c *Config) EffectiveMirakurunPath() string {

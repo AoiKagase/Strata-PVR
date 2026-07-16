@@ -124,11 +124,13 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 	if err := logging.AppendLine(paths.Log, "Mirakurun -> services: %d", len(services)); err != nil {
 		return Result{}, err
 	}
-	filteredServices, sortedServices := serviceLogStats(cfg, services)
-	if err := logging.AppendLine(paths.Log, "Mirakurun -> services: %d (excluded)", filteredServices); err != nil {
+	totalServices := len(services)
+	services = filterAndOrderServices(cfg, append([]mirakurun.Service(nil), services...))
+	excludedServices := totalServices - len(services)
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> services: %d (excluded)", excludedServices); err != nil {
 		return Result{}, err
 	}
-	if err := logging.AppendLine(paths.Log, "Mirakurun -> sorted services: %d", sortedServices); err != nil {
+	if err := logging.AppendLine(paths.Log, "Mirakurun -> sorted services: %d", len(services)); err != nil {
 		return Result{}, err
 	}
 	programs, err := source.Programs(ctx)
@@ -148,7 +150,7 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		return Result{}, err
 	}
 
-	schedule := BuildSchedule(cfg, services, programs)
+	schedule := buildSchedule(services, programs)
 	if err := logDuplicateIDs(paths.Log, schedule); err != nil {
 		return Result{}, err
 	}
@@ -290,19 +292,6 @@ func tunerTypesJSON(tuners []mirakurun.Tuner) string {
 	}
 	b.WriteByte('}')
 	return b.String()
-}
-
-func serviceLogStats(cfg *config.Config, services []mirakurun.Service) (filteredCount int, sortedCount int) {
-	filtered := filterAndOrderServices(cfg, append([]mirakurun.Service(nil), services...))
-	for _, id := range cfg.ServiceOrder {
-		for _, service := range filtered {
-			if service.ID == id {
-				sortedCount++
-				break
-			}
-		}
-	}
-	return len(filtered), sortedCount
 }
 
 func BuildReserves(schedule []legacy.ChannelSchedule, rules []legacy.Rule, oldReserves []legacy.Program, tuners []mirakurun.Tuner, now time.Time) ([]legacy.Program, Result) {

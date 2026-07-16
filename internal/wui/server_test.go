@@ -3038,10 +3038,11 @@ func TestNewHandlerAppliesPreviewCacheRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now := time.Now().UTC()
 	for _, item := range []struct{ key, file, accessed string }{
 		{"expired", "expired.jpg", "2020-01-01T00:00:00.000Z"},
-		{"older", "older.jpg", "2026-07-08T00:00:00.000Z"},
-		{"newer", "newer.jpg", "2026-07-09T00:00:00.000Z"},
+		{"older", "older.jpg", now.Add(-8 * 24 * time.Hour).Format(time.RFC3339Nano)},
+		{"newer", "newer.jpg", now.Add(-6 * 24 * time.Hour).Format(time.RFC3339Nano)},
 	} {
 		if err := os.WriteFile(filepath.Join(cacheDir, item.file), make([]byte, 600*1024), 0o644); err != nil {
 			t.Fatal(err)
@@ -4343,6 +4344,21 @@ func TestAPIAuth(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("status with auth = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestDeleteRecordedProgramRestoresFileWhenDatabaseRemoveFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "recording.m2ts")
+	if err := os.WriteFile(path, []byte("recording"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{paths: Paths{Database: dir}}
+	if err := s.deleteRecordedProgram(context.Background(), legacy.Program{ID: "recording", Recorded: filepath.ToSlash(path)}); err == nil {
+		t.Fatal("delete unexpectedly succeeded")
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "recording" {
+		t.Fatalf("recording was not restored: data=%q err=%v", data, err)
 	}
 }
 

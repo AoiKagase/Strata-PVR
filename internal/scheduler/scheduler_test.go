@@ -199,8 +199,8 @@ func TestRunWithSourceWritesScheduleAndReserves(t *testing.T) {
 		"GETTING EPG from Mirakurun.",
 		"Mirakurun is OK.",
 		"Mirakurun -> services: 1",
-		"Mirakurun -> services: 1 (excluded)",
-		"Mirakurun -> sorted services: 0",
+		"Mirakurun -> services: 0 (excluded)",
+		"Mirakurun -> sorted services: 1",
 		"Mirakurun -> programs: 1",
 		"Mirakurun -> tuners: 1",
 	} {

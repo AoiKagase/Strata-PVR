@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,6 +51,9 @@ type hlsSessionManager struct {
 }
 
 const hlsSessionIdleTimeout = 15 * time.Second
+const maxHLSSessions = 8
+
+var errHLSSessionCapacity = errors.New("HLS session capacity reached")
 
 func newHLSSessionManager(paths Paths) *hlsSessionManager {
 	return &hlsSessionManager{paths: paths, sessions: make(map[string]*hlsSession)}
@@ -60,17 +64,16 @@ func (s *server) handleRecordedHLS(w http.ResponseWriter, r *http.Request, id, r
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	programs, err := s.readPrograms(r.Context(), programstore.Recorded)
+	program, found, err := s.readProgram(r.Context(), programstore.Recorded, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	index := findProgram(programs, id)
-	if index < 0 {
+	if !found {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	filePath := filepath.FromSlash(programs[index].Recorded)
+	filePath := filepath.FromSlash(program.Recorded)
 	if apiType == "m3u8" && resource == "index" && r.Method == http.MethodDelete {
 		quality, _, start, duration, audio, ok := hlsRequestOptions(r)
 		if !ok {
@@ -146,7 +149,7 @@ func (s *server) handleChannelHLS(w http.ResponseWriter, r *http.Request, channe
 	session, err := s.hls.getOrStartStream(channelHLSKey(channelID), body, quality, preset, start, duration, audio)
 	if err != nil {
 		_ = body.Close()
-		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		hlsStartError(w, r, err)
 		return
 	}
 	s.serveHLSPlaylistSession(w, r, session)
@@ -160,10 +163,19 @@ func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePa
 	}
 	session, err := s.hls.getOrStart(filePath, quality, preset, start, duration, audio)
 	if err != nil {
-		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		hlsStartError(w, r, err)
 		return
 	}
 	s.serveHLSPlaylistSession(w, r, session)
+}
+
+func hlsStartError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errHLSSessionCapacity) {
+		w.Header().Set("Retry-After", "15")
+		legacyHTTPError(w, r, http.StatusTooManyRequests)
+		return
+	}
+	legacyHTTPError(w, r, http.StatusServiceUnavailable)
 }
 
 func (s *server) serveHLSPlaylistSession(w http.ResponseWriter, r *http.Request, session *hlsSession) {
@@ -248,6 +260,12 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		existing.lastAccess = time.Now()
 		existing.timer.Reset(hlsSessionIdleTimeout)
 		return existing, nil
+	}
+	if len(m.sessions) >= maxHLSSessions {
+		if input != nil {
+			_ = input.Close()
+		}
+		return nil, errHLSSessionCapacity
 	}
 	if m.root == "" {
 		root, err := os.MkdirTemp("", "strata-pvr-hls-")

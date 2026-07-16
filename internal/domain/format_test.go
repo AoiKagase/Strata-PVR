@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,18 @@ func TestFormatRecordedName(t *testing.T) {
 	want := "[240701-2330][GR27][Test／Channel]A／B：C＊D？E”F＜G＞H｜I.m2ts"
 	if got != want {
 		t.Fatalf("FormatRecordedName() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatRecordedNameSanitizesMirakurunTokens(t *testing.T) {
+	program := Program{
+		ID: "../id", Category: "../category",
+		Channel: Channel{Type: "../type", Channel: `\\channel`, ID: `C:\\channel-id`},
+		Raw:     map[string]json.RawMessage{"tuner": json.RawMessage(`{"name":"../tuner"}`)},
+	}
+	got := FormatRecordedName(program, "<id>-<type>-<channel>-<channel-id>-<tuner>-<category>.m2ts")
+	if strings.ContainsAny(got, `\\/`) {
+		t.Fatalf("unsafe token output: %q", got)
 	}
 }
 

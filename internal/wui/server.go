@@ -1160,6 +1160,10 @@ func (s *server) readPrograms(ctx context.Context, collection string) ([]legacy.
 	return programstore.Read(ctx, s.paths.Database, collection)
 }
 
+func (s *server) readProgram(ctx context.Context, collection, id string) (legacy.Program, bool, error) {
+	return programstore.ReadByID(ctx, s.paths.Database, collection, id)
+}
+
 func (s *server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "HEAD, GET")
@@ -2085,19 +2089,18 @@ func (s *server) handleReserveProgram(w http.ResponseWriter, r *http.Request, pa
 
 func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	recording, err := s.readPrograms(r.Context(), programstore.Recording)
+	recording, found, err := s.readProgram(r.Context(), programstore.Recording, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	index := findProgram(recording, id)
-	if index == -1 {
+	if !found {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writePrettyJSON(w, http.StatusOK, recording[index])
+		writePrettyJSON(w, http.StatusOK, recording)
 	case http.MethodDelete:
 		if err := programstore.SetAbort(r.Context(), s.paths.Database, programstore.Recording, id, true); err != nil {
 			if errors.Is(err, programstore.ErrProgramFinalizing) {
@@ -2107,7 +2110,7 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		if !recording[index].IsManualReserved {
+		if !recording.IsManualReserved {
 			reserves, err := reservationstore.Read(r.Context(), s.paths.Database)
 			if err != nil {
 				if rollbackErr := programstore.SetAbort(context.WithoutCancel(r.Context()), s.paths.Database, programstore.Recording, id, false); rollbackErr != nil {
@@ -2136,24 +2139,20 @@ func (s *server) handleRecordingProgram(w http.ResponseWriter, r *http.Request, 
 
 func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, parts []string) {
 	id := parts[0]
-	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
+	recorded, found, err := s.readProgram(r.Context(), programstore.Recorded, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	index := findProgram(recorded, id)
-	if index == -1 {
+	if !found {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		writePrettyJSON(w, http.StatusOK, withRemovedFlag(recorded[index]))
+		writePrettyJSON(w, http.StatusOK, withRemovedFlag(recorded))
 	case http.MethodDelete:
-		if recorded[index].Recorded != "" {
-			_ = os.Remove(filepath.FromSlash(recorded[index].Recorded))
-		}
-		if err := programstore.Remove(r.Context(), s.paths.Database, programstore.Recorded, id); err != nil {
+		if err := s.deleteRecordedProgram(r.Context(), recorded); err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
@@ -2165,18 +2164,46 @@ func (s *server) handleRecordedProgram(w http.ResponseWriter, r *http.Request, p
 	}
 }
 
+func (s *server) deleteRecordedProgram(ctx context.Context, program legacy.Program) error {
+	var stagedPath string
+	if program.Recorded != "" {
+		path := filepath.FromSlash(program.Recorded)
+		if _, err := os.Stat(path); err == nil {
+			stagedPath = filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".deleting")
+			if err := os.Rename(path, stagedPath); err != nil {
+				return fmt.Errorf("stage recorded file deletion: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat recorded file: %w", err)
+		}
+	}
+	if err := programstore.Remove(ctx, s.paths.Database, programstore.Recorded, program.ID); err != nil {
+		if stagedPath != "" {
+			if rollbackErr := os.Rename(stagedPath, filepath.FromSlash(program.Recorded)); rollbackErr != nil {
+				return errors.Join(err, fmt.Errorf("restore recorded file: %w", rollbackErr))
+			}
+		}
+		return err
+	}
+	if stagedPath != "" {
+		if err := os.Remove(stagedPath); err != nil {
+			return fmt.Errorf("finalize recorded file deletion: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, apiType string) {
-	recorded, err := s.readPrograms(r.Context(), programstore.Recorded)
+	recorded, found, err := s.readProgram(r.Context(), programstore.Recorded, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	index := findProgram(recorded, id)
-	if index == -1 {
+	if !found {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	path := filepath.FromSlash(recorded[index].Recorded)
+	path := filepath.FromSlash(recorded.Recorded)
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -2230,17 +2257,15 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	programs, err := s.readPrograms(r.Context(), collection)
+	program, found, err := s.readProgram(r.Context(), collection, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	index := findProgram(programs, id)
-	if index == -1 {
+	if !found {
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	program := programs[index]
 	if requirePID && !programHasPID(program) {
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return

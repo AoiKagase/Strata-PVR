@@ -56,6 +56,9 @@ Windows での稼働は推奨していませんが、ビルドして動作させ
 
 `init` は、Strata 用の設定と SQLite データベースを作成します。
 
+初期状態の WUI は `127.0.0.1` のみに待受します。ネットワークへ公開するには
+`web.listenAddress` を変更し、`web.authentication.enabled` と認証ユーザーを設定してください。
+
 ```text
 data/config.json
 data/strata.db
