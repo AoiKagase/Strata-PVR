@@ -12,6 +12,7 @@ strata-pvr.exe
 !.git*
 
 # Local/non-public project instructions and notes
+/docs/superpowers/
 /AGENTS.md
 /CLAUDE.md
 /GEMINI.md
