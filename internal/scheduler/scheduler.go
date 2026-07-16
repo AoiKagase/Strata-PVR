@@ -392,30 +392,46 @@ func markConflicts(programs []legacy.Program, tuners []mirakurun.Tuner) int {
 		if p.IsDuplicate || p.IsSkip {
 			continue
 		}
-		p.IsConflict = true
-		for tunerIndex, tuner := range tuners {
-			if !stringContains(tuner.Types, p.Channel.Type) {
-				continue
-			}
-			conflicts := false
-			for _, reserved := range threads[tunerIndex] {
-				if !(reserved.End <= p.Start || reserved.Start >= p.End) {
-					conflicts = true
-					break
-				}
-			}
-			if conflicts {
-				continue
-			}
-			threads[tunerIndex] = append(threads[tunerIndex], *p)
-			p.IsConflict = false
-			break
-		}
+		p.IsConflict = !assignTuner(threads, tuners, *p)
 		if p.IsConflict {
 			count++
 		}
 	}
 	return count
+}
+
+// CanAllocate reports whether candidate can be assigned after all occupied
+// recordings. It uses the same channel-type and overlap rules as reservation
+// conflict detection.
+func CanAllocate(occupied []legacy.Program, candidate legacy.Program, tuners []mirakurun.Tuner) bool {
+	threads := make([][]legacy.Program, len(tuners))
+	for _, program := range occupied {
+		if !assignTuner(threads, tuners, program) {
+			return false
+		}
+	}
+	return assignTuner(threads, tuners, candidate)
+}
+
+func assignTuner(threads [][]legacy.Program, tuners []mirakurun.Tuner, program legacy.Program) bool {
+	for tunerIndex, tuner := range tuners {
+		if !stringContains(tuner.Types, program.Channel.Type) {
+			continue
+		}
+		conflicts := false
+		for _, assigned := range threads[tunerIndex] {
+			if !(assigned.End <= program.Start || assigned.Start >= program.End) {
+				conflicts = true
+				break
+			}
+		}
+		if conflicts {
+			continue
+		}
+		threads[tunerIndex] = append(threads[tunerIndex], program)
+		return true
+	}
+	return false
 }
 
 func applyRecordedFormats(programs []legacy.Program, rules []legacy.Rule, normalizationForm string) {

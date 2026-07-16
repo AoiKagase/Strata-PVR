@@ -428,6 +428,9 @@
   }
 
   function requestError(path, response) {
+    if (response.headers.get("X-Strata-Error-Code") === "tuner-unavailable") {
+      return new Error("空きチューナーがないため録画を開始できません");
+    }
     if (response.status === 401) {
       return new Error("認証が必要です。ログイン状態を確認してください");
     }

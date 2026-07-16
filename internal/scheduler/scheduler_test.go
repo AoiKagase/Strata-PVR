@@ -260,6 +260,34 @@ func TestRunWithSourceWritesSchedulerStateToStrataDatabase(t *testing.T) {
 	}
 }
 
+func TestCanAllocateUsesTunerTypesAndOverlaps(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	occupied := []legacy.Program{{
+		ID:      "active",
+		Start:   now.Add(-time.Minute).UnixMilli(),
+		End:     now.Add(time.Hour).UnixMilli(),
+		Channel: legacy.Channel{Type: "GR", Channel: "27"},
+	}}
+	grCandidate := legacy.Program{
+		ID:      "manual-gr",
+		Start:   now.UnixMilli(),
+		End:     now.Add(30 * time.Minute).UnixMilli(),
+		Channel: legacy.Channel{Type: "GR", Channel: "26"},
+	}
+	bsCandidate := legacy.Program{
+		ID:      "manual-bs",
+		Start:   now.UnixMilli(),
+		End:     now.Add(30 * time.Minute).UnixMilli(),
+		Channel: legacy.Channel{Type: "BS", Channel: "BS1"},
+	}
+	if CanAllocate(occupied, grCandidate, []mirakurun.Tuner{{Types: []string{"GR"}}}) {
+		t.Fatal("GR candidate unexpectedly fit on occupied tuner")
+	}
+	if !CanAllocate(occupied, bsCandidate, []mirakurun.Tuner{{Types: []string{"GR"}}, {Types: []string{"BS"}}}) {
+		t.Fatal("BS candidate did not fit on available tuner")
+	}
+}
+
 func TestRunWithSourceUsesMirakurunFixtures(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths{

@@ -1794,6 +1794,93 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 }
 
+func TestAPIProgramPutOnAirRejectsWhenNoTunerIsAvailable(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	program := legacy.Program{ID: "manual", Title: "手動", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	active := legacy.Program{ID: "active", Title: "録画中", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "26"}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recording, []legacy.Program{active}, false); err != nil {
+		t.Fatal(err)
+	}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tuners" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `[{"name":"GR","types":["GR"]}]`)
+	}))
+	defer mirakurunServer.Close()
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/program/manual", nil))
+	if res.Code != http.StatusConflict {
+		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get(strataErrorCodeHeader); got != strataErrorTunerUnavailable {
+		t.Fatalf("error code = %q", got)
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 0 {
+		t.Fatalf("unexpected reserves: %#v", reserves)
+	}
+}
+
+func TestAPIProgramPutOnAirCreatesManualReserveWhenTunerIsAvailable(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	program := legacy.Program{ID: "manual", Title: "手動", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tuners" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `[{"name":"GR","types":["GR"]}]`)
+	}))
+	defer mirakurunServer.Close()
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/program/manual", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIProgramPutOnAirFailsWhenTunerCheckFails(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	now := time.Now()
+	program := legacy.Program{ID: "manual", Title: "手動", Start: now.Add(-time.Minute).UnixMilli(), End: now.Add(time.Hour).UnixMilli(), Channel: legacy.Channel{Type: "GR", Channel: "27"}}
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer mirakurunServer.Close()
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/program/manual", nil))
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
+	}
+	reserves, err := reservationstore.Read(context.Background(), paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reserves) != 0 {
+		t.Fatalf("unexpected reserves: %#v", reserves)
+	}
+}
+
 func TestAPIProgramPutNotifiesOperator(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

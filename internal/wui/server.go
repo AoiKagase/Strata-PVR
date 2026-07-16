@@ -63,6 +63,8 @@ type Paths struct {
 
 const defaultPreviewPositionSeconds = 60
 const recordingPreviewTailBytes int64 = 12800000
+const strataErrorCodeHeader = "X-Strata-Error-Code"
+const strataErrorTunerUnavailable = "tuner-unavailable"
 const recordingWatchInitialBytes int64 = recordingPreviewTailBytes
 const recordingPreviewTimeout = 10 * time.Second
 
@@ -3250,6 +3252,18 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 		legacyHTTPError(w, r, http.StatusConflict)
 		return
 	}
+	if programIsOnAir(program, time.Now()) {
+		available, err := s.canStartOnAirManualRecording(r.Context(), program)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
+			return
+		}
+		if !available {
+			w.Header().Set(strataErrorCodeHeader, strataErrorTunerUnavailable)
+			legacyHTTPError(w, r, http.StatusConflict)
+			return
+		}
+	}
 	program.IsManualReserved = true
 	program.OneSeg = r.URL.Query().Get("mode") == "1seg"
 	if err := reservationstore.Upsert(r.Context(), s.paths.Database, program); err != nil {
@@ -3260,6 +3274,34 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 	// reservation. Its regular polling remains the fallback.
 	_ = operatorcontrol.Notify(r.Context(), s.paths.OperatorControl)
 	writeCompactJSON(w, http.StatusOK, map[string]any{})
+}
+
+func programIsOnAir(program legacy.Program, now time.Time) bool {
+	nowMS := now.UnixMilli()
+	return program.Start <= nowMS && nowMS < program.End
+}
+
+func (s *server) canStartOnAirManualRecording(ctx context.Context, program legacy.Program) (bool, error) {
+	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+	if err != nil {
+		return false, err
+	}
+	client.UserAgent = mirakurun.StrataUserAgent("wui")
+	tuners, err := client.Tuners(ctx)
+	if err != nil {
+		return false, err
+	}
+	recording, err := programstore.Read(ctx, s.paths.Database, programstore.Recording)
+	if err != nil {
+		return false, err
+	}
+	occupied := make([]legacy.Program, 0, len(recording))
+	for _, active := range recording {
+		if !active.Abort {
+			occupied = append(occupied, active)
+		}
+	}
+	return scheduler.CanAllocate(occupied, program, tuners), nil
 }
 
 func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, apiType string) {
