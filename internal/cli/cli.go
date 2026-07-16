@@ -20,6 +20,7 @@ import (
 	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/operator"
+	"strata-pvr/internal/operatorcontrol"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
@@ -30,8 +31,9 @@ import (
 )
 
 type paths struct {
-	config   string
-	database string
+	config          string
+	database        string
+	operatorControl string
 }
 
 var resolveRuntimePaths = runtimePaths
@@ -125,8 +127,9 @@ func isRuntimeCommand(args []string) bool {
 
 func runtimePaths() paths {
 	return paths{
-		config:   filepath.Join("data", "config.json"),
-		database: filepath.Join("data", "strata.db"),
+		config:          filepath.Join("data", "config.json"),
+		database:        filepath.Join("data", "strata.db"),
+		operatorControl: filepath.Join("data", "operator.sock"),
 	}
 }
 
@@ -1185,6 +1188,7 @@ func reserve(p paths, args []string, stdout io.Writer) error {
 	if err := reservationstore.Upsert(context.Background(), p.database, *target); err != nil {
 		return err
 	}
+	_ = operatorcontrol.Notify(context.Background(), p.operatorControl)
 	fmt.Fprintln(stdout, "reserve:")
 	writePretty(stdout, target)
 	fmt.Fprintln(stdout, "予約しました。 スケジューラーを実行して競合を確認することをお勧めします")
@@ -1458,6 +1462,7 @@ func runNamedComponentWithWebDir(ctx context.Context, p paths, name, webDir stri
 			Database: p.database,
 			PID:      filepath.Join("data", "operator.pid"),
 			Log:      filepath.Join("log", "operator"),
+			Control:  p.operatorControl,
 		}, 0)
 	case "scheduler":
 		_, err := scheduler.Run(ctx, scheduler.Paths{
@@ -1469,12 +1474,13 @@ func runNamedComponentWithWebDir(ctx context.Context, p paths, name, webDir stri
 		return err
 	case "wui":
 		return wui.Run(ctx, wui.Paths{
-			Config:       p.config,
-			Database:     p.database,
-			WebRoot:      webDir,
-			LogDir:       "log",
-			SchedulerPID: filepath.Join("data", "scheduler.pid"),
-			OperatorPID:  filepath.Join("data", "operator.pid"),
+			Config:          p.config,
+			Database:        p.database,
+			WebRoot:         webDir,
+			LogDir:          "log",
+			SchedulerPID:    filepath.Join("data", "scheduler.pid"),
+			OperatorPID:     filepath.Join("data", "operator.pid"),
+			OperatorControl: p.operatorControl,
 		})
 	default:
 		return fmt.Errorf("Usage: strata-pvr run <wui|operator|scheduler>")

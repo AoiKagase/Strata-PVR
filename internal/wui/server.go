@@ -37,6 +37,7 @@ import (
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/operatorcontrol"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
@@ -49,14 +50,15 @@ import (
 )
 
 type Paths struct {
-	Config         string
-	Database       string
-	WebRoot        string
-	LogDir         string
-	SchedulerPID   string
-	OperatorPID    string
-	Scheduler      func(context.Context, bool) error
-	databaseHandle *sql.DB
+	Config          string
+	Database        string
+	WebRoot         string
+	LogDir          string
+	SchedulerPID    string
+	OperatorPID     string
+	OperatorControl string
+	Scheduler       func(context.Context, bool) error
+	databaseHandle  *sql.DB
 }
 
 const defaultPreviewPositionSeconds = 60
@@ -3274,6 +3276,9 @@ func (s *server) reserveProgram(w http.ResponseWriter, r *http.Request, program 
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
+	// A missing or stopped operator must not undo a successfully stored
+	// reservation. Its regular polling remains the fallback.
+	_ = operatorcontrol.Notify(r.Context(), s.paths.OperatorControl)
 	writeCompactJSON(w, http.StatusOK, map[string]any{})
 }
 

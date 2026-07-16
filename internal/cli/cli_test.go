@@ -16,6 +16,7 @@ import (
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
+	"strata-pvr/internal/operatorcontrol"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
@@ -29,8 +30,9 @@ func TestMain(m *testing.M) {
 			return runtimePaths()
 		}
 		p := paths{
-			config:   "config.json",
-			database: filepath.Join("data", "strata.db"),
+			config:          "config.json",
+			database:        filepath.Join("data", "strata.db"),
+			operatorControl: filepath.Join("data", "operator.sock"),
 		}
 		return p
 	}
@@ -975,6 +977,38 @@ func TestReserve(t *testing.T) {
 	}
 	if !reserves[0].OneSeg {
 		t.Fatalf("1seg flag not stored: %#v", reserves[0])
+	}
+}
+
+func TestReserveNotifiesOperator(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir("data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	schedule := `[{"type":"GR","channel":"27","name":"svc","id":"s","sid":101,"programs":[{"id":"p1","title":"T","start":1,"end":2,"seconds":1,"channel":{"type":"GR","channel":"27","name":"svc","id":"s","sid":101}}]}]`
+	if err := os.WriteFile(filepath.Join("data", "schedule.json"), []byte(schedule), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("data", "reserves.json"), []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := operatorcontrol.Listen(filepath.Join("data", "operator.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if err := Run(context.Background(), []string{"reserve", "p1"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-listener.Wake():
+	case <-time.After(time.Second):
+		t.Fatal("manual reserve did not notify the operator")
 	}
 }
 

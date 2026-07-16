@@ -19,6 +19,7 @@ import (
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/operatorcontrol"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/system"
@@ -86,6 +87,7 @@ type Paths struct {
 	Database string
 	PID      string
 	Log      string
+	Control  string
 }
 
 type Result struct {
@@ -127,6 +129,17 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
+	var wake <-chan struct{}
+	var controlErrors <-chan error
+	if paths.Control != "" {
+		control, err := operatorcontrol.Listen(paths.Control)
+		if err != nil {
+			return err
+		}
+		defer control.Close()
+		wake = control.Wake()
+		controlErrors = control.Errors()
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	var recordings sync.WaitGroup
@@ -139,6 +152,11 @@ func Run(ctx context.Context, paths Paths, interval time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+		case <-wake:
+			// A manual reservation was stored. Keep the ticker unchanged so
+			// periodic checks retain their original cadence.
+		case err := <-controlErrors:
+			return fmt.Errorf("operator control listener: %w", err)
 		}
 	}
 }

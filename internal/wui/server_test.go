@@ -26,6 +26,7 @@ import (
 	"strata-pvr/internal/config"
 	"strata-pvr/internal/database"
 	legacy "strata-pvr/internal/domain"
+	"strata-pvr/internal/operatorcontrol"
 	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
@@ -1768,6 +1769,7 @@ func TestAPIRulesMutationFromQueryMatchesLegacyWUI(t *testing.T) {
 func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
+	paths.OperatorControl = filepath.Join(dir, "missing-operator.sock")
 	program := legacy.Program{ID: "abc", Title: "番組", Start: time.Now().UnixMilli()}
 	schedule := []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}
 	if err := storage.WriteJSONAtomic(paths.Schedule, schedule, false); err != nil {
@@ -1786,6 +1788,32 @@ func TestAPIProgramPutCreatesManualReserve(t *testing.T) {
 	}
 	if len(reserves) != 1 || !reserves[0].IsManualReserved || !reserves[0].OneSeg {
 		t.Fatalf("reserve was not created correctly: %#v", reserves)
+	}
+}
+
+func TestAPIProgramPutNotifiesOperator(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.OperatorControl = filepath.Join(dir, "operator.sock")
+	listener, err := operatorcontrol.Listen(paths.OperatorControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	program := legacy.Program{ID: "abc", Title: "番組", Start: time.Now().UnixMilli()}
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{Programs: []legacy.Program{program}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/api/program/abc", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("put status = %d body=%s", res.Code, res.Body.String())
+	}
+	select {
+	case <-listener.Wake():
+	case <-time.After(time.Second):
+		t.Fatal("manual reserve did not notify the operator")
 	}
 }
 
@@ -4675,25 +4703,26 @@ func TestAccessLogUsesRequestMethod(t *testing.T) {
 }
 
 type wuiTestPaths struct {
-	Config         string
-	Database       string
-	Rules          string
-	Schedule       string
-	Reserves       string
-	Recording      string
-	Recorded       string
-	WebRoot        string
-	LogDir         string
-	SchedulerPID   string
-	OperatorPID    string
-	Scheduler      func(context.Context, bool) error
-	databaseHandle *sql.DB
+	Config          string
+	Database        string
+	Rules           string
+	Schedule        string
+	Reserves        string
+	Recording       string
+	Recorded        string
+	WebRoot         string
+	LogDir          string
+	SchedulerPID    string
+	OperatorPID     string
+	OperatorControl string
+	Scheduler       func(context.Context, bool) error
+	databaseHandle  *sql.DB
 }
 
 func (p wuiTestPaths) runtime() Paths {
 	return Paths{
 		Config: p.Config, Database: p.Database, WebRoot: p.WebRoot, LogDir: p.LogDir,
-		SchedulerPID: p.SchedulerPID, OperatorPID: p.OperatorPID, Scheduler: p.Scheduler,
+		SchedulerPID: p.SchedulerPID, OperatorPID: p.OperatorPID, OperatorControl: p.OperatorControl, Scheduler: p.Scheduler,
 		databaseHandle: p.databaseHandle,
 	}
 }
