@@ -861,7 +861,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 }
 
 func recordingOutputPath(recordingDir, relativeName string) (string, error) {
-	if relativeName == "" || filepath.IsAbs(relativeName) || filepath.VolumeName(relativeName) != "" {
+	if relativeName == "" || filepath.IsAbs(relativeName) || filepath.VolumeName(relativeName) != "" || isWindowsAbsolutePath(relativeName) {
 		return "", fmt.Errorf("invalid recording filename %q", relativeName)
 	}
 	base, err := filepath.Abs(recordingDir)
@@ -877,6 +877,15 @@ func recordingOutputPath(recordingDir, relativeName string) (string, error) {
 		return "", fmt.Errorf("recording filename escapes recording directory: %q", relativeName)
 	}
 	return path, nil
+}
+
+// isWindowsAbsolutePath rejects Windows absolute paths even when the operator
+// runs on a non-Windows host, where filepath does not recognize them.
+func isWindowsAbsolutePath(path string) bool {
+	if strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, `//`) {
+		return true
+	}
+	return len(path) >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && (path[2] == '\\' || path[2] == '/')
 }
 
 func recordingStartMargin(cfg *config.Config) time.Duration {
