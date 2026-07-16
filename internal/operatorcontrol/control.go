@@ -133,13 +133,7 @@ func Notify(ctx context.Context, path string) error {
 		return err
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(notifyTimeout)
-	if requested, ok := ctx.Deadline(); ok && requested.Before(deadline) {
-		deadline = requested
-	}
-	if err := conn.SetWriteDeadline(deadline); err != nil {
-		return err
-	}
-	_, err = conn.Write([]byte{1})
-	return err
+	// The listener wakes as soon as it accepts this connection. Sending data
+	// would race with its intentional immediate close and can yield EPIPE.
+	return nil
 }
