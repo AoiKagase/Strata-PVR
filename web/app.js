@@ -6181,8 +6181,12 @@
     });
   }
 
+  function operationalRefreshRequired() {
+    return state.currentView === "dashboard" || state.currentView === "schedule" || state.currentView === "reserves" || state.currentView === "recorded";
+  }
+
   function refreshOperationalData() {
-    if (document.visibilityState === "hidden" || state.isLoading || operationalRefreshInFlight) {
+    if (!operationalRefreshRequired() || document.visibilityState === "hidden" || state.isLoading || operationalRefreshInFlight) {
       return;
     }
     var version = refreshVersion;
