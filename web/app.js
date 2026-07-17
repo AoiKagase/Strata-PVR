@@ -2212,6 +2212,8 @@
     var logo = document.createElement("img");
     logo.className = className + " is-loading";
     logo.alt = "";
+    logo.dataset.channelId = channelID;
+    logo.dataset.logoCacheVersion = String(state.logoCacheVersion);
     logo.width = 44;
     logo.height = 24;
     logo.loading = "lazy";
@@ -3359,7 +3361,7 @@
     });
   }
 
-  function renderOnAirLiveRow(group, current) {
+  function renderOnAirLiveRow(group, current, logo) {
     var item = document.createElement("article");
     item.className = "live-channel-row";
 
@@ -3368,7 +3370,7 @@
     var logoSlot = document.createElement("span");
     logoSlot.className = "live-channel-logo-slot";
     if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {
-      logoSlot.appendChild(channelLogoElement("live-channel-logo", group.id));
+      logoSlot.appendChild(logo || channelLogoElement("live-channel-logo", group.id));
     }
     channel.appendChild(logoSlot);
     channel.appendChild(channelLink(group.id, group.name || group.id));
@@ -3796,6 +3798,12 @@
     }).sort(function (a, b) {
       return compareScheduleChannelGroups(a, b);
     });
+    var reusableLogos = {};
+    root.querySelectorAll(".live-channel-logo[data-channel-id]").forEach(function (logo) {
+      if (logo.dataset.logoCacheVersion === String(state.logoCacheVersion)) {
+        reusableLogos[logo.dataset.channelId] = logo;
+      }
+    });
     root.innerHTML = "";
     if (!groups.length) {
       root.className = "list empty";
@@ -3805,7 +3813,7 @@
     var now = Date.now();
     root.className = "list live-channel-list";
     groups.forEach(function (group) {
-      root.appendChild(renderOnAirLiveRow(group, currentProgramForGroup(group, now)));
+      root.appendChild(renderOnAirLiveRow(group, currentProgramForGroup(group, now), reusableLogos[group.id]));
     });
   }
 
@@ -5974,7 +5982,9 @@
     renderFilteredListView("reserves");
     renderFilteredListView("recorded");
     renderOnAirList();
-    renderSchedule();
+    if (state.currentView === "schedule") {
+      renderSchedule();
+    }
     renderSearch();
     renderRules();
     renderSettings();

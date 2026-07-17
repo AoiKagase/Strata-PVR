@@ -698,9 +698,15 @@ func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
 		`if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {`,
 		`var channelLogoLoadConcurrency = 1;`,
 		`function channelLogoElement(className, channelID)`,
+		`logo.dataset.channelId = channelID;`,
+		`logo.dataset.logoCacheVersion = String(state.logoCacheVersion);`,
 		`channelLogoLoadQueue.push({`,
 		`logo.src = entry.url;`,
 		`channelLogoElement("live-channel-logo", group.id)`,
+		`var reusableLogos = {};`,
+		`reusableLogos[group.id]`,
+		`if (state.currentView === "schedule") {`,
+		`renderSchedule();`,
 	} {
 		if !strings.Contains(string(app), want) {
 			t.Fatalf("web/app.js missing on-air channel logo marker %q", want)
