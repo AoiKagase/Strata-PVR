@@ -729,6 +729,13 @@ h3 {
   object-fit: contain;
 }
 
+.live-channel-logo.is-loading,
+.live-channel-logo.is-unavailable,
+.schedule-channel-logo.is-loading,
+.schedule-channel-logo.is-unavailable {
+  opacity: 0;
+}
+
 .live-channel-name .channel-link,
 .live-channel-program {
   overflow: hidden;
@@ -1502,6 +1509,8 @@ summary:focus-visible,
 
 .schedule-channel-logo {
   display: block;
+  width: 44px;
+  height: 24px;
   max-width: 44px;
   max-height: 24px;
   object-fit: contain;

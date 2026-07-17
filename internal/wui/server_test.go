@@ -697,8 +697,11 @@ func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
 	for _, want := range []string{
 		`logoSlot.className = "live-channel-logo-slot"`,
 		`if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {`,
-		`logo.className = "live-channel-logo"`,
-		`logo.src = channelLogoURL(group.id);`,
+		`var channelLogoLoadConcurrency = 1;`,
+		`function channelLogoElement(className, channelID)`,
+		`channelLogoLoadQueue.push({`,
+		`logo.src = entry.url;`,
+		`channelLogoElement("live-channel-logo", group.id)`,
 	} {
 		if !strings.Contains(string(app), want) {
 			t.Fatalf("web/app.js missing on-air channel logo marker %q", want)
@@ -3832,6 +3835,39 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 		if requests[i] != want[i] {
 			t.Fatalf("request[%d] = %q, want %q", i, requests[i], want[i])
 		}
+	}
+}
+
+func TestAPIChannelLogoTimeoutDoesNotBlockRequests(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: chid, Name: "Service"}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	requestCanceled := make(chan struct{})
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/services/123/logo" {
+			http.NotFound(w, r)
+			return
+		}
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer mirakurunServer.Close()
+	oldTimeout := channelLogoFetchTimeout
+	channelLogoFetchTimeout = 20 * time.Millisecond
+	defer func() { channelLogoFetchTimeout = oldTimeout }()
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo", nil))
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("logo timeout status=%d body=%q", res.Code, res.Body.String())
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the Mirakurun logo request to be canceled")
 	}
 }
 

@@ -3373,7 +3373,9 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		return
 	}
 	client.UserAgent = mirakurun.StrataUserAgent("wui")
-	body, err := client.LogoImage(r.Context(), serviceID)
+	ctx, cancel := context.WithTimeout(r.Context(), channelLogoFetchTimeout)
+	defer cancel()
+	body, err := client.LogoImage(ctx, serviceID)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
@@ -3387,6 +3389,8 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 	_ = s.storeChannelLogoCache(channel.ID, logo)
 	serveChannelLogo(w, r, logo)
 }
+
+var channelLogoFetchTimeout = 3 * time.Second
 
 func (s *server) channelLogoCachePath(channelID string) (string, bool) {
 	cacheDir := s.channelLogoCacheDir()

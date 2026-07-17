@@ -43,6 +43,10 @@
   var realtimeSourceID = "wui-" + Date.now() + "-" + Math.random().toString(36).slice(2);
   var announcementTimer = null;
   var apiRequestTimeoutMs = 15000;
+  var channelLogoLoadQueue = [];
+  var channelLogoLoadsInFlight = 0;
+  var channelLogoLoadScheduled = false;
+  var channelLogoLoadConcurrency = 1;
   var strataConfigFormDirty = false;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
   var state = {
@@ -2152,6 +2156,70 @@
     return channelURL(channelID, "logo", "", { cache: state.logoCacheVersion });
   }
 
+  function scheduleChannelLogoLoad() {
+    if (channelLogoLoadScheduled) {
+      return;
+    }
+    channelLogoLoadScheduled = true;
+    var run = function () {
+      channelLogoLoadScheduled = false;
+      drainChannelLogoLoadQueue();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(run, { timeout: 500 });
+      return;
+    }
+    window.setTimeout(run, 0);
+  }
+
+  function drainChannelLogoLoadQueue() {
+    while (channelLogoLoadsInFlight < channelLogoLoadConcurrency && channelLogoLoadQueue.length) {
+      var entry = channelLogoLoadQueue.shift();
+      var logo = entry.logo;
+      if (!logo.isConnected || entry.cacheVersion !== state.logoCacheVersion) {
+        continue;
+      }
+      channelLogoLoadsInFlight++;
+      var settle = function (available) {
+        logo.classList.remove("is-loading");
+        logo.removeAttribute("aria-busy");
+        if (!available) {
+          logo.classList.add("is-unavailable");
+        }
+        channelLogoLoadsInFlight--;
+        scheduleChannelLogoLoad();
+      };
+      logo.addEventListener("load", function () {
+        settle(true);
+      }, { once: true });
+      logo.addEventListener("error", function () {
+        settle(false);
+      }, { once: true });
+      logo.src = entry.url;
+    }
+  }
+
+  function channelLogoElement(className, channelID) {
+    var logo = document.createElement("img");
+    logo.className = className + " is-loading";
+    logo.alt = "";
+    logo.width = 44;
+    logo.height = 24;
+    logo.loading = "lazy";
+    logo.decoding = "async";
+    logo.setAttribute("aria-busy", "true");
+    if ("fetchPriority" in logo) {
+      logo.fetchPriority = "low";
+    }
+    channelLogoLoadQueue.push({
+      logo: logo,
+      url: channelLogoURL(channelID),
+      cacheVersion: state.logoCacheVersion
+    });
+    scheduleChannelLogoLoad();
+    return logo;
+  }
+
   function channelURL(channelID, resource, ext, query) {
     var url = "/api/channel/" + encodeURIComponent(channelID) + "/" + resource;
     if (ext) {
@@ -3291,12 +3359,7 @@
     var logoSlot = document.createElement("span");
     logoSlot.className = "live-channel-logo-slot";
     if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {
-      var logo = document.createElement("img");
-      logo.className = "live-channel-logo";
-      logo.src = channelLogoURL(group.id);
-      logo.alt = "";
-      logo.loading = "lazy";
-      logoSlot.appendChild(logo);
+      logoSlot.appendChild(channelLogoElement("live-channel-logo", group.id));
     }
     channel.appendChild(logoSlot);
     channel.appendChild(channelLink(group.id, group.name || group.id));
@@ -4189,12 +4252,7 @@
       var mediaRow = document.createElement("div");
       mediaRow.className = "schedule-channel-media-row";
       if (group.logo) {
-        var logo = document.createElement("img");
-        logo.className = "schedule-channel-logo";
-        logo.src = channelLogoURL(group.id);
-        logo.alt = "";
-        logo.loading = "lazy";
-        mediaRow.appendChild(logo);
+        mediaRow.appendChild(channelLogoElement("schedule-channel-logo", group.id));
       }
       mediaRow.appendChild(renderChannelActions(group.id, group.name));
       heading.appendChild(mediaRow);
