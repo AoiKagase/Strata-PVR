@@ -3737,6 +3737,15 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
 		t.Fatalf("logo status=%d body=%q", res.Code, res.Body.String())
 	}
+	if data, err := os.ReadFile(filepath.Join(filepath.Dir(paths.Schedule), ".cache", "logos", chid+".png")); err != nil || string(data) != "pngdata" {
+		t.Fatalf("cached logo=%q err=%v", data, err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
+		t.Fatalf("cached logo status=%d body=%q", res.Code, res.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.m2ts", nil)
 	res = httptest.NewRecorder()

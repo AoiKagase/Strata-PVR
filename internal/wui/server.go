@@ -3319,6 +3319,10 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
+	if cached, err := s.readChannelLogoCache(channel.ID); err == nil {
+		serveChannelLogo(w, r, cached)
+		return
+	}
 	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -3336,10 +3340,47 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		return
 	}
 	defer body.Close()
+	logo, err := io.ReadAll(body)
+	if err != nil || len(logo) == 0 {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	_ = s.storeChannelLogoCache(channel.ID, logo)
+	serveChannelLogo(w, r, logo)
+}
+
+func (s *server) channelLogoCachePath(channelID string) (string, bool) {
+	if channelID == "" || filepath.Base(channelID) != channelID {
+		return "", false
+	}
+	return filepath.Join(filepath.Dir(s.paths.Database), ".cache", "logos", channelID+".png"), true
+}
+
+func (s *server) readChannelLogoCache(channelID string) ([]byte, error) {
+	cachePath, ok := s.channelLogoCachePath(channelID)
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return os.ReadFile(cachePath)
+}
+
+func (s *server) storeChannelLogoCache(channelID string, logo []byte) error {
+	cachePath, ok := s.channelLogoCachePath(channelID)
+	if !ok {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		return err
+	}
+	return storage.WriteFileAtomic(cachePath, logo)
+}
+
+func serveChannelLogo(w http.ResponseWriter, r *http.Request, logo []byte) {
 	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodGet {
-		_, _ = io.Copy(w, body)
+		_, _ = w.Write(logo)
 	}
 }
 
