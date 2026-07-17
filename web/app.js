@@ -52,6 +52,7 @@
     recorded: [],
     schedule: [],
     broadcasting: null,
+    logoCacheVersion: 0,
     rules: [],
     config: {},
     storage: null,
@@ -2144,6 +2145,13 @@
     return channelURL(channelID, "subtitles", "vtt");
   }
 
+  function channelLogoURL(channelID) {
+    if (!state.logoCacheVersion) {
+      return channelURL(channelID, "logo", "");
+    }
+    return channelURL(channelID, "logo", "", { cache: state.logoCacheVersion });
+  }
+
   function channelURL(channelID, resource, ext, query) {
     var url = "/api/channel/" + encodeURIComponent(channelID) + "/" + resource;
     if (ext) {
@@ -3285,7 +3293,7 @@
     if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {
       var logo = document.createElement("img");
       logo.className = "live-channel-logo";
-      logo.src = channelURL(group.id, "logo", "");
+      logo.src = channelLogoURL(group.id);
       logo.alt = "";
       logo.loading = "lazy";
       logoSlot.appendChild(logo);
@@ -4183,7 +4191,7 @@
       if (group.logo) {
         var logo = document.createElement("img");
         logo.className = "schedule-channel-logo";
-        logo.src = channelURL(group.id, "logo", "");
+        logo.src = channelLogoURL(group.id);
         logo.alt = "";
         logo.loading = "lazy";
         mediaRow.appendChild(logo);
@@ -4971,6 +4979,35 @@
       return request("preview-cache", "DELETE").then(function (result) {
         var removed = Number(result && result.removed || 0);
         setBusy("プレビューキャッシュをクリアしました（" + removed + "件）");
+      }).catch(showError).finally(function () {
+        if (button) {
+          button.disabled = false;
+          button.setAttribute("aria-busy", "false");
+        }
+      });
+    });
+  }
+
+  function clearStrataLogoCache() {
+    var button = byId("clearStrataLogoCacheButton");
+    return confirmAction("保存済みの局ロゴキャッシュをすべて削除しますか？", {
+      danger: true,
+      okLabel: "クリア",
+      title: "局ロゴキャッシュの確認"
+    }).then(function (confirmed) {
+      if (!confirmed) {
+        return;
+      }
+      if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+      }
+      setBusy("局ロゴキャッシュをクリア中");
+      return request("logo-cache", "DELETE").then(function (result) {
+        var removed = Number(result && result.removed || 0);
+        state.logoCacheVersion = Date.now();
+        render();
+        setBusy("局ロゴキャッシュをクリアしました（" + removed + "件）");
       }).catch(showError).finally(function () {
         if (button) {
           button.disabled = false;
@@ -6533,6 +6570,10 @@
     var clearStrataPreviewCacheButton = byId("clearStrataPreviewCacheButton");
     if (clearStrataPreviewCacheButton) {
       clearStrataPreviewCacheButton.addEventListener("click", clearStrataPreviewCache);
+    }
+    var clearStrataLogoCacheButton = byId("clearStrataLogoCacheButton");
+    if (clearStrataLogoCacheButton) {
+      clearStrataLogoCacheButton.addEventListener("click", clearStrataLogoCache);
     }
     var strataAuthEnabled = byId("strataAuthEnabled");
     if (strataAuthEnabled) {

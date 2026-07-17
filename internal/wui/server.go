@@ -954,6 +954,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handlePreviewCache(w, r)
+	case len(parts) == 1 && parts[0] == "logo-cache":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleChannelLogoCache(w, r)
 	case len(parts) == 1 && parts[0] == "rules":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -1274,6 +1279,40 @@ func (s *server) handlePreviewCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writePrettyJSON(w, http.StatusOK, map[string]int{"removed": removed})
+}
+
+func (s *server) handleChannelLogoCache(w http.ResponseWriter, r *http.Request) {
+	removed, err := s.clearChannelLogoCache()
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	writePrettyJSON(w, http.StatusOK, map[string]int{"removed": removed})
+}
+
+func (s *server) clearChannelLogoCache() (int, error) {
+	cacheDir := s.channelLogoCacheDir()
+	if cacheDir == "" {
+		return 0, nil
+	}
+	entries, err := os.ReadDir(cacheDir)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".png" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(cacheDir, entry.Name())); err != nil && !os.IsNotExist(err) {
+			return 0, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 func (s *server) clearPreviewCache(ctx context.Context) (int, error) {
@@ -3350,10 +3389,18 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 }
 
 func (s *server) channelLogoCachePath(channelID string) (string, bool) {
-	if channelID == "" || filepath.Base(channelID) != channelID {
+	cacheDir := s.channelLogoCacheDir()
+	if cacheDir == "" || channelID == "" || filepath.Base(channelID) != channelID {
 		return "", false
 	}
-	return filepath.Join(filepath.Dir(s.paths.Database), ".cache", "logos", channelID+".png"), true
+	return filepath.Join(cacheDir, channelID+".png"), true
+}
+
+func (s *server) channelLogoCacheDir() string {
+	if s.paths.Database == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(s.paths.Database), ".cache", "logos")
 }
 
 func (s *server) readChannelLogoCache(channelID string) ([]byte, error) {
@@ -4204,6 +4251,8 @@ func apiAllowedMethods(parts []string) ([]string, bool) {
 		return []string{"GET", "PUT"}, true
 	case len(parts) == 1 && parts[0] == "preview-cache":
 		return []string{"DELETE"}, true
+	case len(parts) == 1 && parts[0] == "logo-cache":
+		return []string{"DELETE"}, true
 	case len(parts) == 1 && parts[0] == "rules":
 		return []string{"GET", "POST"}, true
 	case len(parts) == 2 && parts[0] == "rules":
@@ -4268,7 +4317,7 @@ func methodAllowed(method string, allowed []string) bool {
 
 func knownAPIResource(name string) bool {
 	switch name {
-	case "status", "scheduler", "storage", "metrics", "log", "config", "preview-cache", "rules", "schedule", "search", "reserves", "recording", "recorded", "program", "channel":
+	case "status", "scheduler", "storage", "metrics", "log", "config", "preview-cache", "logo-cache", "rules", "schedule", "search", "reserves", "recording", "recorded", "program", "channel":
 		return true
 	default:
 		return false

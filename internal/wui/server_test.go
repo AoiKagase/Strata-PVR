@@ -258,6 +258,7 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 		{"/api/status", "GET"},
 		{"/api/config", "GET, PUT"},
 		{"/api/preview-cache", "DELETE"},
+		{"/api/logo-cache", "DELETE"},
 		{"/api/recorded/abc/watch.m2ts", "GET"},
 	} {
 		req = httptest.NewRequest(http.MethodHead, tc.path, nil)
@@ -697,7 +698,7 @@ func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
 		`logoSlot.className = "live-channel-logo-slot"`,
 		`if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {`,
 		`logo.className = "live-channel-logo"`,
-		`logo.src = channelURL(group.id, "logo", "");`,
+		`logo.src = channelLogoURL(group.id);`,
 	} {
 		if !strings.Contains(string(app), want) {
 			t.Fatalf("web/app.js missing on-air channel logo marker %q", want)
@@ -712,6 +713,36 @@ func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
 	} {
 		if !strings.Contains(string(styles), want) {
 			t.Fatalf("web/styles.css missing on-air channel logo style %q", want)
+		}
+	}
+}
+
+func TestNativeDashboardCanClearChannelLogoCache(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`id="clearStrataLogoCacheButton"`,
+		`局ロゴキャッシュ`,
+	} {
+		if !strings.Contains(string(index), want) {
+			t.Fatalf("web/index.html missing channel logo cache control %q", want)
+		}
+	}
+	for _, want := range []string{
+		`function channelLogoURL(channelID)`,
+		`function clearStrataLogoCache()`,
+		`request("logo-cache", "DELETE")`,
+		`state.logoCacheVersion = Date.now();`,
+		`clearStrataLogoCacheButton.addEventListener("click", clearStrataLogoCache);`,
+	} {
+		if !strings.Contains(string(app), want) {
+			t.Fatalf("web/app.js missing channel logo cache behavior %q", want)
 		}
 	}
 }
@@ -3286,6 +3317,49 @@ func TestAPIDeletesPreviewCache(t *testing.T) {
 	entries, err := database.ListPreviewCacheEntries(context.Background(), db)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("preview cache entries=%v err=%v", entries, err)
+	}
+}
+
+func TestAPIDeletesChannelLogoCache(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	paths.Database = filepath.Join(dir, "data", "strata.db")
+	handler := newTestHandler(t, paths, &config.Config{})
+	cacheDir := filepath.Join(dir, "data", ".cache", "logos")
+	if err := os.MkdirAll(filepath.Join(cacheDir, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"abc.png", "def.PNG", "keep.jpg"} {
+		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/logo-cache", nil)
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("clear logo cache status=%d body=%q", res.Code, res.Body.String())
+	}
+	var result struct {
+		Removed int `json:"removed"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Removed != 2 {
+		t.Fatalf("removed=%d, want 2", result.Removed)
+	}
+	for _, name := range []string{"abc.png", "def.PNG"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "keep.jpg")); err != nil {
+		t.Fatalf("non-logo file should remain: %v", err)
+	}
+	if info, err := os.Stat(filepath.Join(cacheDir, "nested")); err != nil || !info.IsDir() {
+		t.Fatalf("nested directory should remain: info=%v err=%v", info, err)
 	}
 }
 
