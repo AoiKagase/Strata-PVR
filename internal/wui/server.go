@@ -200,11 +200,17 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 	mux := http.NewServeMux()
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(),
-		authCache: make(map[[sha256.Size]byte]time.Time), authWorkers: make(chan struct{}, 2),
+		sessions: make(map[string]authSession), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
 	}
 	server.cleanupPreviewCache(context.Background())
+	mux.HandleFunc("/api/auth/login", server.handleLogin)
+	mux.HandleFunc("/api/auth/logout", server.handleLogout)
+	mux.HandleFunc("/api/auth/tokens", server.handleAPITokens)
+	mux.HandleFunc("/api/auth/tokens/", server.handleAPIToken)
+	mux.HandleFunc("/login", server.handleLoginPage)
+	mux.HandleFunc("/login.html", server.handleLoginPage)
 	mux.HandleFunc("/api/", server.handleAPI)
 	mux.HandleFunc("/", server.handleStatic)
 	var handler http.Handler = mux
@@ -237,7 +243,7 @@ type server struct {
 	schedulerMu       sync.Mutex
 	schedulerGate     chan struct{}
 	authMu            sync.Mutex
-	authCache         map[[sha256.Size]byte]time.Time
+	sessions          map[string]authSession
 	authWorkers       chan struct{}
 	hls               *hlsSessionManager
 }
@@ -631,49 +637,222 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		authorization := r.Header.Get("Authorization")
-		cacheKey := sha256.Sum256([]byte(authorization))
-		s.authMu.Lock()
-		expires, cached := s.authCache[cacheKey]
-		valid := cached && time.Now().Before(expires)
-		if cached && !valid {
-			delete(s.authCache, cacheKey)
+		if r.URL.Path == "/login" || r.URL.Path == "/login.html" || r.URL.Path == "/api/auth/login" {
+			next.ServeHTTP(w, r)
+			return
 		}
-		s.authMu.Unlock()
-		username, password, ok := r.BasicAuth()
-		if ok && !valid {
-			select {
-			case s.authWorkers <- struct{}{}:
-			case <-r.Context().Done():
+		identity, valid := s.authenticateRequest(r)
+		if !valid {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+				legacyHTTPError(w, r, http.StatusUnauthorized)
 				return
 			}
-			s.authMu.Lock()
-			expires, cached = s.authCache[cacheKey]
-			valid = cached && time.Now().Before(expires)
-			s.authMu.Unlock()
-			if !valid {
-				for _, account := range accounts {
-					if account.Username == username && passwordauth.VerifyPassword(account.PasswordHash, password) {
-						valid = true
-						s.authMu.Lock()
-						if len(s.authCache) >= 256 {
-							s.authCache = make(map[[sha256.Size]byte]time.Time)
-						}
-						s.authCache[cacheKey] = time.Now().Add(5 * time.Minute)
-						s.authMu.Unlock()
-						break
-					}
-				}
-			}
-			<-s.authWorkers
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
 		}
-		if !valid {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Authentication."`)
-			legacyHTTPError(w, r, http.StatusUnauthorized)
+		if !identity.bearer && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !validSameOrigin(r) {
+			legacyHTTPError(w, r, http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	request := r.Clone(r.Context())
+	request.URL.Path = "/login.html"
+	s.handleStatic(w, request)
+}
+
+func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if !validSameOrigin(r) {
+		legacyHTTPError(w, r, http.StatusForbidden)
+		return
+	}
+	var credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&credentials); err != nil || !s.verifyLogin(credentials.Username, credentials.Password, r) {
+		legacyHTTPError(w, r, http.StatusUnauthorized)
+		return
+	}
+	sessionID, err := s.createSession(credentials.Username)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", HttpOnly: true, Secure: requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode})
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		s.clearSession(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type apiTokenResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"createdAt"`
+	Token     string `json:"token,omitempty"`
+}
+
+func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
+	s.configMu.Lock()
+	enabled := len(s.cfg.WUIAccounts) > 0
+	s.configMu.Unlock()
+	if !enabled {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.configMu.Lock()
+		tokens := append([]config.APIToken(nil), s.cfg.WUIAPITokens...)
+		s.configMu.Unlock()
+		response := make([]apiTokenResponse, 0, len(tokens))
+		for _, token := range tokens {
+			response = append(response, apiTokenResponse{ID: token.ID, Name: token.Name, CreatedAt: token.CreatedAt})
+		}
+		writePrettyJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var input struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input); err != nil {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		input.Name = strings.TrimSpace(input.Name)
+		if input.Name == "" || len(input.Name) > 64 {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		id, err := randomAuthValue(12)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		secret, err := randomAuthValue(32)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		rawToken := "strata_" + secret
+		hash := sha256.Sum256([]byte(rawToken))
+		created := time.Now().UTC().Format(time.RFC3339)
+		token := config.APIToken{ID: id, Name: input.Name, TokenHash: hex.EncodeToString(hash[:]), CreatedAt: created}
+		if err := s.mutateAPITokens(func(tokens []config.APIToken) ([]config.APIToken, error) {
+			for _, existing := range tokens {
+				if existing.Name == token.Name {
+					return nil, errors.New("duplicate api token name")
+				}
+			}
+			return append(tokens, token), nil
+		}); err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writePrettyJSON(w, http.StatusCreated, apiTokenResponse{ID: token.ID, Name: token.Name, CreatedAt: token.CreatedAt, Token: rawToken})
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleAPIToken(w http.ResponseWriter, r *http.Request) {
+	s.configMu.Lock()
+	enabled := len(s.cfg.WUIAccounts) > 0
+	s.configMu.Unlock()
+	if !enabled {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		w.Header().Set("Allow", "DELETE")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/auth/tokens/")
+	if id == "" || strings.Contains(id, "/") {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	removed := false
+	if err := s.mutateAPITokens(func(tokens []config.APIToken) ([]config.APIToken, error) {
+		next := make([]config.APIToken, 0, len(tokens))
+		for _, token := range tokens {
+			if token.ID == id {
+				removed = true
+				continue
+			}
+			next = append(next, token)
+		}
+		return next, nil
+	}); err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	if !removed {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) mutateAPITokens(mutate func([]config.APIToken) ([]config.APIToken, error)) error {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	data, err := os.ReadFile(s.paths.Config)
+	if err != nil {
+		return err
+	}
+	doc, err := config.ParseDocument(data)
+	if err != nil {
+		return err
+	}
+	next, err := mutate(append([]config.APIToken(nil), doc.Web.Authentication.APITokens...))
+	if err != nil {
+		return err
+	}
+	doc.Web.Authentication.APITokens = next
+	encoded, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	loaded, err := config.Parse(encoded)
+	if err != nil {
+		return err
+	}
+	if err := storage.WriteFileAtomic(s.paths.Config, encoded); err != nil {
+		return err
+	}
+	*s.cfg = *loaded
+	return nil
 }
 func (s *server) withHostRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1376,6 +1555,7 @@ func publicStrataConfig(data []byte) ([]byte, error) {
 			user["passwordConfigured"] = true
 		}
 	}
+	delete(authentication, "apiTokens")
 	return json.MarshalIndent(document, "", "  ")
 }
 
@@ -1458,7 +1638,7 @@ func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, curr
 		Recording: update.Recording, PreviewCache: update.PreviewCache, Services: update.Services, Advanced: update.Advanced,
 		Web: config.WebSettings{
 			ListenAddress: update.Web.ListenAddress, Port: update.Web.Port,
-			Authentication: config.AuthenticationSettings{Enabled: update.Web.Authentication.Enabled, Users: users},
+			Authentication: config.AuthenticationSettings{Enabled: update.Web.Authentication.Enabled, Users: users, APITokens: current.Web.Authentication.APITokens},
 		},
 	}
 	encoded, err := json.MarshalIndent(doc, "", "  ")
@@ -1482,9 +1662,7 @@ func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, curr
 		return
 	}
 	*s.cfg = *loaded
-	s.authMu.Lock()
-	s.authCache = make(map[[sha256.Size]byte]time.Time)
-	s.authMu.Unlock()
+	s.clearSessions()
 	public, err := publicStrataConfig(encoded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)

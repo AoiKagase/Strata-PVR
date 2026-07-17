@@ -102,6 +102,7 @@
         <a href="#logs" data-view-link="logs">ログ</a>
       </div>
     </details>
+    <button id="logoutButton" class="secondary-button" type="button">ログアウト</button>
     <div id="scheduleStatusSummary" class="schedule-status-summary">
       <span id="scheduleOperatorStatus" class="schedule-status-pill">読み込み中</span>
       <span id="scheduleRecordingSummary">録画中 0</span>
@@ -649,9 +650,19 @@
           </fieldset>
           <fieldset class="config-fieldset">
             <legend>認証</legend>
-            <label class="config-toggle"><input id="strataAuthEnabled" type="checkbox"><span><strong>Basic認証</strong><small>ネットワーク経由のアクセスにユーザー名とパスワードを要求します。</small></span></label>
+            <label class="config-toggle"><input id="strataAuthEnabled" type="checkbox"><span><strong>ログイン認証</strong><small>ネットワーク経由のアクセスにログインを要求します。</small></span></label>
             <div id="strataAuthUsers" class="config-user-list"></div>
             <button id="addStrataUserButton" class="secondary-button" type="button">ユーザーを追加</button>
+          </fieldset>
+          <fieldset id="strataAPITokensSection" class="config-fieldset" hidden>
+            <legend>APIトークン</legend>
+            <p class="config-help">外部プログラムは <code>Authorization: Bearer &lt;token&gt;</code> で利用できます。トークンは発行時に一度だけ表示されます。</p>
+            <div class="config-form">
+              <label><span>トークン名</span><input id="strataAPITokenName" class="config-form-control" type="text" maxlength="64" autocomplete="off" placeholder="例: home-assistant"></label>
+              <button id="createStrataAPITokenButton" class="secondary-button" type="button">トークンを発行</button>
+            </div>
+            <div id="strataAPITokenSecret" class="config-help" hidden></div>
+            <div id="strataAPITokens" class="config-user-list"></div>
           </fieldset>
           <fieldset class="config-fieldset">
             <legend>録画</legend>

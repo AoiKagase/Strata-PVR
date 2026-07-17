@@ -52,13 +52,23 @@ type WebSettings struct {
 }
 
 type AuthenticationSettings struct {
-	Enabled bool      `json:"enabled"`
-	Users   []WebUser `json:"users,omitempty"`
+	Enabled   bool       `json:"enabled"`
+	Users     []WebUser  `json:"users,omitempty"`
+	APITokens []APIToken `json:"apiTokens,omitempty"`
 }
 
 type WebUser struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"passwordHash"`
+}
+
+// APIToken contains only the metadata and hash for a bearer token. The token
+// secret itself is shown once when it is created and is never persisted.
+type APIToken struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	TokenHash string `json:"tokenHash"`
+	CreatedAt string `json:"createdAt"`
 }
 
 type ServiceSettings struct {
@@ -76,6 +86,7 @@ type Config struct {
 	ExcludeServices            []int64
 	ServiceOrder               []int64
 	WUIAccounts                []WebUser
+	WUIAPITokens               []APIToken
 	WUIAuthenticationEnabled   bool
 	WUIPort                    int
 	WUIHost                    string
@@ -249,6 +260,14 @@ func loadDocument(b []byte) (*Config, error) {
 		}
 		cfg.WUIAccounts = doc.Web.Authentication.Users
 	}
+	seenTokens := make(map[string]bool, len(doc.Web.Authentication.APITokens))
+	for _, token := range doc.Web.Authentication.APITokens {
+		if token.ID == "" || token.Name == "" || token.TokenHash == "" || token.CreatedAt == "" || seenTokens[token.ID] {
+			return nil, fmt.Errorf("web authentication apiTokens require unique id, name, tokenHash, and createdAt")
+		}
+		seenTokens[token.ID] = true
+	}
+	cfg.WUIAPITokens = doc.Web.Authentication.APITokens
 	if !isLoopbackAddress(doc.Web.ListenAddress) && !doc.Web.Authentication.Enabled {
 		return nil, fmt.Errorf("web.authentication must be enabled when web.listenAddress is not loopback")
 	}

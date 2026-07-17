@@ -5,7 +5,6 @@ import (
 	"compress/zlib"
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -4615,7 +4614,7 @@ func TestAPIAuth(t *testing.T) {
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("status without auth = %d", res.Code)
 	}
-	if got := res.Header().Get("WWW-Authenticate"); got != `Basic realm="Authentication."` {
+	if got := res.Header().Get("WWW-Authenticate"); got != "Bearer" {
 		t.Fatalf("WWW-Authenticate = %q", got)
 	}
 	if res.Body.String() != "Unauthorized\n" {
@@ -4630,11 +4629,116 @@ func TestAPIAuth(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:pass")))
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status with basic auth = %d body=%s", res.Code, res.Body.String())
+	}
+
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"user","password":"pass"}`))
+	login.Header.Set("Origin", "https://example.com")
+	login.Header.Set("Content-Type", "application/json")
+	login.Header.Set("X-Forwarded-Proto", "https")
+	loginRes := httptest.NewRecorder()
+	handler.ServeHTTP(loginRes, login)
+	if loginRes.Code != http.StatusNoContent {
+		t.Fatalf("login status = %d body=%s", loginRes.Code, loginRes.Body.String())
+	}
+	cookies := loginRes.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != sessionCookieName || !cookies[0].HttpOnly || !cookies[0].Secure || cookies[0].SameSite != http.SameSiteStrictMode {
+		t.Fatalf("unexpected session cookie: %#v", cookies)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.AddCookie(cookies[0])
 	res = httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
-		t.Fatalf("status with auth = %d body=%s", res.Code, res.Body.String())
+		t.Fatalf("status with session = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestAPITokensAndCSRF(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	hash, err := passwordauth.HashPassword("pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := config.DefaultDocument()
+	doc.Web.Authentication = config.AuthenticationSettings{Enabled: true, Users: []config.WebUser{{Username: "admin", PasswordHash: hash}}}
+	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(paths.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, cfg)
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"pass"}`))
+	login.Header.Set("Origin", "http://example.com")
+	loginRes := httptest.NewRecorder()
+	handler.ServeHTTP(loginRes, login)
+	if loginRes.Code != http.StatusNoContent {
+		t.Fatalf("login status = %d", loginRes.Code)
+	}
+	cookie := loginRes.Result().Cookies()[0]
+
+	create := httptest.NewRequest(http.MethodPost, "/api/auth/tokens", strings.NewReader(`{"name":"automation"}`))
+	create.Header.Set("Content-Type", "application/json")
+	create.AddCookie(cookie)
+	createRes := httptest.NewRecorder()
+	handler.ServeHTTP(createRes, create)
+	if createRes.Code != http.StatusForbidden {
+		t.Fatalf("csrf status = %d", createRes.Code)
+	}
+
+	create = httptest.NewRequest(http.MethodPost, "/api/auth/tokens", strings.NewReader(`{"name":"automation"}`))
+	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Origin", "http://example.com")
+	create.AddCookie(cookie)
+	createRes = httptest.NewRecorder()
+	handler.ServeHTTP(createRes, create)
+	if createRes.Code != http.StatusCreated {
+		t.Fatalf("create token status = %d body=%s", createRes.Code, createRes.Body.String())
+	}
+	var created apiTokenResponse
+	if err := json.Unmarshal(createRes.Body.Bytes(), &created); err != nil || created.Token == "" {
+		t.Fatalf("created token = %#v err=%v", created, err)
+	}
+	if strings.Contains(string(mustReadFile(t, paths.Config)), created.Token) {
+		t.Fatal("token secret was persisted")
+	}
+
+	bearer := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	bearer.Header.Set("Authorization", "Bearer "+created.Token)
+	bearerRes := httptest.NewRecorder()
+	handler.ServeHTTP(bearerRes, bearer)
+	if bearerRes.Code != http.StatusOK {
+		t.Fatalf("bearer status = %d", bearerRes.Code)
+	}
+
+	configReq := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	configReq.AddCookie(cookie)
+	configRes := httptest.NewRecorder()
+	handler.ServeHTTP(configRes, configReq)
+	if strings.Contains(configRes.Body.String(), "tokenHash") || strings.Contains(configRes.Body.String(), created.Token) {
+		t.Fatalf("config exposed token: %s", configRes.Body.String())
+	}
+
+	remove := httptest.NewRequest(http.MethodDelete, "/api/auth/tokens/"+created.ID, nil)
+	remove.Header.Set("Origin", "http://example.com")
+	remove.AddCookie(cookie)
+	removeRes := httptest.NewRecorder()
+	handler.ServeHTTP(removeRes, remove)
+	if removeRes.Code != http.StatusNoContent {
+		t.Fatalf("delete token status = %d", removeRes.Code)
+	}
+	bearerRes = httptest.NewRecorder()
+	handler.ServeHTTP(bearerRes, bearer)
+	if bearerRes.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked bearer status = %d", bearerRes.Code)
 	}
 }
 
@@ -4661,7 +4765,14 @@ func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
 	handler := newTestHandler(t, testPaths(t.TempDir()), &config.Config{
 		WUIAccounts: []config.WebUser{{Username: "admin", PasswordHash: hash}},
 	})
-	authorization := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"secret"}`))
+	login.Header.Set("Origin", "http://example.com")
+	loginRes := httptest.NewRecorder()
+	handler.ServeHTTP(loginRes, login)
+	if loginRes.Code != http.StatusNoContent {
+		t.Fatalf("login status = %d", loginRes.Code)
+	}
+	cookie := loginRes.Result().Cookies()[0]
 	start := make(chan struct{})
 	statuses := make(chan int, 8)
 	var wait sync.WaitGroup
@@ -4671,7 +4782,7 @@ func TestStrataAuthConcurrentRequestsDoNotReturnTooManyRequests(t *testing.T) {
 			defer wait.Done()
 			<-start
 			req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
-			req.Header.Set("Authorization", authorization)
+			req.AddCookie(cookie)
 			res := httptest.NewRecorder()
 			handler.ServeHTTP(res, req)
 			statuses <- res.Code

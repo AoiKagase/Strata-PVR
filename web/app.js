@@ -59,6 +59,7 @@
     logoCacheVersion: 0,
     rules: [],
     config: {},
+    apiTokens: [],
     storage: null,
     metrics: null,
     scheduleChannel: "",
@@ -437,6 +438,7 @@
       return new Error("空きチューナーがないため録画を開始できません");
     }
     if (response.status === 401) {
+      window.location.replace("/login");
       return new Error("認証が必要です。ログイン状態を確認してください");
     }
     if (response.status === 403) {
@@ -1611,6 +1613,13 @@
       } else if (path === "storage") {
         state.storage = result || null;
       }
+      if (path === "config" && (((state.config.web || {}).authentication || {}).enabled)) {
+        return api("auth/tokens").then(function (tokens) {
+          state.apiTokens = tokens || [];
+        });
+      }
+      state.apiTokens = [];
+    }).then(function () {
       state[readyKey] = true;
       if (state.currentView === view) {
         if (view === "rules") {
@@ -4838,6 +4847,7 @@
       appendStrataUser(user);
     });
     updateStrataAuthUsersState();
+    renderAPITokens();
   }
 
   function appendStrataUser(user) {
@@ -4867,6 +4877,68 @@
     var enabled = byId("strataAuthEnabled").checked;
     byId("strataAuthUsers").hidden = !enabled;
     byId("addStrataUserButton").hidden = !enabled;
+    byId("strataAPITokensSection").hidden = !enabled;
+  }
+
+  function renderAPITokens() {
+    var root = byId("strataAPITokens");
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    (state.apiTokens || []).forEach(function (token) {
+      var row = document.createElement("div");
+      row.className = "config-user-row";
+      var details = document.createElement("span");
+      details.textContent = token.name + "（" + token.createdAt + "）";
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "icon-button danger-button";
+      remove.title = "トークンを失効";
+      remove.setAttribute("aria-label", "トークンを失効: " + token.name);
+      remove.textContent = "×";
+      remove.addEventListener("click", function () {
+        confirmAction("APIトークン「" + token.name + "」を失効しますか？", { danger: true, okLabel: "失効", title: "APIトークンの失効" }).then(function (confirmed) {
+          if (!confirmed) {
+            return;
+          }
+          return request("auth/tokens/" + encodeURIComponent(token.id), "DELETE").then(function () {
+            state.apiTokens = (state.apiTokens || []).filter(function (item) { return item.id !== token.id; });
+            renderAPITokens();
+          }).catch(showError);
+        });
+      });
+      row.appendChild(details);
+      row.appendChild(remove);
+      root.appendChild(row);
+    });
+  }
+
+  function createAPIToken() {
+    var input = byId("strataAPITokenName");
+    var name = input.value.trim();
+    if (!name) {
+      showError(new Error("APIトークン名を入力してください"));
+      input.focus();
+      return;
+    }
+    sendJSON("auth/tokens", "POST", { name: name }).then(function (token) {
+      state.apiTokens = (state.apiTokens || []).concat([{ id: token.id, name: token.name, createdAt: token.createdAt }]);
+      input.value = "";
+      var secret = byId("strataAPITokenSecret");
+      secret.hidden = false;
+      secret.textContent = "このトークンは一度だけ表示されます。安全な場所へ保存してください: " + token.token;
+      renderAPITokens();
+    }).catch(showError);
+  }
+
+  function logout() {
+    fetchWithTimeout("/api/auth/logout", { method: "POST", credentials: "same-origin" }).then(function (response) {
+      if (!response.ok) {
+        throw new Error("ログアウトに失敗しました。");
+      }
+      window.location.assign("/login");
+    }).catch(showError);
   }
 
   function clearConfigFieldErrors() {
@@ -6645,6 +6717,14 @@
         var names = byId("strataAuthUsers").querySelectorAll(".strata-user-name");
         names[names.length - 1].focus();
       });
+    }
+    var createStrataAPITokenButton = byId("createStrataAPITokenButton");
+    if (createStrataAPITokenButton) {
+      createStrataAPITokenButton.addEventListener("click", createAPIToken);
+    }
+    var logoutButton = byId("logoutButton");
+    if (logoutButton) {
+      logoutButton.addEventListener("click", logout);
     }
     var addBasicRuleButton = byId("addBasicRuleButton");
     if (addBasicRuleButton) {
