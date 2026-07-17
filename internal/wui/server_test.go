@@ -695,6 +695,7 @@ func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
 	}
 	for _, want := range []string{
 		`logoSlot.className = "live-channel-logo-slot"`,
+		`if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {`,
 		`logo.className = "live-channel-logo"`,
 		`logo.src = channelURL(group.id, "logo", "");`,
 	} {

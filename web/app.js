@@ -3282,7 +3282,7 @@
     channel.className = "inline-channel-row live-channel-name";
     var logoSlot = document.createElement("span");
     logoSlot.className = "live-channel-logo-slot";
-    if (group.logo) {
+    if (group.logo || (current && scheduleChannelHasLogo(current.channel))) {
       var logo = document.createElement("img");
       logo.className = "live-channel-logo";
       logo.src = channelURL(group.id, "logo", "");
