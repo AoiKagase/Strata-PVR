@@ -1277,6 +1277,8 @@ func TestNativeDashboardKeyboardMouseShortcuts(t *testing.T) {
 			`event.key === "Enter" || event.key === " "`,
 			`function ensureScheduleRovingTabStop(scroll)`,
 			`function adjacentScheduleCard(card, key)`,
+			`virtualHorizontalStart`,
+			`horizontalWindowContainsViewport`,
 			`card.tabIndex = -1`,
 			`event.key === "ArrowRight"`,
 			`矢印キーで番組を選び`,
@@ -1349,6 +1351,7 @@ func TestNativeDashboardVisualStateRetention(t *testing.T) {
 		},
 		filepath.Join("..", "..", "web", "styles.css"): {
 			`.schedule-card.selected`,
+			`--schedule-floating-controls-clearance`,
 			`.list.empty.error`,
 			`.recoverable-empty`,
 		},

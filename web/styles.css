@@ -3382,6 +3382,11 @@ body.view-schedule .schedule-guide-scroll {
   border-radius: 0;
 }
 
+body.view-schedule .schedule-guide-grid {
+  --schedule-floating-controls-clearance: 72px;
+  padding-bottom: var(--schedule-floating-controls-clearance);
+}
+
 body.view-schedule .schedule-zoom-controls {
   position: fixed;
   left: max(12px, env(safe-area-inset-left));
@@ -3644,6 +3649,10 @@ body.view-schedule .schedule-zoom-controls {
 
 /* A large touch-enabled PC still uses the desktop schedule layout. */
 @media (max-width: 760px) {
+  body.view-schedule .schedule-guide-grid {
+    --schedule-floating-controls-clearance: 132px;
+  }
+
   body.view-schedule .schedule-list-alternative {
     position: fixed;
     right: max(12px, env(safe-area-inset-right));

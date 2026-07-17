@@ -4152,6 +4152,8 @@
     var virtualRenderFrame = 0;
     var virtualWindowStart = -1;
     var virtualWindowEnd = -1;
+    var virtualHorizontalStart = -1;
+    var virtualHorizontalEnd = -1;
 
     function renderVisibleScheduleLanes() {
       var headerHeight = 76;
@@ -4160,14 +4162,19 @@
       var visibleBottom = visibleTop + Math.max(scroll.clientHeight, 360);
       var nextWindowStart = Math.max(0, visibleTop - overscan);
       var nextWindowEnd = visibleBottom + overscan;
-      if (nextWindowStart === virtualWindowStart && nextWindowEnd === virtualWindowEnd) {
+      var horizontalOverscan = Math.max(264, Math.round(scroll.clientWidth * 0.2));
+      var visibleLeft = scroll.scrollLeft;
+      var visibleRight = visibleLeft + scroll.clientWidth;
+      var horizontalWindowContainsViewport = visibleLeft >= virtualHorizontalStart && visibleRight <= virtualHorizontalEnd;
+      if (nextWindowStart === virtualWindowStart && nextWindowEnd === virtualWindowEnd && horizontalWindowContainsViewport) {
         return;
       }
       virtualWindowStart = nextWindowStart;
       virtualWindowEnd = nextWindowEnd;
-      var horizontalOverscan = Math.max(264, Math.round(scroll.clientWidth * 0.2));
-      var horizontalStart = Math.max(0, scroll.scrollLeft - horizontalOverscan);
-      var horizontalEnd = scroll.scrollLeft + scroll.clientWidth + horizontalOverscan;
+      var horizontalStart = Math.max(0, visibleLeft - horizontalOverscan);
+      var horizontalEnd = visibleRight + horizontalOverscan;
+      virtualHorizontalStart = horizontalStart;
+      virtualHorizontalEnd = horizontalEnd;
       var laneWindows = virtualLanes.map(function (record) {
         var left = record.lane.offsetLeft;
         return { record: record, left: left, right: left + record.lane.offsetWidth };
