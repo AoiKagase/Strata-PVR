@@ -966,7 +966,9 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 			`<track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語" default>`,
 			`var src = params.get("src");`,
 			`var subtitles = params.get("subtitles");`,
-			`video.src = new URL(src, window.location.href).toString();`,
+			`var mediaURL = new URL(src, window.location.href);`,
+			`function recoverLivePlayback(reason)`,
+			`video.src = mediaURL.toString();`,
 			`subtitleTrack.src = new URL(subtitles, window.location.href).toString();`,
 		},
 	}

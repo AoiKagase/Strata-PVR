@@ -148,6 +148,9 @@
       var messageText = document.getElementById("messageText");
       var retryButton = document.getElementById("retryButton");
       var resolvedSrc = "";
+      var recoveryTimer = 0;
+      var reconnectAttempts = 0;
+      var maxReconnectAttempts = 5;
       document.title = title;
       titleNode.textContent = title;
 
@@ -174,13 +177,49 @@
         });
       }
 
-      function loadVideo() {
+      function isLiveStream() {
+        return /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(src || "");
+      }
+
+      function clearRecoveryTimer() {
+        if (recoveryTimer) {
+          window.clearTimeout(recoveryTimer);
+          recoveryTimer = 0;
+        }
+      }
+
+      function recoverLivePlayback(reason) {
+        if (!isLiveStream() || recoveryTimer) {
+          return;
+        }
+        if (reconnectAttempts >= maxReconnectAttempts) {
+          showMessage("ライブ視聴を復旧できませんでした。チャンネルの状態を確認して再試行してください。", true);
+          return;
+        }
+        reconnectAttempts += 1;
+        var delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 8000);
+        showMessage(reason + " 自動的に再接続しています（" + reconnectAttempts + "/" + maxReconnectAttempts + "）。", false);
+        recoveryTimer = window.setTimeout(function () {
+          recoveryTimer = 0;
+          loadVideo(true);
+        }, delay);
+      }
+
+      function loadVideo(isRecovery) {
+        clearRecoveryTimer();
         if (!src) {
           showMessage("再生 URL が指定されていません。", false);
           return;
         }
+        if (!isRecovery) {
+          reconnectAttempts = 0;
+        }
         try {
-          video.src = new URL(src, window.location.href).toString();
+          var mediaURL = new URL(src, window.location.href);
+          if (isRecovery) {
+            mediaURL.searchParams.set("reconnect", String(Date.now()));
+          }
+          video.src = mediaURL.toString();
           if (subtitles) {
             try {
               subtitleTrack.src = new URL(subtitles, window.location.href).toString();
@@ -203,17 +242,35 @@
         }
       }
 
-      retryButton.addEventListener("click", loadVideo);
+      retryButton.addEventListener("click", function () { loadVideo(false); });
       subtitleTrack.track.addEventListener("cuechange", removeStaleLiveSubtitleCues);
       video.addEventListener("error", function () {
+        if (isLiveStream()) {
+          recoverLivePlayback("ライブ配信が中断されました。");
+          return;
+        }
         showMessage("再生に失敗しました。録画状態と WUI ログを確認して再試行してください。", true);
       });
+      video.addEventListener("waiting", function () {
+        if (isLiveStream() && !video.paused && !recoveryTimer) {
+          recoveryTimer = window.setTimeout(function () {
+            recoveryTimer = 0;
+            recoverLivePlayback("ライブ配信の受信が遅れています。");
+          }, 12000);
+        }
+      });
+      video.addEventListener("timeupdate", clearRecoveryTimer);
+      video.addEventListener("playing", function () {
+        clearRecoveryTimer();
+        reconnectAttempts = 0;
+      });
       window.addEventListener("pagehide", function () {
+        clearRecoveryTimer();
         if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src) || /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
           fetch(resolvedSrc || src, { method: "DELETE", keepalive: true }).catch(function () {});
         }
       });
-      loadVideo();
+      loadVideo(false);
     }());
   </script>
 </body>

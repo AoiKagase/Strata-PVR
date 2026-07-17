@@ -36,6 +36,7 @@ var hlsPresets = map[string]hlsPreset{
 type hlsSession struct {
 	id, dir    string
 	lastAccess time.Time
+	live       bool
 	cancel     context.CancelFunc
 	input      io.Closer
 	done       chan struct{}
@@ -179,6 +180,10 @@ func hlsStartError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (s *server) serveHLSPlaylistSession(w http.ResponseWriter, r *http.Request, session *hlsSession) {
+	if session.live && session.failed() {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
 	playlist := filepath.Join(session.dir, "index.m3u8")
 	deadline := time.NewTimer(15 * time.Second)
 	defer deadline.Stop()
@@ -221,7 +226,7 @@ func (s *server) serveHLSSegment(w http.ResponseWriter, r *http.Request, name st
 	for {
 		if info, err := os.Stat(filePath); err == nil {
 			w.Header().Set("Content-Type", "video/MP2T")
-			w.Header().Set("Cache-Control", "private, max-age=300")
+			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFile(w, r, filePath)
 			_ = info
 			return
@@ -279,7 +284,7 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), cancel: cancel, input: input, done: make(chan struct{})}
+	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), live: input != nil, cancel: cancel, input: input, done: make(chan struct{})}
 	inputPath := source
 	if input != nil {
 		inputPath = "pipe:0"
@@ -328,10 +333,38 @@ func (m *hlsSessionManager) lookup(id string) *hlsSession {
 	defer m.mu.Unlock()
 	s := m.sessions[id]
 	if s != nil {
+		if s.live && s.finished() {
+			delete(m.sessions, id)
+			if s.timer != nil {
+				s.timer.Stop()
+			}
+			_ = os.RemoveAll(s.dir)
+			return nil
+		}
 		s.lastAccess = time.Now()
-		s.timer.Reset(hlsSessionIdleTimeout)
+		if s.timer != nil {
+			s.timer.Reset(hlsSessionIdleTimeout)
+		}
 	}
 	return s
+}
+
+func (s *hlsSession) finished() bool {
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *hlsSession) failed() bool {
+	select {
+	case <-s.done:
+		return s.err != nil
+	default:
+		return false
+	}
 }
 
 func (m *hlsSessionManager) expire(id string) {

@@ -3,6 +3,7 @@ package wui
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -53,6 +54,63 @@ func TestHLSSessionManagerClosesUnusedLiveInput(t *testing.T) {
 	}
 	if !input.closed {
 		t.Fatal("unused live input was not closed")
+	}
+}
+
+func TestHLSSessionManagerDiscardsFinishedLiveSession(t *testing.T) {
+	m := newHLSSessionManager(Paths{})
+	dir := t.TempDir()
+	id := hlsSessionID(channelHLSKey("abc"), "540p", 0, 0, "")
+	done := make(chan struct{})
+	close(done)
+	session := &hlsSession{id: id, dir: dir, live: true, done: done, timer: time.NewTimer(time.Hour)}
+	defer session.timer.Stop()
+	m.sessions[id] = session
+
+	if got := m.lookup(id); got != nil {
+		t.Fatal("finished live session was reused")
+	}
+	if m.sessions[id] != nil {
+		t.Fatal("finished live session was not removed")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("finished live session directory still exists: %v", err)
+	}
+}
+
+func TestServeHLSSegmentDisablesCaching(t *testing.T) {
+	dir := t.TempDir()
+	name := "segment00000.ts"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("segment"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	id := hlsSessionID(channelHLSKey("abc"), "540p", 0, 0, "")
+	timer := time.NewTimer(time.Hour)
+	defer timer.Stop()
+	m := newHLSSessionManager(Paths{})
+	m.sessions[id] = &hlsSession{id: id, dir: dir, timer: timer}
+	s := &server{hls: m}
+	req := httptest.NewRequest("GET", "/api/channel/abc/hls/"+name+"?session="+id, nil)
+	res := httptest.NewRecorder()
+
+	s.serveHLSSegment(res, req, name)
+
+	if got := res.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestServeHLSPlaylistRejectsFailedLiveSession(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	s := &server{}
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/channel/abc/hls/index.m3u8", nil)
+
+	s.serveHLSPlaylistSession(res, req, &hlsSession{live: true, done: done, err: errors.New("stream ended")})
+
+	if res.Code != 503 {
+		t.Fatalf("status = %d, want 503", res.Code)
 	}
 }
 
