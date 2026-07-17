@@ -15,6 +15,7 @@ import (
 	"strata-pvr/internal/config"
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/schedulestore"
@@ -128,6 +129,52 @@ func TestBuildReservesPreservesManualAndSkip(t *testing.T) {
 	}
 	if result.Skips != 1 || result.Reserves != 1 {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestRunWithSourceUpdatesActiveRecordingTimingFromSchedule(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	paths := testPaths{
+		Database: filepath.Join(dir, "data", "strata.db"),
+		Log:      filepath.Join(dir, "log", "scheduler"),
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := legacy.Program{
+		ID:       "a",
+		Start:    now.Add(-20 * time.Minute).UnixMilli(),
+		End:      now.Add(-time.Minute).UnixMilli(),
+		Seconds:  1140,
+		Recorded: "recorded/active.m2ts",
+		Abort:    true,
+		Raw:      map[string]json.RawMessage{"external": json.RawMessage(`{"keep":true}`)},
+	}
+	if err := programstore.Upsert(context.Background(), paths.Database, programstore.Recording, old); err != nil {
+		t.Fatal(err)
+	}
+	start := now.Add(-10 * time.Minute).UnixMilli()
+	service := mirakurun.Service{ID: 1, ServiceID: 101, NetworkID: 1, Name: "svc"}
+	service.Channel.Type = "GR"
+	service.Channel.Channel = "27"
+	source := fakeSource{
+		services: []mirakurun.Service{service},
+		programs: []mirakurun.Program{{ID: 10, NetworkID: 1, ServiceID: 101, Name: "Updated event", StartAt: start, Duration: 3600000}},
+		tuners:   []mirakurun.Tuner{{Types: []string{"GR"}}},
+	}
+	if _, err := runWithSourceTest(t, context.Background(), paths, &config.Config{}, source, false, now); err != nil {
+		t.Fatal(err)
+	}
+	updated, found, err := programstore.ReadByID(context.Background(), paths.Database, programstore.Recording, "a")
+	if err != nil || !found {
+		t.Fatalf("active recording found=%v err=%v", found, err)
+	}
+	if updated.Start != start || updated.End != start+3600000 || updated.Seconds != 3600 {
+		t.Fatalf("recording timing = %#v", updated)
+	}
+	if updated.Recorded != old.Recorded || !updated.Abort || string(updated.Raw["external"]) != `{"keep":true}` {
+		t.Fatalf("recorder-owned state was not preserved: %#v", updated)
 	}
 }
 

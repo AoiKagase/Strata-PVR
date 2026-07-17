@@ -708,19 +708,9 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	recordCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	endReached := atomic.Bool{}
-	var endTimer *time.Timer
 	endMargin := recordingEndMargin(cfg)
-	endAt := time.UnixMilli(program.End).Add(endMargin)
-	if endAt.After(time.Now()) {
-		endTimer = time.AfterFunc(time.Until(endAt), func() {
-			endReached.Store(true)
-			cancel()
-		})
-		defer endTimer.Stop()
-	} else if endMargin != 0 {
-		endReached.Store(true)
-		cancel()
-	}
+	endController := newRecordingEndController(recordCtx, program.End, endMargin, &endReached, cancel)
+	defer endController.Stop()
 	if setter, ok := source.(prioritySetter); ok {
 		setter.SetPriority(programPriority(cfg, program))
 	}
@@ -732,7 +722,7 @@ func recordProgramWithLog(ctx context.Context, databasePath, logPath string, cfg
 	defer stream.Close()
 	stopContextClose := closeStreamOnContext(recordCtx, stream)
 	defer stopContextClose()
-	stopAbortMonitor := watchAbortFlag(recordCtx, databasePath, program.ID, cancel, stream)
+	stopAbortMonitor := watchRecordingState(recordCtx, databasePath, program.ID, program.End, cancel, stream, endController.Update)
 	defer stopAbortMonitor()
 
 	format := cfg.RecordedFormat
@@ -1013,7 +1003,89 @@ func programPriority(cfg *config.Config, program legacy.Program) int {
 	return 2
 }
 
-func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel context.CancelFunc, stream io.Closer) func() {
+type recordingEndController struct {
+	updates chan int64
+	done    chan struct{}
+	stopped chan struct{}
+}
+
+func newRecordingEndController(ctx context.Context, initialEnd int64, margin time.Duration, endReached *atomic.Bool, cancel context.CancelFunc) *recordingEndController {
+	controller := &recordingEndController{
+		updates: make(chan int64),
+		done:    make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	go func() {
+		defer close(controller.stopped)
+		var timer *time.Timer
+		var timerC <-chan time.Time
+		setDeadline := func(end int64, stopIfElapsed bool) bool {
+			deadline := time.UnixMilli(end).Add(margin)
+			if !deadline.After(time.Now()) {
+				if stopIfElapsed {
+					endReached.Store(true)
+					cancel()
+					return false
+				}
+				return true
+			}
+			if timer == nil {
+				timer = time.NewTimer(time.Until(deadline))
+				timerC = timer.C
+				return true
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(time.Until(deadline))
+			timerC = timer.C
+			return true
+		}
+		if !setDeadline(initialEnd, margin != 0) {
+			return
+		}
+		defer func() {
+			if timer != nil {
+				timer.Stop()
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-controller.done:
+				return
+			case end := <-controller.updates:
+				if !setDeadline(end, true) {
+					return
+				}
+			case <-timerC:
+				endReached.Store(true)
+				cancel()
+				return
+			}
+		}
+	}()
+	return controller
+}
+
+func (c *recordingEndController) Update(end int64) {
+	select {
+	case <-c.stopped:
+		return
+	case c.updates <- end:
+	}
+}
+
+func (c *recordingEndController) Stop() {
+	close(c.done)
+	<-c.stopped
+}
+
+func watchRecordingState(ctx context.Context, databasePath, programID string, currentEnd int64, cancel context.CancelFunc, stream io.Closer, updateEnd func(int64)) func() {
 	done := make(chan struct{})
 	stopped := make(chan struct{})
 	go func() {
@@ -1028,12 +1100,18 @@ func watchAbortFlag(ctx context.Context, databasePath, programID string, cancel 
 				return
 			case <-ticker.C:
 				program, found, err := programstore.ReadByID(ctx, databasePath, programstore.Recording, programID)
-				if err != nil || !found || !program.Abort {
+				if err != nil || !found {
 					continue
 				}
-				cancel()
-				_ = stream.Close()
-				return
+				if program.Abort {
+					cancel()
+					_ = stream.Close()
+					return
+				}
+				if program.End != currentEnd {
+					currentEnd = program.End
+					updateEnd(currentEnd)
+				}
 			}
 		}
 	}()

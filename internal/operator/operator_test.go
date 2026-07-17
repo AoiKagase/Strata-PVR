@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -292,6 +293,45 @@ func TestRecordProgramStopsImmediatelyWhenEndMarginAlreadyElapsed(t *testing.T) 
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("recording with elapsed end margin stopped after %s", elapsed)
+	}
+}
+
+func TestRecordingEndControllerExtendsDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	endReached := atomic.Bool{}
+	controller := newRecordingEndController(ctx, time.Now().Add(150*time.Millisecond).UnixMilli(), 0, &endReached, cancel)
+	defer controller.Stop()
+	controller.Update(time.Now().Add(500 * time.Millisecond).UnixMilli())
+	select {
+	case <-ctx.Done():
+		t.Fatal("recording stopped at its original end time")
+	case <-time.After(250 * time.Millisecond):
+	}
+	select {
+	case <-ctx.Done():
+		if !endReached.Load() {
+			t.Fatal("extended deadline did not mark recording end")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("recording did not stop at its extended end time")
+	}
+}
+
+func TestRecordingEndControllerShortenedPastDeadlineStopsImmediately(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	endReached := atomic.Bool{}
+	controller := newRecordingEndController(ctx, time.Now().Add(time.Hour).UnixMilli(), 0, &endReached, cancel)
+	defer controller.Stop()
+	controller.Update(time.Now().Add(-time.Second).UnixMilli())
+	select {
+	case <-ctx.Done():
+		if !endReached.Load() {
+			t.Fatal("shortened deadline did not mark recording end")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("recording did not stop at an elapsed updated deadline")
 	}
 }
 

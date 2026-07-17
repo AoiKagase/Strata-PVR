@@ -16,6 +16,7 @@ import (
 	legacy "strata-pvr/internal/domain"
 	"strata-pvr/internal/logging"
 	"strata-pvr/internal/mirakurun"
+	"strata-pvr/internal/programstore"
 	"strata-pvr/internal/reservationstore"
 	"strata-pvr/internal/rulestore"
 	"strata-pvr/internal/schedulestore"
@@ -207,11 +208,16 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		if err != nil {
 			return Result{}, err
 		}
+		recordingIDs, err := programstore.ReadIDs(ctx, paths.Database, programstore.Recording)
+		if err != nil {
+			return Result{}, err
+		}
+		recordingUpdates := recordingTimingUpdates(schedule, recordingIDs)
 		db, release, err := database.Acquire(ctx, paths.Database)
 		if err != nil {
 			return Result{}, err
 		}
-		err = database.ReplaceSchedulerState(ctx, db, scheduleDocuments, reservationDocuments)
+		err = database.ReplaceSchedulerStateWithRecordingUpdates(ctx, db, scheduleDocuments, reservationDocuments, recordingUpdates)
 		release()
 		if err != nil {
 			return Result{}, err
@@ -221,6 +227,33 @@ func RunWithSource(ctx context.Context, paths Paths, cfg *config.Config, source 
 		}
 	}
 	return result, nil
+}
+
+func recordingTimingUpdates(schedule []legacy.ChannelSchedule, recordingIDs []string) []database.RecordingTimingUpdate {
+	updates := make([]database.RecordingTimingUpdate, 0, len(recordingIDs))
+	for _, id := range recordingIDs {
+		program := legacy.GetProgramByID(id, schedule, nil)
+		if program == nil {
+			continue
+		}
+		updated := *program
+		updates = append(updates, database.RecordingTimingUpdate{
+			ProgramID: updated.ID,
+			Start:     updated.Start,
+			End:       updated.End,
+			Update: func(document json.RawMessage) (json.RawMessage, error) {
+				var recording legacy.Program
+				if err := json.Unmarshal(document, &recording); err != nil {
+					return nil, err
+				}
+				recording.Start = updated.Start
+				recording.End = updated.End
+				recording.Seconds = updated.Seconds
+				return json.Marshal(recording)
+			},
+		})
+	}
+	return updates
 }
 
 func appendResultLogs(logPath string, result Result) error {
