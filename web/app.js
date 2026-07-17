@@ -3280,6 +3280,17 @@
 
     var channel = document.createElement("div");
     channel.className = "inline-channel-row live-channel-name";
+    var logoSlot = document.createElement("span");
+    logoSlot.className = "live-channel-logo-slot";
+    if (group.logo) {
+      var logo = document.createElement("img");
+      logo.className = "live-channel-logo";
+      logo.src = channelURL(group.id, "logo", "");
+      logo.alt = "";
+      logo.loading = "lazy";
+      logoSlot.appendChild(logo);
+    }
+    channel.appendChild(logoSlot);
     channel.appendChild(channelLink(group.id, group.name || group.id));
 
     var nowPlaying = document.createElement("button");

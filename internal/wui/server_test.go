@@ -684,6 +684,37 @@ func TestNativeDashboardLiveWatchActionsPreferMP4Playback(t *testing.T) {
 	}
 }
 
+func TestNativeDashboardOnAirRowsReserveChannelLogoSpace(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles, err := os.ReadFile(filepath.Join("..", "..", "web", "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`logoSlot.className = "live-channel-logo-slot"`,
+		`logo.className = "live-channel-logo"`,
+		`logo.src = channelURL(group.id, "logo", "");`,
+	} {
+		if !strings.Contains(string(app), want) {
+			t.Fatalf("web/app.js missing on-air channel logo marker %q", want)
+		}
+	}
+	for _, want := range []string{
+		`.live-channel-logo-slot {`,
+		`flex: 0 0 44px;`,
+		`width: 44px;`,
+		`height: 24px;`,
+		`.live-channel-logo {`,
+	} {
+		if !strings.Contains(string(styles), want) {
+			t.Fatalf("web/styles.css missing on-air channel logo style %q", want)
+		}
+	}
+}
+
 func TestNativeDashboardOnAirReserveShowsImmediateRecordingFeedback(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {

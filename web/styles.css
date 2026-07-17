@@ -713,6 +713,22 @@ h3 {
   min-width: 0;
 }
 
+.live-channel-logo-slot {
+  display: inline-flex;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 24px;
+}
+
+.live-channel-logo {
+  display: block;
+  max-width: 44px;
+  max-height: 24px;
+  object-fit: contain;
+}
+
 .live-channel-name .channel-link,
 .live-channel-program {
   overflow: hidden;
