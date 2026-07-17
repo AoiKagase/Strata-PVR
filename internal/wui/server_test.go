@@ -3761,6 +3761,25 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	}
 }
 
+func TestReadScheduleUsesProcessDatabaseHandle(t *testing.T) {
+	dir := t.TempDir()
+	databasePath := filepath.Join(dir, "strata.db")
+	if err := schedulestore.Write(context.Background(), databasePath, []legacy.ChannelSchedule{{Channel: legacy.Channel{ID: "service"}}}); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{paths: Paths{Database: databasePath}, db: db}
+	if _, err := s.readSchedule(); err == nil {
+		t.Fatal("readSchedule unexpectedly opened a separate database handle")
+	}
+}
+
 func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)

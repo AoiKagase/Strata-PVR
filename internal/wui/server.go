@@ -3804,7 +3804,7 @@ func logDir(paths Paths) string {
 }
 
 func (s *server) readSchedule() ([]legacy.ChannelSchedule, error) {
-	return schedulestore.Read(context.Background(), s.paths.Database)
+	return schedulestore.Read(database.WithHandle(context.Background(), s.db), s.paths.Database)
 }
 
 func (s *server) findScheduleChannel(id string) (*legacy.ChannelSchedule, error) {
