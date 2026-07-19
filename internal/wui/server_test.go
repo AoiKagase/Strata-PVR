@@ -2657,6 +2657,8 @@ func TestAPIRecordedWatchXSPFPlaybackTicketAuthorizesVLC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"9","bit_rate":"2400"}}`, nil)
+	defer restoreProbe()
 	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
 	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"user","password":"pass"}`))
 	login.Header.Set("Origin", "http://example.com")
@@ -2709,6 +2711,8 @@ func TestAPIRecordedPlaybackURLAuthorizesM2TSRangeRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
+	restoreProbe := installFakeFFprobe(t, `{"format":{"duration":"30.0","size":"9","bit_rate":"2400"}}`, nil)
+	defer restoreProbe()
 	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"user","password":"pass"}`))
 	login.Header.Set("Origin", "http://example.com")
 	loginRes := httptest.NewRecorder()

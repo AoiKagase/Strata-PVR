@@ -2611,24 +2611,13 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 			s.streamFFmpegWithStatus(w, r, input, "m2ts", false, plan.Status)
 			return
 		}
-		if r.URL.Query().Has("ss") {
-			if !s.streamLegacyM2TSOffset(w, r, filePath) {
-				return
-			}
+		// Match Chinachu's watch.m2ts behavior: translate the player's byte
+		// range through the probed stream bitrate before reading the source.
+		// This keeps consecutive seeks on the same timeline rather than using
+		// raw container byte offsets.
+		if !s.streamLegacyM2TSOffset(w, r, filePath) {
 			return
 		}
-		if r.Header.Get("Range") != "" && staticRangeExceedsSize(r.Header.Get("Range"), info.Size()) {
-			legacyHTTPError(w, r, http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
-		file, err := os.Open(filePath)
-		if err != nil {
-			legacyHTTPError(w, r, http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
-		w.Header().Set("Content-Type", "video/MP2T")
-		http.ServeContent(w, r, filepath.Base(filePath), info.ModTime(), file)
 	case "mp4":
 		if !s.checkLegacyWatchStart(w, r, filePath) {
 			return
