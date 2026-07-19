@@ -1139,6 +1139,16 @@ func TestRecordedPlaybackUsesHLSOnlyForAppleNativeBrowsers(t *testing.T) {
 	}
 }
 
+func TestRecordedXSPFURLDoesNotAddPlaylistParameters(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(app), "function recordedXSPFURL(program) {\n    return recordedWatchURL(program, \"xspf\");\n  }") {
+		t.Fatal("recorded XSPF URL should not include playlist-only query parameters")
+	}
+}
+
 func TestLiveChannelPlaybackUsesHLSForAppleNativeBrowsers(t *testing.T) {
 	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
 	if err != nil {
@@ -2604,13 +2614,13 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	defer restoreProbe()
 	handler := newTestHandler(t, paths, &config.Config{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf?prefix=/api/recorded/abc/&ext=m2ts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf?prefix=/api/recorded/abc/&ext=m2ts&t=30", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts?prefix=/api/recorded/abc/") {
+	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts?t=30") || strings.Contains(res.Body.String(), "prefix=") || strings.Contains(res.Body.String(), "ext=m2ts") {
 		t.Fatalf("unexpected xspf: %q", res.Body.String())
 	}
 
@@ -4083,7 +4093,7 @@ func TestAPIChannelWatchXSPF(t *testing.T) {
 	if !strings.Contains(res.Body.String(), "Service & One") {
 		t.Fatalf("xspf channel title should match legacy unescaped output: %q", res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "http://example.com/api/channel/"+chid+"/watch.m2ts?prefix=/api/channel/") {
+	if !strings.Contains(res.Body.String(), "http://example.com/api/channel/"+chid+"/watch.m2ts") || strings.Contains(res.Body.String(), "prefix=") || strings.Contains(res.Body.String(), "ext=m2ts") {
 		t.Fatalf("xspf target missing: %q", res.Body.String())
 	}
 }

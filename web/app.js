@@ -2103,8 +2103,7 @@
   }
 
   function recordedXSPFURL(program) {
-    var prefix = window.location.origin + "/api/recorded/" + encodeURIComponent(program.id) + "/";
-    return recordedWatchURL(program, "xspf", { prefix: prefix, ext: "m2ts" });
+    return recordedWatchURL(program, "xspf");
   }
 
   function recordedHLSURL(program, query) {

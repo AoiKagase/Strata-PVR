@@ -4325,19 +4325,25 @@ func writeXSPF(w io.Writer, target, title string) {
 
 func xspfTarget(r *http.Request, ext string) string {
 	prefix := r.URL.Query().Get("prefix")
+	query := r.URL.Query()
+	// prefix and ext describe XSPF generation only.  They must not be passed
+	// to the media URL, because players use that URL as the actual input.
+	query.Del("prefix")
+	query.Del("ext")
+	encodedQuery := query.Encode()
 	path := ""
 	if prefix != "" {
 		path = prefix + "watch." + ext
-		if r.URL.RawQuery != "" {
-			path += "?" + r.URL.RawQuery
+		if encodedQuery != "" {
+			path += "?" + encodedQuery
 		}
 		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 			return path
 		}
 	} else {
 		path = strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext
-		if r.URL.RawQuery != "" {
-			path += "?" + r.URL.RawQuery
+		if encodedQuery != "" {
+			path += "?" + encodedQuery
 		}
 	}
 	scheme := r.Header.Get("X-Forwarded-Proto")
