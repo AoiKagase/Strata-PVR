@@ -2620,7 +2620,7 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("xspf status=%d body=%q", res.Code, res.Body.String())
 	}
-	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts?t=30") || strings.Contains(res.Body.String(), "prefix=") || strings.Contains(res.Body.String(), "ext=m2ts") {
+	if !strings.Contains(res.Body.String(), "Title &amp;lt;&amp;&quot;'&amp;gt; One") || !strings.Contains(res.Body.String(), "http://example.com/api/recorded/abc/watch.m2ts?") || !strings.Contains(res.Body.String(), "playback=") || !strings.Contains(res.Body.String(), "t=30") || strings.Contains(res.Body.String(), "prefix=") || strings.Contains(res.Body.String(), "ext=m2ts") {
 		t.Fatalf("unexpected xspf: %q", res.Body.String())
 	}
 
@@ -2640,6 +2640,50 @@ func TestAPIRecordedWatchXSPFAndM2TS(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusRequestedRangeNotSatisfiable || res.Body.String() != "Requested Range Not Satisfiable\n" {
 		t.Fatalf("watch invalid range status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestAPIRecordedWatchXSPFPlaybackTicketAuthorizesVLC(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("watchdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := passwordauth.HashPassword("pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"user","password":"pass"}`))
+	login.Header.Set("Origin", "http://example.com")
+	loginRes := httptest.NewRecorder()
+	handler.ServeHTTP(loginRes, login)
+	if loginRes.Code != http.StatusNoContent {
+		t.Fatalf("login status=%d body=%q", loginRes.Code, loginRes.Body.String())
+	}
+
+	xspf := httptest.NewRequest(http.MethodGet, "/api/recorded/abc/watch.xspf", nil)
+	xspf.AddCookie(loginRes.Result().Cookies()[0])
+	xspfRes := httptest.NewRecorder()
+	handler.ServeHTTP(xspfRes, xspf)
+	if xspfRes.Code != http.StatusOK || !strings.Contains(xspfRes.Body.String(), "playback=") {
+		t.Fatalf("xspf status=%d body=%q", xspfRes.Code, xspfRes.Body.String())
+	}
+	locationStart := strings.Index(xspfRes.Body.String(), "<location>") + len("<location>")
+	locationEnd := strings.Index(xspfRes.Body.String()[locationStart:], "</location>")
+	if locationEnd < 0 {
+		t.Fatalf("xspf location missing: %q", xspfRes.Body.String())
+	}
+	target := strings.ReplaceAll(xspfRes.Body.String()[locationStart:locationStart+locationEnd], "&amp;", "&")
+	playback := httptest.NewRequest(http.MethodGet, target, nil)
+	playbackRes := httptest.NewRecorder()
+	handler.ServeHTTP(playbackRes, playback)
+	if playbackRes.Code != http.StatusOK || playbackRes.Body.String() != "watchdata" {
+		t.Fatalf("ticket playback status=%d body=%q", playbackRes.Code, playbackRes.Body.String())
 	}
 }
 

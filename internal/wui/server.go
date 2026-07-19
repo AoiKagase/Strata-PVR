@@ -200,7 +200,7 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 	mux := http.NewServeMux()
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(),
-		sessions: make(map[string]authSession), authWorkers: make(chan struct{}, 2),
+		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
 	}
@@ -243,6 +243,7 @@ type server struct {
 	schedulerMu       sync.Mutex
 	schedulerGate     chan struct{}
 	authMu            sync.Mutex
+	playbackTickets   map[string]playbackTicket
 	sessions          map[string]authSession
 	authWorkers       chan struct{}
 	hls               *hlsSessionManager
@@ -641,7 +642,10 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		identity, valid := s.authenticateRequest(r)
+		identity, valid := s.playbackTicketIdentity(r)
+		if !valid {
+			identity, valid = s.authenticateRequest(r)
+		}
 		if !valid {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				w.Header().Set("WWW-Authenticate", "Bearer")
@@ -2494,8 +2498,15 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		if ext == "" {
 			ext = "m2ts"
 		}
+		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
 		target := xspfTarget(r, ext)
+		target = appendPlaybackTicket(target, ticket)
 		w.Header().Set("Content-Type", "application/xspf+xml")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, id))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
@@ -3630,8 +3641,14 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		if ext == "" {
 			ext = "m2ts"
 		}
-		target := xspfTarget(r, ext)
+		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext)
+		if err != nil {
+			legacyHTTPError(w, r, http.StatusInternalServerError)
+			return
+		}
+		target := appendPlaybackTicket(xspfTarget(r, ext), ticket)
 		w.Header().Set("Content-Type", "application/xspf+xml")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, channel.ID))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
@@ -4359,6 +4376,17 @@ func xspfTarget(r *http.Request, ext string) string {
 		host = r.Host
 	}
 	return scheme + "://" + host + path
+}
+
+func appendPlaybackTicket(target, ticket string) string {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	query := parsed.Query()
+	query.Set("playback", ticket)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func legacyXSPFLocation(value string) string {

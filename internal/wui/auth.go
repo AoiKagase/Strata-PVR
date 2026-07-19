@@ -17,10 +17,16 @@ import (
 
 const sessionCookieName = "strata_session"
 const sessionDuration = 8 * time.Hour
+const playbackTicketDuration = 5 * time.Minute
 
 type authSession struct {
 	username string
 	expires  time.Time
+}
+
+type playbackTicket struct {
+	path    string
+	expires time.Time
 }
 
 type authIdentity struct {
@@ -61,6 +67,49 @@ func (s *server) clearSessions() {
 	s.authMu.Lock()
 	s.sessions = make(map[string]authSession)
 	s.authMu.Unlock()
+}
+
+func (s *server) createPlaybackTicket(path string) (string, error) {
+	token, err := randomAuthValue(32)
+	if err != nil {
+		return "", err
+	}
+	s.authMu.Lock()
+	s.cleanupPlaybackTicketsLocked(time.Now())
+	s.playbackTickets[token] = playbackTicket{path: path, expires: time.Now().Add(playbackTicketDuration)}
+	s.authMu.Unlock()
+	return token, nil
+}
+
+func (s *server) playbackTicketIdentity(r *http.Request) (authIdentity, bool) {
+	if !isPlaybackRequest(r.URL.Path) {
+		return authIdentity{}, false
+	}
+	token := r.URL.Query().Get("playback")
+	if token == "" {
+		return authIdentity{}, false
+	}
+	s.authMu.Lock()
+	s.cleanupPlaybackTicketsLocked(time.Now())
+	ticket, ok := s.playbackTickets[token]
+	s.authMu.Unlock()
+	if !ok || ticket.path != r.URL.Path {
+		return authIdentity{}, false
+	}
+	return authIdentity{bearer: true}, true
+}
+
+func (s *server) cleanupPlaybackTicketsLocked(now time.Time) {
+	for token, ticket := range s.playbackTickets {
+		if !now.Before(ticket.expires) {
+			delete(s.playbackTickets, token)
+		}
+	}
+}
+
+func isPlaybackRequest(requestPath string) bool {
+	parts := strings.Split(strings.Trim(requestPath, "/"), "/")
+	return len(parts) == 4 && parts[0] == "api" && (parts[1] == "recorded" || parts[1] == "recording" || parts[1] == "channel") && parts[3] == "watch.m2ts"
 }
 
 func (s *server) cleanupSessionsLocked(now time.Time) {
