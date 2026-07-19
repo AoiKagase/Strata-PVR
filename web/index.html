@@ -720,6 +720,13 @@
               <label><span>文字正規化</span><select id="strataNormalizationForm" class="config-form-control"><option value="">未設定</option><option value="NFC">NFC</option><option value="NFD">NFD</option><option value="NFKC">NFKC</option><option value="NFKD">NFKD</option></select></label>
             </div>
           </fieldset>
+          <fieldset class="config-fieldset">
+            <legend>再生</legend>
+            <div class="config-form">
+              <label><span>MP4 映像エンコーダー</span><select id="strataMP4VideoEncoder" class="config-form-control" aria-describedby="strataMP4VideoEncoderHelp"></select></label>
+            </div>
+            <p id="strataMP4VideoEncoderHelp" class="config-help">FFmpeg で実際に利用できる H.264 エンコーダーのみ表示します。ハードウェアエンコーダーがない環境ではソフトウェアエンコーダーのみ選択できます。</p>
+          </fieldset>
         </form>
       </section>
     </section>

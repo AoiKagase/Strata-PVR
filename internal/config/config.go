@@ -78,6 +78,7 @@ type ServiceSettings struct {
 
 type AdvancedSettings struct {
 	NormalizationForm string `json:"normalizationForm,omitempty"`
+	MP4VideoEncoder   string `json:"mp4VideoEncoder,omitempty"`
 }
 
 type Config struct {
@@ -92,6 +93,7 @@ type Config struct {
 	WUIHost                    string
 	WUIWebDir                  string
 	NormalizationForm          string
+	MP4VideoEncoder            string
 	RecordedFormat             string
 	RecordingStartMargin       int
 	RecordingStartMarginSet    bool
@@ -274,6 +276,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.ExcludeServices = doc.Services.Excluded
 	cfg.ServiceOrder = doc.Services.Order
 	cfg.NormalizationForm = doc.Advanced.NormalizationForm
+	cfg.MP4VideoEncoder = doc.Advanced.MP4VideoEncoder
 	cfg.PreviewCacheMaxAgeDays = doc.PreviewCache.MaxAgeDays
 	cfg.PreviewCacheMaxSizeMB = doc.PreviewCache.MaxSizeMB
 	return cfg, nil

@@ -48,6 +48,7 @@
   var channelLogoLoadScheduled = false;
   var channelLogoLoadConcurrency = 1;
   var strataConfigFormDirty = false;
+  var mp4VideoEncodersLoaded = false;
   var focusableControlSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
   var state = {
     status: null,
@@ -59,6 +60,7 @@
     logoCacheVersion: 0,
     rules: [],
     config: {},
+    mp4VideoEncoders: [],
     apiTokens: [],
     storage: null,
     metrics: null,
@@ -4855,6 +4857,8 @@
     setControlValue("strataExcludedServices", services.excluded);
     setControlValue("strataServiceOrder", services.order);
     setControlValue("strataNormalizationForm", advanced.normalizationForm);
+	loadMP4VideoEncoders();
+	renderMP4VideoEncoderOptions(advanced.mp4VideoEncoder);
     var root = byId("strataAuthUsers");
     root.innerHTML = "";
     (authentication.users || []).forEach(function (user) {
@@ -4862,6 +4866,46 @@
     });
     updateStrataAuthUsersState();
     renderAPITokens();
+  }
+
+  function loadMP4VideoEncoders() {
+    if (mp4VideoEncodersLoaded) {
+      return;
+    }
+    mp4VideoEncodersLoaded = true;
+    request("encoders").then(function (encoders) {
+      state.mp4VideoEncoders = Array.isArray(encoders) ? encoders : [];
+      renderMP4VideoEncoderOptions((state.config.advanced || {}).mp4VideoEncoder);
+    }).catch(function () {
+      state.mp4VideoEncoders = [];
+      renderMP4VideoEncoderOptions("");
+    });
+  }
+
+  function renderMP4VideoEncoderOptions(selected) {
+    var control = byId("strataMP4VideoEncoder");
+    if (!control || strataConfigFormDirty) {
+      return;
+    }
+    var encoders = state.mp4VideoEncoders || [];
+    control.innerHTML = "";
+    if (!encoders.length) {
+      var unavailable = document.createElement("option");
+      unavailable.value = "";
+      unavailable.textContent = "利用可能な H.264 エンコーダーを検出できません";
+      control.appendChild(unavailable);
+      control.disabled = true;
+      return;
+    }
+    control.disabled = false;
+    encoders.forEach(function (encoder) {
+      var option = document.createElement("option");
+      option.value = encoder.name;
+      option.textContent = encoder.hardware ? encoder.name + "（ハードウェア）" : encoder.name + "（ソフトウェア）";
+      control.appendChild(option);
+    });
+    var found = encoders.some(function (encoder) { return encoder.name === selected; });
+    control.value = found ? selected : encoders[0].name;
   }
 
   function appendStrataUser(user) {
@@ -5082,7 +5126,7 @@
 	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
       web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
       services: { excluded: excluded, order: order },
-      advanced: { normalizationForm: controlString("strataNormalizationForm") }
+      advanced: { normalizationForm: controlString("strataNormalizationForm"), mp4VideoEncoder: controlString("strataMP4VideoEncoder") }
     };
   }
 

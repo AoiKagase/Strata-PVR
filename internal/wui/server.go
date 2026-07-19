@@ -1143,6 +1143,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleConfig(w, r)
+	case len(parts) == 1 && parts[0] == "encoders":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleEncoders(w, r)
 	case len(parts) == 1 && parts[0] == "preview-cache":
 		if !requireAPIType(w, r, apiType, "json") {
 			return
@@ -1469,6 +1474,19 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(data)
 	}
+}
+
+func (s *server) handleEncoders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "HEAD, GET")
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	encoders, err := availableH264Encoders()
+	if err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "H.264 encoder detection failed: %v", err)
+	}
+	writePrettyJSON(w, http.StatusOK, encoders)
 }
 
 func (s *server) handlePreviewCache(w http.ResponseWriter, r *http.Request) {
@@ -3852,27 +3870,33 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 }
 
 func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
+	encoder := ""
 	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
-		if _, err := detectedH264Encoder(); err != nil {
+		var err error
+		encoder, err = s.mp4VideoEncoder()
+		if err != nil {
 			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "H.264 encoder detection failed: %v", err)
 			legacyHTTPError(w, r, http.StatusServiceUnavailable)
 			return
 		}
 	}
-	args := watchFFmpegArgs(r, format, live)
+	args := watchFFmpegArgs(r, format, live, encoder)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status)
 }
 
 func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
+	encoder := ""
 	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
-		if _, err := detectedH264Encoder(); err != nil {
+		var err error
+		encoder, err = s.mp4VideoEncoder()
+		if err != nil {
 			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "H.264 encoder detection failed: %v", err)
 			legacyHTTPError(w, r, http.StatusServiceUnavailable)
 			return
 		}
 	}
-	args := watchFFmpegFileArgs(r, format, filePath)
+	args := watchFFmpegFileArgs(r, format, filePath, encoder)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK)
 }
@@ -3898,12 +3922,28 @@ func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, outp
 	}
 }
 
-func watchFFmpegArgs(r *http.Request, format string, live bool) []string {
-	return watchFFmpegArgsForInput(r, format, live, "pipe:0", false)
+func (s *server) mp4VideoEncoder() (string, error) {
+	s.configMu.Lock()
+	configured := s.cfg.MP4VideoEncoder
+	s.configMu.Unlock()
+	encoders, err := availableH264Encoders()
+	if err != nil {
+		return "", err
+	}
+	for _, encoder := range encoders {
+		if encoder.Name == configured {
+			return encoder.Name, nil
+		}
+	}
+	return detectedH264Encoder()
 }
 
-func watchFFmpegFileArgs(r *http.Request, format string, filePath string) []string {
-	return watchFFmpegArgsForInput(r, format, false, filePath, true)
+func watchFFmpegArgs(r *http.Request, format string, live bool, encoder string) []string {
+	return watchFFmpegArgsForInput(r, format, live, "pipe:0", false, encoder)
+}
+
+func watchFFmpegFileArgs(r *http.Request, format string, filePath, encoder string) []string {
+	return watchFFmpegArgsForInput(r, format, false, filePath, true, encoder)
 }
 
 func subtitleFFmpegFileArgs(r *http.Request, filePath, decoder string) []string {
@@ -3949,7 +3989,7 @@ func aribCaptionDecoder() (string, error) {
 	return "", fmt.Errorf("no compatible ARIB caption decoder found in ffmpeg")
 }
 
-func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool) []string {
+func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool, encoder string) []string {
 	q := r.URL.Query()
 	videoCodec := q.Get("c:v")
 	audioCodec := q.Get("c:a")
@@ -3959,7 +3999,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if format == "mp4" {
 		container = "mp4"
 		if videoCodec == "" {
-			videoCodec, _ = detectedH264Encoder()
+			videoCodec = encoder
 		}
 		if audioCodec == "" {
 			audioCodec = "aac"

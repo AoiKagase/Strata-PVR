@@ -33,6 +33,7 @@
     "order": []
   },
   "advanced": {
-    "normalizationForm": "NFKC"
+    "normalizationForm": "NFKC",
+    "mp4VideoEncoder": ""
   }
 }

@@ -162,6 +162,22 @@ func TestLoadStrataDocumentMapsWUIWebDir(t *testing.T) {
 	}
 }
 
+func TestLoadStrataDocumentMapsMP4VideoEncoder(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Advanced.MP4VideoEncoder = "h264_nvenc"
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MP4VideoEncoder != "h264_nvenc" {
+		t.Fatalf("MP4VideoEncoder = %q", cfg.MP4VideoEncoder)
+	}
+}
+
 func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

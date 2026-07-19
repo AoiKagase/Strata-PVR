@@ -12,9 +12,23 @@ import (
 
 var h264EncoderDetection struct {
 	sync.Mutex
-	done    bool
-	encoder string
-	err     error
+	done     bool
+	encoders []h264EncoderCapability
+	err      error
+}
+
+type h264EncoderCapability struct {
+	Name     string `json:"name"`
+	Hardware bool   `json:"hardware"`
+}
+
+var h264EncoderCandidates = []h264EncoderCapability{
+	{Name: "libx264"},
+	{Name: "libopenh264"},
+	{Name: "h264_nvenc", Hardware: true},
+	{Name: "h264_qsv", Hardware: true},
+	{Name: "h264_amf", Hardware: true},
+	{Name: "h264_videotoolbox", Hardware: true},
 }
 
 var runH264EncoderProbe = func(ctx context.Context, encoder string) error {
@@ -36,25 +50,40 @@ var runH264EncoderProbe = func(ctx context.Context, encoder string) error {
 }
 
 func detectedH264Encoder() (string, error) {
+	encoders, err := availableH264Encoders()
+	if err != nil {
+		return "", err
+	}
+	for _, encoder := range encoders {
+		if !encoder.Hardware {
+			return encoder.Name, nil
+		}
+	}
+	return "", errors.New("no usable software H.264 encoder found")
+}
+
+func availableH264Encoders() ([]h264EncoderCapability, error) {
 	h264EncoderDetection.Lock()
 	defer h264EncoderDetection.Unlock()
 	if h264EncoderDetection.done {
-		return h264EncoderDetection.encoder, h264EncoderDetection.err
+		return append([]h264EncoderCapability(nil), h264EncoderDetection.encoders...), h264EncoderDetection.err
 	}
 	h264EncoderDetection.done = true
 	var failures []error
-	for _, encoder := range []string{"libx264", "libopenh264"} {
+	for _, encoder := range h264EncoderCandidates {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := runH264EncoderProbe(ctx, encoder)
+		err := runH264EncoderProbe(ctx, encoder.Name)
 		cancel()
 		if err == nil {
-			h264EncoderDetection.encoder = encoder
-			return encoder, nil
+			h264EncoderDetection.encoders = append(h264EncoderDetection.encoders, encoder)
+			continue
 		}
-		failures = append(failures, fmt.Errorf("%s: %w", encoder, err))
+		failures = append(failures, fmt.Errorf("%s: %w", encoder.Name, err))
 	}
-	h264EncoderDetection.err = fmt.Errorf("no usable H.264 encoder (tried libx264, libopenh264): %w", errors.Join(failures...))
-	return "", h264EncoderDetection.err
+	if len(h264EncoderDetection.encoders) == 0 {
+		h264EncoderDetection.err = fmt.Errorf("no usable H.264 encoder: %w", errors.Join(failures...))
+	}
+	return append([]h264EncoderCapability(nil), h264EncoderDetection.encoders...), h264EncoderDetection.err
 }
 
 func appendH264CompatibilityArgs(args []string, encoder string) []string {
