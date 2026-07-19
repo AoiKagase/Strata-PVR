@@ -2685,6 +2685,60 @@ func TestAPIRecordedWatchXSPFPlaybackTicketAuthorizesVLC(t *testing.T) {
 	if playbackRes.Code != http.StatusOK || playbackRes.Body.String() != "watchdata" {
 		t.Fatalf("ticket playback status=%d body=%q", playbackRes.Code, playbackRes.Body.String())
 	}
+	seek := httptest.NewRequest(http.MethodGet, target, nil)
+	seek.Header.Set("Range", "bytes=5-8")
+	seekRes := httptest.NewRecorder()
+	handler.ServeHTTP(seekRes, seek)
+	if seekRes.Code != http.StatusPartialContent || seekRes.Body.String() != "data" {
+		t.Fatalf("ticket seek status=%d body=%q", seekRes.Code, seekRes.Body.String())
+	}
+}
+
+func TestAPIRecordedPlaybackURLAuthorizesM2TSRangeRequests(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	recordedPath := filepath.Join(dir, "recorded.m2ts")
+	if err := os.WriteFile(recordedPath, []byte("watchdata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteJSONAtomic(paths.Recorded, []legacy.Program{{ID: "abc", Recorded: filepath.ToSlash(recordedPath)}}, false); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := passwordauth.HashPassword("pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"user","password":"pass"}`))
+	login.Header.Set("Origin", "http://example.com")
+	loginRes := httptest.NewRecorder()
+	handler.ServeHTTP(loginRes, login)
+	if loginRes.Code != http.StatusNoContent {
+		t.Fatalf("login status=%d body=%q", loginRes.Code, loginRes.Body.String())
+	}
+
+	issue := httptest.NewRequest(http.MethodPost, "/api/recorded/abc/playback", nil)
+	issue.Header.Set("Origin", "http://example.com")
+	issue.AddCookie(loginRes.Result().Cookies()[0])
+	issueRes := httptest.NewRecorder()
+	handler.ServeHTTP(issueRes, issue)
+	if issueRes.Code != http.StatusOK {
+		t.Fatalf("playback URL status=%d body=%q", issueRes.Code, issueRes.Body.String())
+	}
+	var response struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(issueRes.Body.Bytes(), &response); err != nil || !strings.Contains(response.URL, "watch.m2ts?playback=") {
+		t.Fatalf("playback URL=%q err=%v", response.URL, err)
+	}
+
+	seek := httptest.NewRequest(http.MethodGet, response.URL, nil)
+	seek.Header.Set("Range", "bytes=5-8")
+	seekRes := httptest.NewRecorder()
+	handler.ServeHTTP(seekRes, seek)
+	if seekRes.Code != http.StatusPartialContent || seekRes.Body.String() != "data" || seekRes.Header().Get("Content-Range") != "bytes 5-8/9" {
+		t.Fatalf("playback seek status=%d range=%q body=%q", seekRes.Code, seekRes.Header().Get("Content-Range"), seekRes.Body.String())
+	}
 }
 
 func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {

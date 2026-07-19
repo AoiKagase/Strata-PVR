@@ -17,7 +17,9 @@ import (
 
 const sessionCookieName = "strata_session"
 const sessionDuration = 8 * time.Hour
-const playbackTicketDuration = 5 * time.Minute
+// Playback tickets remain valid for the viewing session because media players
+// issue fresh Range requests whenever the user seeks.
+const playbackTicketDuration = sessionDuration
 
 type authSession struct {
 	username string

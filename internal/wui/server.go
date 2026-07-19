@@ -899,7 +899,7 @@ func (s *server) withAccessLog(next http.Handler) http.Handler {
 			"%d %s:%s %s %q",
 			recorder.status,
 			r.Method,
-			r.URL.RequestURI(),
+			redactedRequestURI(r),
 			s.remoteAddress(r),
 			userAgent,
 		)
@@ -908,12 +908,23 @@ func (s *server) withAccessLog(next http.Handler) http.Handler {
 			"http.request",
 			logging.Field{Key: "status", Value: recorder.status},
 			logging.Field{Key: "method", Value: r.Method},
-			logging.Field{Key: "path", Value: r.URL.RequestURI()},
+			logging.Field{Key: "path", Value: redactedRequestURI(r)},
 			logging.Field{Key: "remote", Value: s.remoteAddress(r)},
 			logging.Field{Key: "user_agent", Value: userAgent},
 			logging.Field{Key: "message", Value: legacyAccessMessage},
 		)
 	})
+}
+
+func redactedRequestURI(r *http.Request) string {
+	if !r.URL.Query().Has("playback") {
+		return r.URL.RequestURI()
+	}
+	copy := *r.URL
+	query := copy.Query()
+	query.Set("playback", "REDACTED")
+	copy.RawQuery = query.Encode()
+	return copy.RequestURI()
 }
 
 func (s *server) remoteAddress(r *http.Request) string {
@@ -1247,6 +1258,11 @@ func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleProgramPreview(w, r, programstore.Recorded, parts[1], apiType)
+	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "playback":
+		if !requireAPIType(w, r, apiType, "json") {
+			return
+		}
+		s.handleRecordedPlaybackURL(w, r, parts[1])
 	case len(parts) == 3 && parts[0] == "recorded" && parts[2] == "watch":
 		if !requireAPIType(w, r, apiType, "mp4", "xspf", "m2ts") {
 			return
@@ -2454,6 +2470,50 @@ func (s *server) handleRecordedFile(w http.ResponseWriter, r *http.Request, id, 
 		w.Header().Set("Allow", "GET, HEAD, DELETE")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *server) handleRecordedPlaybackURL(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	program, found, err := s.readProgram(r.Context(), programstore.Recorded, id)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		legacyHTTPError(w, r, http.StatusNotFound)
+		return
+	}
+	if programIsScrambling(program) {
+		legacyHTTPError(w, r, http.StatusConflict)
+		return
+	}
+	if program.Recorded == "" {
+		legacyHTTPError(w, r, http.StatusGone)
+		return
+	}
+	if _, _, err := statProgramFile(program.Recorded, false); err != nil {
+		if os.IsNotExist(err) {
+			legacyHTTPError(w, r, http.StatusGone)
+			return
+		}
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	ticket, err := s.createPlaybackTicket("/api/recorded/" + id + "/watch.m2ts")
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusInternalServerError)
+		return
+	}
+	target := requestOrigin(r) + "/api/recorded/" + url.PathEscape(id) + "/watch.m2ts?playback=" + url.QueryEscape(ticket)
+	w.Header().Set("Cache-Control", "no-store")
+	writePrettyJSON(w, http.StatusOK, map[string]string{
+		"url":       target,
+		"expiresAt": time.Now().Add(playbackTicketDuration).UTC().Format(time.RFC3339),
+	})
 }
 
 func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, collection, id, apiType string, requirePID bool) {
