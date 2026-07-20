@@ -32,10 +32,11 @@ var h264EncoderCandidates = []h264EncoderCapability{
 }
 
 var runH264EncoderProbe = func(ctx context.Context, encoder string) error {
-	// A raw 64x64 YUV420P frame avoids depending on the lavfi input device.
-	frame := make([]byte, 64*64*3/2)
+	// A raw 128x128 YUV420P frame avoids depending on the lavfi input device.
+	// AMD AMF rejects the 64x64 frame that software encoders accept.
+	frame := make([]byte, 128*128*3/2)
 	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s:v", "64x64", "-r", "1",
+		"-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s:v", "128x128", "-r", "1",
 		"-i", "pipe:0", "-frames:v", "1", "-c:v", encoder, "-f", "null", "-")
 	cmd.Stdin = bytes.NewReader(frame)
 	var stderr bytes.Buffer
