@@ -80,6 +80,44 @@ func TestMP4VideoEncoderUsesConfiguredHardwareEncoder(t *testing.T) {
 	}
 }
 
+func TestWatchFFmpegArgsUsesFrequentAMFKeyframes(t *testing.T) {
+	args := watchFFmpegArgs(httptest.NewRequest(http.MethodGet, "/watch.mp4", nil), "mp4", true, "h264_amf")
+	for _, pair := range [][2]string{{"-bf", "0"}, {"-g", "60"}, {"-forced_idr", "1"}} {
+		found := false
+		for i := range args {
+			if args[i] == pair[0] && i+1 < len(args) && args[i+1] == pair[1] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("AMF args missing %q %q: %v", pair[0], pair[1], args)
+		}
+	}
+	for i := range args {
+		if args[i] == "-af" && i+1 < len(args) && args[i+1] == "aresample=async=1:first_pts=0" {
+			break
+		}
+		if i == len(args)-1 {
+			t.Fatalf("AMF args do not normalize audio timestamps: %v", args)
+		}
+	}
+	for i := range args {
+		if args[i] == "-frag_interleave" && i+1 < len(args) && args[i+1] == "1" {
+			break
+		}
+		if i == len(args)-1 {
+			t.Fatalf("AMF args do not interleave fragmented MP4 samples: %v", args)
+		}
+	}
+	for i := range args {
+		if args[i] == "-flush_packets" && i+1 < len(args) && args[i+1] == "1" {
+			return
+		}
+	}
+	t.Fatalf("AMF args do not flush MP4 packets: %v", args)
+}
+
 func TestAPIEncodersReturnsOnlyUsableEncoders(t *testing.T) {
 	withH264Probe(t, func(_ context.Context, encoder string) error {
 		if encoder == "libx264" || encoder == "h264_nvenc" {

@@ -93,6 +93,10 @@ func appendH264CompatibilityArgs(args []string, encoder string) []string {
 		return append(args, "-profile:v", "main", "-preset", "veryfast", "-pix_fmt", "yuv420p")
 	case "libopenh264":
 		return append(args, "-profile:v", "constrained_baseline", "-pix_fmt", "yuv420p")
+	case "h264_amf":
+		// The MP4 stream is fragmented at keyframes. Emit a frequent IDR frame
+		// so AMF continuously releases fragments containing both audio and video.
+		return append(args, "-bf", "0", "-g", "60", "-forced_idr", "1")
 	default:
 		return args
 	}

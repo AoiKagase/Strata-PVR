@@ -4039,6 +4039,11 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	}
 	if format == "mp4" {
 		args = append(args, "-map", "0:v:0", "-map", watchAudioMap(q.Get("audio")), "-sn", "-dn")
+		if videoCodec == "h264_amf" {
+			// AMF can begin video at a different timestamp from MPEG-TS audio.
+			// Normalize AAC timestamps for fragmented MP4 browser playback.
+			args = append(args, "-af", "aresample=async=1:first_pts=0")
+		}
 	}
 	args = append(args, "-filter:v", "yadif")
 	if videoCodec != "" {
@@ -4070,13 +4075,17 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 			args = append(args, "-bufsize:a", strconv.FormatInt(legacyBitrateBits(audioBitrate)*8, 10))
 		}
 	}
-	if videoCodec == "libx264" {
-		args = appendH264CompatibilityArgs(args, videoCodec)
-	} else if videoCodec == "libopenh264" {
+	if videoCodec != "" {
 		args = appendH264CompatibilityArgs(args, videoCodec)
 	}
 	if container == "mp4" {
 		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
+		if videoCodec == "h264_amf" {
+			// AMF packets are substantially larger than software-encoded packets.
+			// Interleave each sample so AAC reaches streaming clients without
+			// waiting behind an entire video fragment.
+			args = append(args, "-frag_interleave", "1", "-flush_packets", "1")
+		}
 	}
 	return append(args, "-y", "-f", container, "pipe:1")
 }
