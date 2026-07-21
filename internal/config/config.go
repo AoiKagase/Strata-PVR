@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 )
 
 const StrataSchema = "strata/config"
@@ -33,16 +34,26 @@ type MirakurunSettings struct {
 }
 
 type RecordingSettings struct {
-	Directory      string           `json:"directory"`
-	FilenameFormat string           `json:"filenameFormat"`
-	StartMargin    int              `json:"startMargin"`
-	EndMargin      int              `json:"endMargin"`
-	LowSpace       LowSpaceSettings `json:"lowSpace"`
+	Directory      string              `json:"directory"`
+	FilenameFormat string              `json:"filenameFormat"`
+	StartMargin    int                 `json:"startMargin"`
+	EndMargin      int                 `json:"endMargin"`
+	LowSpace       LowSpaceSettings    `json:"lowSpace"`
+	PostProcess    PostProcessSettings `json:"postProcess,omitempty"`
 }
 
 type LowSpaceSettings struct {
 	ThresholdMB int    `json:"thresholdMB"`
 	Action      string `json:"action"`
+}
+
+// PostProcessSettings defines a command run after a recording has been
+// successfully promoted to the recorded collection. Command is an argv array;
+// it is never interpreted by a shell.
+type PostProcessSettings struct {
+	Command           []string `json:"command,omitempty"`
+	TimeoutSeconds    int      `json:"timeoutSeconds,omitempty"`
+	MaxConcurrentRuns int      `json:"maxConcurrentRuns,omitempty"`
 }
 
 type WebSettings struct {
@@ -104,6 +115,9 @@ type Config struct {
 	StorageLowSpaceAction      string
 	PreviewCacheMaxAgeDays     int
 	PreviewCacheMaxSizeMB      int
+	PostProcessCommand         []string
+	PostProcessTimeout         time.Duration
+	PostProcessMaxConcurrent   int
 }
 
 type LegacyConfig struct {
@@ -236,6 +250,15 @@ func loadDocument(b []byte) (*Config, error) {
 	if doc.Recording.LowSpace.Action != "remove" && doc.Recording.LowSpace.Action != "stop" {
 		return nil, fmt.Errorf("recording.lowSpace.action must be remove or stop")
 	}
+	if doc.Recording.PostProcess.TimeoutSeconds < 0 {
+		return nil, fmt.Errorf("recording.postProcess.timeoutSeconds must not be negative")
+	}
+	if doc.Recording.PostProcess.MaxConcurrentRuns < 0 {
+		return nil, fmt.Errorf("recording.postProcess.maxConcurrentRuns must not be negative")
+	}
+	if len(doc.Recording.PostProcess.Command) > 0 && doc.Recording.PostProcess.Command[0] == "" {
+		return nil, fmt.Errorf("recording.postProcess.command[0] must not be empty")
+	}
 	cfg := defaultConfig()
 	cfg.MirakurunPath = doc.Mirakurun.URL
 	cfg.RecordingPriority = doc.Mirakurun.RecordingPriority
@@ -247,6 +270,9 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.RecordingEndMargin = doc.Recording.EndMargin
 	cfg.StorageLowSpaceThresholdMB = doc.Recording.LowSpace.ThresholdMB
 	cfg.StorageLowSpaceAction = doc.Recording.LowSpace.Action
+	cfg.PostProcessCommand = append([]string(nil), doc.Recording.PostProcess.Command...)
+	cfg.PostProcessTimeout = time.Duration(doc.Recording.PostProcess.TimeoutSeconds) * time.Second
+	cfg.PostProcessMaxConcurrent = doc.Recording.PostProcess.MaxConcurrentRuns
 	cfg.WUIHost = doc.Web.ListenAddress
 	cfg.WUIPort = doc.Web.Port
 	cfg.WUIWebDir = doc.WUIWebDir

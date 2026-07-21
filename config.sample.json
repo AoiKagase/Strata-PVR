@@ -14,6 +14,11 @@
     "lowSpace": {
       "thresholdMB": 3000,
       "action": "remove"
+    },
+    "postProcess": {
+      "command": [],
+      "timeoutSeconds": 600,
+      "maxConcurrentRuns": 1
     }
   },
   "web": {

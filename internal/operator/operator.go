@@ -337,6 +337,7 @@ func finishRecording(ctx context.Context, paths Paths, cfg *config.Config, sourc
 	}
 	_ = logging.AppendLine(paths.Log, "FIN: %s [%s] %s", completed.ID, completed.Channel.Name, completed.Title)
 	_ = logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed))
+	runPostProcess(paths.Log, cfg, completed)
 }
 
 func initializeRuntimeState(paths Paths, cfg *config.Config) error {
@@ -501,6 +502,7 @@ func RunOnce(ctx context.Context, paths Paths, cfg *config.Config, source Stream
 		if err := logging.AppendLine(paths.Log, "FIN: %s", operatorProgramLogLine(completed)); err != nil {
 			return result, err
 		}
+		runPostProcess(paths.Log, cfg, completed)
 		result.Completed++
 	}
 	return result, nil

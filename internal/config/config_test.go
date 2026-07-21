@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
 	"strata-pvr/internal/storage"
 )
@@ -175,6 +177,41 @@ func TestLoadStrataDocumentMapsMP4VideoEncoder(t *testing.T) {
 	}
 	if cfg.MP4VideoEncoder != "h264_nvenc" {
 		t.Fatalf("MP4VideoEncoder = %q", cfg.MP4VideoEncoder)
+	}
+}
+
+func TestLoadStrataDocumentMapsPostProcess(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Recording.PostProcess = PostProcessSettings{
+		Command:           []string{"/usr/local/bin/archive", "{recordedPath}"},
+		TimeoutSeconds:    90,
+		MaxConcurrentRuns: 2,
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.PostProcessCommand, doc.Recording.PostProcess.Command; !reflect.DeepEqual(got, want) {
+		t.Fatalf("PostProcessCommand = %#v, want %#v", got, want)
+	}
+	if cfg.PostProcessTimeout != 90*time.Second || cfg.PostProcessMaxConcurrent != 2 {
+		t.Fatalf("post-process runtime settings = %s/%d", cfg.PostProcessTimeout, cfg.PostProcessMaxConcurrent)
+	}
+}
+
+func TestParseRejectsInvalidPostProcessSettings(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Recording.PostProcess.TimeoutSeconds = -1
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse(b); err == nil {
+		t.Fatal("negative post-process timeout was accepted")
 	}
 }
 
