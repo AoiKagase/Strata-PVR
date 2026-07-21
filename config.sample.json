@@ -16,7 +16,7 @@
       "action": "remove"
     },
     "postProcess": {
-      "command": [],
+      "commands": [],
       "timeoutSeconds": 600,
       "maxConcurrentRuns": 1
     }

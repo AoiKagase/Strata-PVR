@@ -4862,7 +4862,7 @@
     setControlValue("strataNormalizationForm", advanced.normalizationForm);
 	loadMP4VideoEncoders();
 	renderMP4VideoEncoderOptions(advanced.mp4VideoEncoder);
-	renderPostProcessCommand(postProcess.command || []);
+	renderPostProcessCommands(postProcess.commands || legacyPostProcessCommands(postProcess.command));
     var root = byId("strataAuthUsers");
     root.innerHTML = "";
     (authentication.users || []).forEach(function (user) {
@@ -4872,22 +4872,84 @@
     renderAPITokens();
   }
 
-  function renderPostProcessCommand(command) {
-    var root = byId("strataPostProcessCommand");
+  function legacyPostProcessCommands(command) {
+    if (!Array.isArray(command) || command.length === 0) {
+      return [];
+    }
+    return [{ command: command[0], arguments: command.slice(1) }];
+  }
+
+  function renderPostProcessCommands(commands) {
+    var root = byId("strataPostProcessCommands");
     if (!root) {
       return;
     }
     root.innerHTML = "";
-    (Array.isArray(command) ? command : []).forEach(function (argument) {
-      appendPostProcessArgument(argument);
+    (Array.isArray(commands) ? commands : []).forEach(function (command) {
+      appendPostProcessCommand(command);
     });
   }
 
-  function appendPostProcessArgument(argument) {
-    var root = byId("strataPostProcessCommand");
+  function appendPostProcessCommand(command) {
+    var root = byId("strataPostProcessCommands");
     if (!root) {
       return;
     }
+    command = command || {};
+    var section = document.createElement("section");
+    section.className = "post-process-command";
+    var header = document.createElement("div");
+    header.className = "post-process-command-header";
+    var title = document.createElement("span");
+    title.className = "post-process-command-title";
+    title.textContent = "コマンド " + (root.children.length + 1);
+    var removeCommand = document.createElement("button");
+    removeCommand.type = "button";
+    removeCommand.className = "secondary-button danger-button";
+    removeCommand.textContent = "コマンドを削除";
+    removeCommand.addEventListener("click", function () {
+      strataConfigFormDirty = true;
+      section.remove();
+      updatePostProcessCommandTitles();
+    });
+    header.appendChild(title);
+    header.appendChild(removeCommand);
+    var executableLabel = document.createElement("label");
+    executableLabel.textContent = "コマンド";
+    var input = document.createElement("input");
+    input.className = "config-form-control strata-post-process-executable";
+    input.type = "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.value = command.command || "";
+    input.placeholder = "例: ffmpeg";
+    executableLabel.appendChild(input);
+    var argumentList = document.createElement("div");
+    argumentList.className = "post-process-command-arguments";
+    (Array.isArray(command.arguments) ? command.arguments : []).forEach(function (argument) {
+      appendPostProcessArgument(argumentList, argument);
+    });
+    var actions = document.createElement("div");
+    actions.className = "post-process-command-actions";
+    var addArgument = document.createElement("button");
+    addArgument.type = "button";
+    addArgument.className = "secondary-button";
+    addArgument.textContent = "引数を追加";
+    addArgument.addEventListener("click", function () {
+      strataConfigFormDirty = true;
+      var argumentInput = appendPostProcessArgument(argumentList, "");
+      argumentInput.focus();
+    });
+    actions.appendChild(addArgument);
+    section.appendChild(header);
+    section.appendChild(executableLabel);
+    section.appendChild(argumentList);
+    section.appendChild(actions);
+    root.appendChild(section);
+    return input;
+  }
+
+  function appendPostProcessArgument(root, argument) {
     var row = document.createElement("div");
     row.className = "post-process-command-row";
     var input = document.createElement("input");
@@ -4896,8 +4958,8 @@
     input.autocomplete = "off";
     input.spellcheck = false;
     input.value = argument || "";
-    input.placeholder = root.children.length === 0 ? "例: ffmpeg" : "例: -crf または {recordedPath}";
-    input.setAttribute("aria-label", root.children.length === 0 ? "実行ファイル" : "コマンド引数 " + (root.children.length + 1));
+    input.placeholder = "例: -crf または {recordedPath}";
+    input.setAttribute("aria-label", "コマンド引数 " + (root.children.length + 1));
     var remove = document.createElement("button");
     remove.type = "button";
     remove.className = "icon-button danger-button";
@@ -4911,6 +4973,13 @@
     row.appendChild(input);
     row.appendChild(remove);
     root.appendChild(row);
+    return input;
+  }
+
+  function updatePostProcessCommandTitles() {
+    Array.prototype.forEach.call(document.querySelectorAll("#strataPostProcessCommands .post-process-command-title"), function (title, index) {
+      title.textContent = "コマンド " + (index + 1);
+    });
   }
 
   function loadMP4VideoEncoders() {
@@ -5143,11 +5212,19 @@
     if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || startMargin === null || endMargin === null || threshold === null || postProcessTimeout === null || postProcessMaxConcurrent === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
       return null;
     }
-	var postProcessCommand = Array.prototype.map.call(document.querySelectorAll("#strataPostProcessCommand .strata-post-process-argument"), function (input) {
-		return input.value.trim();
+	var postProcessCommands = [];
+	var invalidPostProcessCommand = false;
+	Array.prototype.forEach.call(document.querySelectorAll("#strataPostProcessCommands .post-process-command"), function (row, index) {
+		var command = row.querySelector(".strata-post-process-executable").value.trim();
+		var arguments = Array.prototype.map.call(row.querySelectorAll(".strata-post-process-argument"), function (input) { return input.value.trim(); });
+		if (!command || arguments.some(function (argument) { return !argument; })) {
+			invalidPostProcessCommand = true;
+			return;
+		}
+		postProcessCommands.push({ command: command, arguments: arguments });
 	});
-	if (postProcessCommand.some(function (argument) { return !argument; })) {
-		showError(new Error("録画後処理コマンドの空の引数を削除するか入力してください"));
+	if (invalidPostProcessCommand) {
+		showError(new Error("録画後処理のコマンドと引数を入力するか、空の行を削除してください"));
 		return null;
 	}
     var enabled = byId("strataAuthEnabled").checked;
@@ -5176,7 +5253,7 @@
       schema: cfg.schema,
       version: cfg.version,
       mirakurun: { url: mirakurunURL, recordingPriority: Number(controlString("strataRecordingPriority")), conflictedPriority: Number(controlString("strataConflictedPriority")) },
-      recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") }, postProcess: { command: postProcessCommand, timeoutSeconds: postProcessTimeout, maxConcurrentRuns: postProcessMaxConcurrent } },
+	  recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") }, postProcess: { commands: postProcessCommands, timeoutSeconds: postProcessTimeout, maxConcurrentRuns: postProcessMaxConcurrent } },
 	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
       web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
       services: { excluded: excluded, order: order },
@@ -6836,13 +6913,11 @@
         names[names.length - 1].focus();
       });
     }
-	var addPostProcessArgumentButton = byId("addPostProcessArgumentButton");
-	if (addPostProcessArgumentButton) {
-		addPostProcessArgumentButton.addEventListener("click", function () {
+	var addPostProcessCommandButton = byId("addPostProcessCommandButton");
+	if (addPostProcessCommandButton) {
+		addPostProcessCommandButton.addEventListener("click", function () {
 			strataConfigFormDirty = true;
-			appendPostProcessArgument("");
-			var arguments = byId("strataPostProcessCommand").querySelectorAll(".strata-post-process-argument");
-			arguments[arguments.length - 1].focus();
+			appendPostProcessCommand({ command: "", arguments: [] }).focus();
 		});
 	}
     var createStrataAPITokenButton = byId("createStrataAPITokenButton");

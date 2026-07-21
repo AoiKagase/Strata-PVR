@@ -2704,6 +2704,42 @@ body.view-settings .settings-grid {
   margin: 12px 0 8px;
 }
 
+.post-process-command {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-control-soft);
+}
+
+.post-process-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.post-process-command-title {
+  font-weight: 700;
+}
+
+.post-process-command label {
+  display: grid;
+  gap: 4px;
+}
+
+.post-process-command-arguments {
+  display: grid;
+  gap: 8px;
+}
+
+.post-process-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .post-process-command-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;

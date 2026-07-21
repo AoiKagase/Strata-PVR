@@ -183,7 +183,7 @@ func TestLoadStrataDocumentMapsMP4VideoEncoder(t *testing.T) {
 func TestLoadStrataDocumentMapsPostProcess(t *testing.T) {
 	doc := DefaultDocument()
 	doc.Recording.PostProcess = PostProcessSettings{
-		Command:           []string{"/usr/local/bin/archive", "{recordedPath}"},
+		Commands:          []PostProcessCommand{{Command: "/usr/local/bin/archive", Arguments: []string{"{recordedPath}"}}},
 		TimeoutSeconds:    90,
 		MaxConcurrentRuns: 2,
 	}
@@ -195,11 +195,28 @@ func TestLoadStrataDocumentMapsPostProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := cfg.PostProcessCommand, doc.Recording.PostProcess.Command; !reflect.DeepEqual(got, want) {
-		t.Fatalf("PostProcessCommand = %#v, want %#v", got, want)
+	if got, want := cfg.PostProcessCommands, doc.Recording.PostProcess.Commands; !reflect.DeepEqual(got, want) {
+		t.Fatalf("PostProcessCommands = %#v, want %#v", got, want)
 	}
 	if cfg.PostProcessTimeout != 90*time.Second || cfg.PostProcessMaxConcurrent != 2 {
 		t.Fatalf("post-process runtime settings = %s/%d", cfg.PostProcessTimeout, cfg.PostProcessMaxConcurrent)
+	}
+}
+
+func TestLoadStrataDocumentMigratesLegacyPostProcessCommand(t *testing.T) {
+	doc := DefaultDocument()
+	doc.Recording.PostProcess.Command = []string{"/usr/local/bin/archive", "{recordedPath}"}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []PostProcessCommand{{Command: "/usr/local/bin/archive", Arguments: []string{"{recordedPath}"}}}
+	if !reflect.DeepEqual(cfg.PostProcessCommands, want) {
+		t.Fatalf("PostProcessCommands = %#v, want %#v", cfg.PostProcessCommands, want)
 	}
 }
 

@@ -47,13 +47,20 @@ type LowSpaceSettings struct {
 	Action      string `json:"action"`
 }
 
-// PostProcessSettings defines a command run after a recording has been
-// successfully promoted to the recorded collection. Command is an argv array;
-// it is never interpreted by a shell.
+// PostProcessSettings defines commands run after a recording has been
+// successfully promoted to the recorded collection. Each command is executed
+// without a shell, in declaration order.
 type PostProcessSettings struct {
-	Command           []string `json:"command,omitempty"`
-	TimeoutSeconds    int      `json:"timeoutSeconds,omitempty"`
-	MaxConcurrentRuns int      `json:"maxConcurrentRuns,omitempty"`
+	Commands          []PostProcessCommand `json:"commands,omitempty"`
+	Command           []string             `json:"command,omitempty"` // Deprecated: legacy argv form.
+	TimeoutSeconds    int                  `json:"timeoutSeconds,omitempty"`
+	MaxConcurrentRuns int                  `json:"maxConcurrentRuns,omitempty"`
+}
+
+// PostProcessCommand separates the executable from its argv parameters.
+type PostProcessCommand struct {
+	Command   string   `json:"command"`
+	Arguments []string `json:"arguments,omitempty"`
 }
 
 type WebSettings struct {
@@ -115,7 +122,7 @@ type Config struct {
 	StorageLowSpaceAction      string
 	PreviewCacheMaxAgeDays     int
 	PreviewCacheMaxSizeMB      int
-	PostProcessCommand         []string
+	PostProcessCommands        []PostProcessCommand
 	PostProcessTimeout         time.Duration
 	PostProcessMaxConcurrent   int
 }
@@ -256,8 +263,17 @@ func loadDocument(b []byte) (*Config, error) {
 	if doc.Recording.PostProcess.MaxConcurrentRuns < 0 {
 		return nil, fmt.Errorf("recording.postProcess.maxConcurrentRuns must not be negative")
 	}
-	if len(doc.Recording.PostProcess.Command) > 0 && doc.Recording.PostProcess.Command[0] == "" {
-		return nil, fmt.Errorf("recording.postProcess.command[0] must not be empty")
+	postProcessCommands := append([]PostProcessCommand(nil), doc.Recording.PostProcess.Commands...)
+	if len(postProcessCommands) == 0 && len(doc.Recording.PostProcess.Command) > 0 {
+		postProcessCommands = []PostProcessCommand{{
+			Command:   doc.Recording.PostProcess.Command[0],
+			Arguments: append([]string(nil), doc.Recording.PostProcess.Command[1:]...),
+		}}
+	}
+	for i, command := range postProcessCommands {
+		if command.Command == "" {
+			return nil, fmt.Errorf("recording.postProcess.commands[%d].command must not be empty", i)
+		}
 	}
 	cfg := defaultConfig()
 	cfg.MirakurunPath = doc.Mirakurun.URL
@@ -270,7 +286,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.RecordingEndMargin = doc.Recording.EndMargin
 	cfg.StorageLowSpaceThresholdMB = doc.Recording.LowSpace.ThresholdMB
 	cfg.StorageLowSpaceAction = doc.Recording.LowSpace.Action
-	cfg.PostProcessCommand = append([]string(nil), doc.Recording.PostProcess.Command...)
+	cfg.PostProcessCommands = postProcessCommands
 	cfg.PostProcessTimeout = time.Duration(doc.Recording.PostProcess.TimeoutSeconds) * time.Second
 	cfg.PostProcessMaxConcurrent = doc.Recording.PostProcess.MaxConcurrentRuns
 	cfg.WUIHost = doc.Web.ListenAddress
