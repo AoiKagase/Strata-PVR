@@ -4837,6 +4837,7 @@
     var authentication = web.authentication || {};
     var recording = cfg.recording || {};
     var lowSpace = recording.lowSpace || {};
+	var postProcess = recording.postProcess || {};
     var previewCache = cfg.previewCache || {};
     var services = cfg.services || {};
     var advanced = cfg.advanced || {};
@@ -4852,6 +4853,8 @@
     setControlValue("strataConflictedPriority", (cfg.mirakurun || {}).conflictedPriority);
     setControlValue("strataLowSpaceThreshold", lowSpace.thresholdMB);
     setControlValue("strataLowSpaceAction", lowSpace.action);
+	setControlValue("strataPostProcessTimeout", postProcess.timeoutSeconds === undefined ? 600 : postProcess.timeoutSeconds);
+	setControlValue("strataPostProcessMaxConcurrent", postProcess.maxConcurrentRuns === undefined ? 1 : postProcess.maxConcurrentRuns);
 	setControlValue("strataPreviewCacheMaxAge", previewCache.maxAgeDays);
 	setControlValue("strataPreviewCacheMaxSize", previewCache.maxSizeMB);
     setControlValue("strataExcludedServices", services.excluded);
@@ -4859,6 +4862,7 @@
     setControlValue("strataNormalizationForm", advanced.normalizationForm);
 	loadMP4VideoEncoders();
 	renderMP4VideoEncoderOptions(advanced.mp4VideoEncoder);
+	renderPostProcessCommand(postProcess.command || []);
     var root = byId("strataAuthUsers");
     root.innerHTML = "";
     (authentication.users || []).forEach(function (user) {
@@ -4866,6 +4870,47 @@
     });
     updateStrataAuthUsersState();
     renderAPITokens();
+  }
+
+  function renderPostProcessCommand(command) {
+    var root = byId("strataPostProcessCommand");
+    if (!root) {
+      return;
+    }
+    root.innerHTML = "";
+    (Array.isArray(command) ? command : []).forEach(function (argument) {
+      appendPostProcessArgument(argument);
+    });
+  }
+
+  function appendPostProcessArgument(argument) {
+    var root = byId("strataPostProcessCommand");
+    if (!root) {
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "post-process-command-row";
+    var input = document.createElement("input");
+    input.className = "config-form-control strata-post-process-argument";
+    input.type = "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.value = argument || "";
+    input.placeholder = root.children.length === 0 ? "例: ffmpeg" : "例: -crf または {recordedPath}";
+    input.setAttribute("aria-label", root.children.length === 0 ? "実行ファイル" : "コマンド引数 " + (root.children.length + 1));
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button danger-button";
+    remove.title = "引数を削除";
+    remove.setAttribute("aria-label", "引数を削除");
+    remove.textContent = "×";
+    remove.addEventListener("click", function () {
+      strataConfigFormDirty = true;
+      row.remove();
+    });
+    row.appendChild(input);
+    row.appendChild(remove);
+    root.appendChild(row);
   }
 
   function loadMP4VideoEncoders() {
@@ -5089,13 +5134,22 @@
     var startMargin = requiredInteger("strataRecordingStartMargin", "録画開始マージン", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
     var endMargin = requiredInteger("strataRecordingEndMargin", "録画終了マージン", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
     var threshold = requiredInteger("strataLowSpaceThreshold", "空き容量しきい値", 0, Number.MAX_SAFE_INTEGER);
+	var postProcessTimeout = requiredInteger("strataPostProcessTimeout", "後処理タイムアウト", 0, Number.MAX_SAFE_INTEGER);
+	var postProcessMaxConcurrent = requiredInteger("strataPostProcessMaxConcurrent", "後処理の最大同時実行数", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxAge = requiredInteger("strataPreviewCacheMaxAge", "プレビュー保持日数", 0, Number.MAX_SAFE_INTEGER);
 	var previewMaxSize = requiredInteger("strataPreviewCacheMaxSize", "プレビュー上限", 0, Number.MAX_SAFE_INTEGER);
     var excluded = strataServiceList("strataExcludedServices", "除外サービス");
     var order = strataServiceList("strataServiceOrder", "サービス順");
-    if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || startMargin === null || endMargin === null || threshold === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
+    if (mirakurunURL === null || listenAddress === null || port === null || directory === null || filenameFormat === null || startMargin === null || endMargin === null || threshold === null || postProcessTimeout === null || postProcessMaxConcurrent === null || previewMaxAge === null || previewMaxSize === null || excluded === null || order === null) {
       return null;
     }
+	var postProcessCommand = Array.prototype.map.call(document.querySelectorAll("#strataPostProcessCommand .strata-post-process-argument"), function (input) {
+		return input.value.trim();
+	});
+	if (postProcessCommand.some(function (argument) { return !argument; })) {
+		showError(new Error("録画後処理コマンドの空の引数を削除するか入力してください"));
+		return null;
+	}
     var enabled = byId("strataAuthEnabled").checked;
     var users = [];
     var names = {};
@@ -5122,7 +5176,7 @@
       schema: cfg.schema,
       version: cfg.version,
       mirakurun: { url: mirakurunURL, recordingPriority: Number(controlString("strataRecordingPriority")), conflictedPriority: Number(controlString("strataConflictedPriority")) },
-      recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") } },
+      recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") }, postProcess: { command: postProcessCommand, timeoutSeconds: postProcessTimeout, maxConcurrentRuns: postProcessMaxConcurrent } },
 	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
       web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
       services: { excluded: excluded, order: order },
@@ -6782,6 +6836,15 @@
         names[names.length - 1].focus();
       });
     }
+	var addPostProcessArgumentButton = byId("addPostProcessArgumentButton");
+	if (addPostProcessArgumentButton) {
+		addPostProcessArgumentButton.addEventListener("click", function () {
+			strataConfigFormDirty = true;
+			appendPostProcessArgument("");
+			var arguments = byId("strataPostProcessCommand").querySelectorAll(".strata-post-process-argument");
+			arguments[arguments.length - 1].focus();
+		});
+	}
     var createStrataAPITokenButton = byId("createStrataAPITokenButton");
     if (createStrataAPITokenButton) {
       createStrataAPITokenButton.addEventListener("click", createAPIToken);

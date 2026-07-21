@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -4977,6 +4978,11 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 		map[string]any{"username": "admin", "passwordConfigured": true},
 		map[string]any{"username": "viewer", "password": "new-secret"},
 	}
+	update["recording"].(map[string]any)["postProcess"] = map[string]any{
+		"command":           []any{"ffmpeg", "-i", "{recordedPath}", "{programID}.mp4"},
+		"timeoutSeconds":    900,
+		"maxConcurrentRuns": 2,
+	}
 	body, err := json.Marshal(update)
 	if err != nil {
 		t.Fatal(err)
@@ -4999,6 +5005,9 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 	}
 	if !passwordauth.VerifyPassword(saved.Web.Authentication.Users[1].PasswordHash, "new-secret") {
 		t.Fatal("new password was not hashed")
+	}
+	if got := saved.Recording.PostProcess; !reflect.DeepEqual(got.Command, []string{"ffmpeg", "-i", "{recordedPath}", "{programID}.mp4"}) || got.TimeoutSeconds != 900 || got.MaxConcurrentRuns != 2 {
+		t.Fatalf("post-process settings were not preserved: %#v", got)
 	}
 }
 

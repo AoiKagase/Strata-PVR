@@ -721,6 +721,26 @@
             </div>
           </fieldset>
           <fieldset class="config-fieldset">
+            <legend>録画後処理</legend>
+            <p id="strataPostProcessHelp" class="config-help">録画が正常完了した後に実行するコマンドです。シェルではなく、1 行を 1 引数として渡します。未指定なら実行しません。</p>
+            <div id="strataPostProcessCommand" class="post-process-command-list" aria-describedby="strataPostProcessHelp"></div>
+            <button id="addPostProcessArgumentButton" class="secondary-button" type="button">引数を追加</button>
+            <div class="config-form config-form-detail">
+              <label><span>タイムアウト（秒）</span><input id="strataPostProcessTimeout" class="config-form-control" type="number" min="0" step="1" inputmode="numeric" required aria-describedby="strataPostProcessTimeoutHelp"></label>
+              <label><span>最大同時実行数</span><input id="strataPostProcessMaxConcurrent" class="config-form-control" type="number" min="0" step="1" inputmode="numeric" required aria-describedby="strataPostProcessMaxConcurrentHelp"></label>
+            </div>
+            <p id="strataPostProcessTimeoutHelp" class="config-help">0 は既定の 10 分です。コマンドの終了コードと出力は operator ログに記録され、失敗しても録画済みファイルは保持されます。</p>
+            <p id="strataPostProcessMaxConcurrentHelp" class="config-help">0 は 1 件です。複数の録画が完了した場合も、この数まで順番に実行します。</p>
+            <details class="post-process-help">
+              <summary>FFmpeg の記述例と利用可能な値</summary>
+              <p>例として、録画を MP4 に再エンコードする場合は以下を 1 行ずつ入力します。<code>-crf</code> が画質（小さいほど高画質）、<code>-preset</code> がエンコード速度です。</p>
+              <ol class="post-process-example" aria-label="FFmpeg の引数例">
+                <li><code>ffmpeg</code></li><li><code>-y</code></li><li><code>-i</code></li><li><code>{recordedPath}</code></li><li><code>-c:v</code></li><li><code>libx264</code></li><li><code>-crf</code></li><li><code>23</code></li><li><code>-preset</code></li><li><code>medium</code></li><li><code>-c:a</code></li><li><code>aac</code></li><li><code>-b:a</code></li><li><code>192k</code></li><li><code>/mnt/archive/{programID}.mp4</code></li>
+              </ol>
+              <p>引数では <code>{recordedPath}</code>、<code>{programID}</code>、<code>{title}</code>、<code>{channelName}</code>、<code>{channelType}</code>、<code>{channelNumber}</code>、<code>{startAtUnixMilli}</code>、<code>{endAtUnixMilli}</code> を使えます。完全な番組 JSON は標準入力で渡されます。</p>
+            </details>
+          </fieldset>
+          <fieldset class="config-fieldset">
             <legend>再生</legend>
             <div class="config-form">
               <label><span>MP4 映像エンコーダー</span><select id="strataMP4VideoEncoder" class="config-form-control" aria-describedby="strataMP4VideoEncoderHelp"></select></label>

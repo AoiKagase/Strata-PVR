@@ -2698,6 +2698,67 @@ body.view-settings .settings-grid {
   margin: 12px 0 8px;
 }
 
+.post-process-command-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.post-process-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.post-process-command-row .icon-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 20px;
+}
+
+.post-process-help {
+  max-width: 75ch;
+  margin-top: 14px;
+  color: var(--ink-soft);
+}
+
+.post-process-help summary {
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.post-process-help p {
+  line-height: 1.65;
+}
+
+.post-process-example {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post-process-example li {
+  max-width: 100%;
+}
+
+.post-process-example code {
+  display: inline-block;
+  overflow-wrap: anywhere;
+  padding: 3px 6px;
+  color: var(--ink);
+  background: var(--surface-control-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+}
+
 .config-user-row {
   display: grid;
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) 44px;
