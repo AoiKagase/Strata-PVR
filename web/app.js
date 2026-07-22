@@ -5120,11 +5120,12 @@
     }
     form.querySelectorAll("[aria-invalid='true']").forEach(function (control) {
       control.removeAttribute("aria-invalid");
-      control.removeAttribute("aria-describedby");
+      restoreConfigFieldDescription(control);
     });
     form.querySelectorAll(".field-error").forEach(function (error) {
       error.remove();
     });
+    clearConfigValidationSummary();
   }
 
   function clearConfigFieldError(id) {
@@ -5132,11 +5133,48 @@
     var error = byId(id + "Error");
     if (control) {
       control.removeAttribute("aria-invalid");
-      control.removeAttribute("aria-describedby");
+      restoreConfigFieldDescription(control);
     }
     if (error) {
       error.remove();
     }
+  }
+
+  function restoreConfigFieldDescription(control) {
+    var original = control.getAttribute("data-config-original-describedby");
+    if (original === null || original === "") {
+      control.removeAttribute("aria-describedby");
+    } else {
+      control.setAttribute("aria-describedby", original);
+    }
+    control.removeAttribute("data-config-original-describedby");
+  }
+
+  function clearConfigValidationSummary() {
+    var summary = byId("strataConfigValidationSummary");
+    if (!summary) {
+      return;
+    }
+    summary.hidden = true;
+    summary.textContent = "";
+  }
+
+  function announceConfigValidationErrors() {
+    var form = byId("strataConfigForm");
+    var summary = byId("strataConfigValidationSummary");
+    if (!form || !summary) {
+      return;
+    }
+    var invalid = form.querySelectorAll("[aria-invalid='true']");
+    if (!invalid.length) {
+      return;
+    }
+    var messages = Array.prototype.map.call(form.querySelectorAll(".field-error"), function (error) {
+      return error.textContent;
+    });
+    summary.textContent = "入力内容を確認してください。" + messages.join("、");
+    summary.hidden = false;
+    invalid[0].focus();
   }
 
   function setConfigFieldError(id, message) {
@@ -5154,7 +5192,14 @@
     }
     error.textContent = message;
     control.setAttribute("aria-invalid", "true");
-    control.setAttribute("aria-describedby", errorID);
+    if (!control.hasAttribute("data-config-original-describedby")) {
+      control.setAttribute("data-config-original-describedby", control.getAttribute("aria-describedby") || "");
+    }
+    var descriptionIDs = (control.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+    if (descriptionIDs.indexOf(errorID) === -1) {
+      descriptionIDs.push(errorID);
+    }
+    control.setAttribute("aria-describedby", descriptionIDs.join(" "));
   }
 
   function requiredString(id, label) {
@@ -5264,6 +5309,7 @@
   function saveStrataConfigFromForm() {
     var config = readStrataConfigForm();
     if (!config) {
+      announceConfigValidationErrors();
       return;
     }
     confirmAction("Strata設定を保存しますか？", { danger: false, okLabel: "保存", title: "設定保存の確認" }).then(function (confirmed) {

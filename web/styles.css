@@ -2385,6 +2385,18 @@ summary:focus-visible,
   line-height: 1.4;
 }
 
+.config-validation-summary {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  background: var(--error-soft);
+  color: var(--error-strong);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .config-form-control[aria-invalid="true"],
 .config-user-row input[aria-invalid="true"] {
   border-color: var(--error);
