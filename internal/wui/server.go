@@ -199,7 +199,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
@@ -229,25 +229,29 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 }
 
 type server struct {
-	paths             Paths
-	cfg               *config.Config
-	db                *sql.DB
-	assets            fs.FS
-	assetLog          string
-	assetErr          error
-	metrics           *metricHistory
-	recordedSize      *recordedSizeCache
-	recordingPreviews *recordingPreviewCache
-	mediaProbes       *mediaProbeCache
-	metricsOnce       sync.Once
-	configMu          sync.Mutex
-	schedulerMu       sync.Mutex
-	schedulerGate     chan struct{}
-	authMu            sync.Mutex
-	playbackTickets   map[string]playbackTicket
-	sessions          map[string]authSession
-	authWorkers       chan struct{}
-	hls               *hlsSessionManager
+	paths              Paths
+	cfg                *config.Config
+	db                 *sql.DB
+	assets             fs.FS
+	assetLog           string
+	assetErr           error
+	metrics            *metricHistory
+	recordedSize       *recordedSizeCache
+	recordingPreviews  *recordingPreviewCache
+	mediaProbes        *mediaProbeCache
+	liveSubtitles      *liveSubtitleManager
+	metricsOnce        sync.Once
+	configMu           sync.Mutex
+	schedulerMu        sync.Mutex
+	schedulerGate      chan struct{}
+	authMu             sync.Mutex
+	playbackTickets    map[string]playbackTicket
+	sessions           map[string]authSession
+	authWorkers        chan struct{}
+	hls                *hlsSessionManager
+	captionDecoderOnce sync.Once
+	captionDecoder     string
+	captionDecoderErr  error
 }
 
 func newSchedulerGate() chan struct{} {
@@ -2712,7 +2716,7 @@ func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, 
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	decoder, err := aribCaptionDecoder()
+	decoder, err := s.aribCaptionDecoder()
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "ARIB caption decoder unavailable: %v", err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -3907,38 +3911,63 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
-	if err != nil {
-		legacyHTTPError(w, r, http.StatusInternalServerError)
-		return
-	}
-	client.UserAgent = mirakurun.StrataUserAgent("wui")
-	body, err := client.ServiceStream(r.Context(), serviceID, true)
-	if err != nil {
-		legacyHTTPError(w, r, http.StatusServiceUnavailable)
-		return
-	}
-	defer body.Close()
-	decoder, err := aribCaptionDecoder()
+	decoder, err := s.aribCaptionDecoder()
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "ARIB caption decoder unavailable: %v", err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	args := subtitleFFmpegStreamArgs(decoder)
-	output, wait, err := runFFmpegStream(r.Context(), body, args...)
+	manager := s.liveSubtitles
+	if manager == nil {
+		manager = newLiveSubtitleManager()
+		s.liveSubtitles = manager
+	}
+	subtitles, err := manager.subscribe(r.Context(), id, func(sessionCtx context.Context) (liveSubtitleSource, error) {
+		client, clientErr := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+		if clientErr != nil {
+			return liveSubtitleSource{}, clientErr
+		}
+		client.UserAgent = mirakurun.StrataUserAgent("wui")
+		body, streamErr := client.ServiceStream(sessionCtx, serviceID, true)
+		if streamErr != nil {
+			return liveSubtitleSource{}, streamErr
+		}
+		args := subtitleFFmpegStreamArgs(decoder)
+		output, wait, ffmpegErr := runFFmpegStream(sessionCtx, body, args...)
+		if ffmpegErr != nil {
+			_ = body.Close()
+			_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), ffmpegErr)
+			return liveSubtitleSource{}, ffmpegErr
+		}
+		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
+		waitWithLog := func() error {
+			waitErr := wait()
+			if waitErr != nil && sessionCtx.Err() == nil {
+				_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", waitErr)
+			}
+			return waitErr
+		}
+		return liveSubtitleSource{output: output, wait: waitWithLog, close: body.Close}, nil
+	})
 	if err != nil {
-		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	defer output.Close()
-	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
+	defer subtitles.Close()
 	w.WriteHeader(http.StatusOK)
-	_, _ = copyLiveWebVTT(w, output)
-	if err := wait(); err != nil {
-		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
+	_, _ = copySharedLiveWebVTT(w, subtitles)
+}
+
+func copySharedLiveWebVTT(w http.ResponseWriter, source io.Reader) (int64, error) {
+	n, err := io.WriteString(w, "WEBVTT\n\n")
+	if err != nil {
+		return int64(n), err
 	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	copied, err := io.Copy(w, source)
+	return int64(n) + copied, err
 }
 
 func copyLiveWebVTT(w http.ResponseWriter, source io.Reader) (int64, error) {
@@ -4102,6 +4131,13 @@ func aribCaptionDecoder() (string, error) {
 		return "", fmt.Errorf("ffmpeg arbc cannot decode generic MPEG-TS data streams; install an ffmpeg build with libaribcaption or libaribb24")
 	}
 	return "", fmt.Errorf("no compatible ARIB caption decoder found in ffmpeg")
+}
+
+func (s *server) aribCaptionDecoder() (string, error) {
+	s.captionDecoderOnce.Do(func() {
+		s.captionDecoder, s.captionDecoderErr = aribCaptionDecoder()
+	})
+	return s.captionDecoder, s.captionDecoderErr
 }
 
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool, encoder string) []string {
