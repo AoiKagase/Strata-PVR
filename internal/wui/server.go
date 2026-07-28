@@ -199,7 +199,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), playbackRequests: newPlaybackRequestSessions(),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
@@ -240,6 +240,7 @@ type server struct {
 	recordingPreviews  *recordingPreviewCache
 	mediaProbes        *mediaProbeCache
 	liveSubtitles      *liveSubtitleManager
+	playbackRequests   *playbackRequestSessions
 	metricsOnce        sync.Once
 	configMu           sync.Mutex
 	schedulerMu        sync.Mutex
@@ -2547,12 +2548,35 @@ func (s *server) handleRecordedPlaybackURL(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+func (s *server) beginPlaybackRequest(r *http.Request) (*http.Request, func()) {
+	manager := s.playbackRequests
+	if manager == nil {
+		manager = newPlaybackRequestSessions()
+		s.playbackRequests = manager
+	}
+	ctx, release := manager.register(r.Context(), r.URL.Query().Get("session"))
+	return r.WithContext(ctx), release
+}
+
+func (s *server) stopPlaybackRequest(w http.ResponseWriter, r *http.Request) {
+	if s.playbackRequests != nil {
+		s.playbackRequests.stop(r.URL.Query().Get("session"))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, collection, id, apiType string, requirePID bool) {
+	if r.Method == http.MethodDelete {
+		s.stopPlaybackRequest(w, r)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "HEAD, GET")
+		w.Header().Set("Allow", "DELETE, HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	r, release := s.beginPlaybackRequest(r)
+	defer release()
 	program, found, err := s.readProgram(r.Context(), collection, id)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -2673,11 +2697,17 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 }
 
 func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, collection, id string) {
+	if r.Method == http.MethodDelete {
+		s.stopPlaybackRequest(w, r)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "HEAD, GET")
+		w.Header().Set("Allow", "DELETE, HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	r, release := s.beginPlaybackRequest(r)
+	defer release()
 	programs, err := s.readPrograms(r.Context(), collection)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -3808,11 +3838,17 @@ func serveChannelLogo(w http.ResponseWriter, r *http.Request, logo []byte) {
 }
 
 func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, apiType string) {
+	if r.Method == http.MethodDelete {
+		s.stopPlaybackRequest(w, r)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "HEAD, GET")
+		w.Header().Set("Allow", "DELETE, HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	r, release := s.beginPlaybackRequest(r)
+	defer release()
 	channel, ok := s.findChannel(id)
 	if !ok {
 		legacyHTTPError(w, r, http.StatusNotFound)
@@ -3890,11 +3926,17 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 }
 
 func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method == http.MethodDelete {
+		s.stopPlaybackRequest(w, r)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "HEAD, GET")
+		w.Header().Set("Allow", "DELETE, HEAD, GET")
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	r, release := s.beginPlaybackRequest(r)
+	defer release()
 	channel, ok := s.findChannel(id)
 	if !ok {
 		legacyHTTPError(w, r, http.StatusNotFound)

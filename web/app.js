@@ -2519,10 +2519,11 @@
       return;
     }
     setPlayerStatus("");
-    stopHLSPlayback(playerCurrentURL);
+    stopPlaybackRequest(playerCurrentURL);
     video.pause();
     video.removeAttribute("src");
     video.load();
+    url = withPlaybackSession(url);
     video.src = url;
     playerCurrentURL = url;
     playerBaseQuery = cloneQuery(query || {});
@@ -2678,7 +2679,9 @@
     if (track.track) {
       track.track.mode = "disabled";
     }
+    stopPlaybackRequest(track.getAttribute("src"));
     track.removeAttribute("src");
+    track.removeAttribute("data-source-url");
     if (!track.parentNode) {
       return track;
     }
@@ -2696,20 +2699,19 @@
     var track = byId("playerSubtitleTrack");
     if (!select || !track || !playerSubtitleSourceBuilder || select.value !== "ja") {
       if (track) {
-        track.track.mode = "disabled";
-        track.removeAttribute("src");
+        resetPlayerSubtitleTrack(track);
       }
       return;
     }
     var url = playerSubtitleSourceBuilder(cloneQuery(query || {}));
     if (!url) {
-      track.track.mode = "disabled";
-      track.removeAttribute("src");
+      resetPlayerSubtitleTrack(track);
       return;
     }
-    if (track.getAttribute("src") !== url) {
+    if (track.getAttribute("data-source-url") !== url) {
       track = resetPlayerSubtitleTrack(track);
-      track.setAttribute("src", url);
+      track.setAttribute("data-source-url", url);
+      track.setAttribute("src", withPlaybackSession(url));
     }
     track.track.mode = "showing";
   }
@@ -2849,7 +2851,7 @@
     if (!video) {
       return;
     }
-    stopHLSPlayback(playerCurrentURL);
+    stopPlaybackRequest(playerCurrentURL);
     playerCurrentURL = "";
     video.pause();
     video.removeAttribute("src");
@@ -2869,8 +2871,24 @@
     updatePlayerControls();
   }
 
-  function stopHLSPlayback(url) {
-    if (!url || (!/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url) && !/\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(url))) {
+  function newPlaybackSessionToken() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID().replace(/-/g, "_");
+    }
+    return "playback_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2);
+  }
+
+  function withPlaybackSession(url) {
+    if (!url) {
+      return url;
+    }
+    var parsed = new URL(url, window.location.href);
+    parsed.searchParams.set("session", newPlaybackSessionToken());
+    return parsed.pathname + parsed.search + parsed.hash;
+  }
+
+  function stopPlaybackRequest(url) {
+    if (!url || !/\/api\/(?:recorded|recording|channel)\/[^/]+\/(?:hls\/index\.m3u8|watch\.(?:mp4|m2ts)|subtitles\.vtt)(?:\?|$)/.test(url)) {
       return;
     }
     fetch(url, { method: "DELETE", keepalive: true }).catch(function () {});

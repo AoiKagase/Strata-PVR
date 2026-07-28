@@ -151,6 +151,8 @@
       var recoveryTimer = 0;
       var reconnectAttempts = 0;
       var maxReconnectAttempts = 5;
+      var playbackSessionToken = "";
+      var subtitleSessionToken = "";
       document.title = title;
       titleNode.textContent = title;
 
@@ -188,6 +190,29 @@
         }
       }
 
+      function newSessionToken() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+          return window.crypto.randomUUID().replace(/-/g, "_");
+        }
+        return "playback_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2);
+      }
+
+      function stopPlaybackRequest(url) {
+        if (!url) {
+          return;
+        }
+        var target;
+        try {
+          target = new URL(url, window.location.href);
+        } catch (error) {
+          return;
+        }
+        if (target.origin !== window.location.origin || !/\/api\/(?:recorded|recording|channel)\/[^/]+\/(?:hls\/index\.m3u8|watch\.(?:mp4|m2ts)|subtitles\.vtt)$/.test(target.pathname)) {
+          return;
+        }
+        fetch(target.toString(), { method: "DELETE", keepalive: true }).catch(function () {});
+      }
+
       function recoverLivePlayback(reason) {
         if (!isLiveStream() || recoveryTimer) {
           return;
@@ -215,14 +240,21 @@
           reconnectAttempts = 0;
         }
         try {
+          stopPlaybackRequest(resolvedSrc);
+          stopPlaybackRequest(subtitleTrack.getAttribute("src"));
+          playbackSessionToken = newSessionToken();
+          subtitleSessionToken = newSessionToken();
           var mediaURL = new URL(src, window.location.href);
+          mediaURL.searchParams.set("session", playbackSessionToken);
           if (isRecovery) {
             mediaURL.searchParams.set("reconnect", String(Date.now()));
           }
           video.src = mediaURL.toString();
           if (subtitles) {
             try {
-              subtitleTrack.src = new URL(subtitles, window.location.href).toString();
+              var subtitleURL = new URL(subtitles, window.location.href);
+              subtitleURL.searchParams.set("session", subtitleSessionToken);
+              subtitleTrack.src = subtitleURL.toString();
             } catch (error) {
               subtitleTrack.removeAttribute("src");
             }
@@ -266,15 +298,14 @@
       });
       window.addEventListener("pagehide", function () {
         clearRecoveryTimer();
+        stopPlaybackRequest(resolvedSrc || video.src);
+        stopPlaybackRequest(subtitleTrack.getAttribute("src"));
         video.pause();
         video.removeAttribute("src");
         video.load();
         subtitleTrack.track.mode = "disabled";
         subtitleTrack.removeAttribute("src");
         subtitleTrack.remove();
-        if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src) || /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
-          fetch(resolvedSrc || src, { method: "DELETE", keepalive: true }).catch(function () {});
-        }
       });
       loadVideo(false);
     }());

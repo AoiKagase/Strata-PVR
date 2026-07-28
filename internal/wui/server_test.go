@@ -971,7 +971,8 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 			`var mediaURL = new URL(src, window.location.href);`,
 			`function recoverLivePlayback(reason)`,
 			`video.src = mediaURL.toString();`,
-			`subtitleTrack.src = new URL(subtitles, window.location.href).toString();`,
+			`subtitleURL.searchParams.set("session", subtitleSessionToken);`,
+			`subtitleTrack.src = subtitleURL.toString();`,
 		},
 	}
 	for path, wants := range files {
@@ -994,11 +995,16 @@ func TestPlayersAbortSubtitleRequestsWhenClosed(t *testing.T) {
 			`function resetPlayerSubtitleTrack(track)`,
 			`track.parentNode.replaceChild(replacement, track);`,
 			`resetPlayerSubtitleTrack(track);`,
+			`function withPlaybackSession(url)`,
+			`stopPlaybackRequest(playerCurrentURL);`,
+			`fetch(url, { method: "DELETE", keepalive: true })`,
 		},
 		filepath.Join("..", "..", "web", "player.html"): {
 			`window.addEventListener("pagehide"`,
 			`subtitleTrack.removeAttribute("src");`,
 			`subtitleTrack.remove();`,
+			`mediaURL.searchParams.set("session", playbackSessionToken);`,
+			`stopPlaybackRequest(subtitleTrack.getAttribute("src"));`,
 		},
 	}
 	for path, wants := range files {
