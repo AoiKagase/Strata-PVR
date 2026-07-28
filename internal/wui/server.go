@@ -589,6 +589,11 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
+			// Bound slow request and idle connections. WriteTimeout remains unset
+			// because this listener serves long-lived media streams.
+			ReadTimeout:    30 * time.Second,
+			IdleTimeout:    2 * time.Minute,
+			MaxHeaderBytes: 1 << 20,
 		},
 		label: "HTTP Server", assetLog: assets.log, wui: wui,
 	}}, nil

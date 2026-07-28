@@ -5159,6 +5159,21 @@ func TestBuildHTTPServersReportsAssetSource(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPServersSetsResourceLimits(t *testing.T) {
+	paths := testPaths(t.TempDir()).runtime()
+	servers, err := buildHTTPServers(paths, &config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("server count = %d", len(servers))
+	}
+	server := servers[0].server
+	if server.ReadHeaderTimeout != 10*time.Second || server.ReadTimeout != 30*time.Second || server.IdleTimeout != 2*time.Minute || server.MaxHeaderBytes != 1<<20 {
+		t.Fatalf("unexpected HTTP resource limits: %#v", server)
+	}
+}
+
 func TestAccessLogKeepsRemoteAddressWhenXForwardedForDisabled(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
