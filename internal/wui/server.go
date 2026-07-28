@@ -628,6 +628,9 @@ func (s *server) withCommonHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		// Restrict content origins as defense in depth for the browser UI. Inline
+		// assets are retained for compatibility with the standalone player/login.
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:")
 		w.Header().Set("X-UA-Compatible", "IE=Edge,chrome=1")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		next.ServeHTTP(w, r)

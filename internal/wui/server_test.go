@@ -368,10 +368,11 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 		t.Fatalf("Server = %q", got)
 	}
 	for key, want := range map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "SAMEORIGIN",
-		"X-UA-Compatible":        "IE=Edge,chrome=1",
-		"X-XSS-Protection":       "1; mode=block",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "SAMEORIGIN",
+		"Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:",
+		"X-UA-Compatible":         "IE=Edge,chrome=1",
+		"X-XSS-Protection":        "1; mode=block",
 	} {
 		if got := res.Header().Get(key); got != want {
 			t.Fatalf("%s = %q", key, got)
