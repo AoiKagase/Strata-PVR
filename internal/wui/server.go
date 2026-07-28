@@ -199,7 +199,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
@@ -238,6 +238,7 @@ type server struct {
 	metrics           *metricHistory
 	recordedSize      *recordedSizeCache
 	recordingPreviews *recordingPreviewCache
+	mediaProbes       *mediaProbeCache
 	metricsOnce       sync.Once
 	configMu          sync.Mutex
 	schedulerMu       sync.Mutex
@@ -2808,7 +2809,7 @@ type legacyM2TSWatchPlan struct {
 }
 
 func (s *server) prepareLegacyM2TSWatch(w http.ResponseWriter, r *http.Request, filePath string) (legacyM2TSWatchPlan, bool) {
-	format, err := probeMediaFormat(r.Context(), filePath)
+	format, err := s.probeMediaFormat(r.Context(), filePath)
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "error %v", err)
 		legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -2899,6 +2900,12 @@ func parseLegacyWatchRange(header string, totalSize int64) (int64, int64, bool) 
 	return start, end, true
 }
 
+type mediaFormat struct {
+	Duration float64
+	Size     int64
+	BitRate  int64
+}
+
 func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
 	data, err := runFFprobeFormat(ctx, filePath)
 	if err != nil {
@@ -2915,13 +2922,75 @@ func probeMediaDuration(ctx context.Context, filePath string) (float64, error) {
 	return strconv.ParseFloat(value.Format.Duration, 64)
 }
 
-type mediaFormat struct {
-	Duration float64
-	Size     int64
-	BitRate  int64
+type mediaProbeCache struct {
+	mu       sync.Mutex
+	entries  map[string]mediaProbeCacheEntry
+	inFlight map[string]*mediaProbeFlight
 }
 
-func probeMediaFormat(ctx context.Context, filePath string) (mediaFormat, error) {
+type mediaProbeCacheEntry struct {
+	size    int64
+	modTime int64
+	format  mediaFormat
+}
+
+type mediaProbeFlight struct {
+	done   chan struct{}
+	format mediaFormat
+	err    error
+}
+
+func newMediaProbeCache() *mediaProbeCache {
+	return &mediaProbeCache{entries: make(map[string]mediaProbeCacheEntry), inFlight: make(map[string]*mediaProbeFlight)}
+}
+
+// probeMediaFormat caches immutable recorded-file metadata and coalesces
+// simultaneous probes. This avoids multiple ffprobe processes scanning the
+// same NAS file when several viewers start playback at once.
+func (s *server) probeMediaFormat(ctx context.Context, filePath string) (mediaFormat, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		// Keep probe behavior compatible with virtual/test inputs. Real files
+		// are keyed by size and mtime; inputs without stat metadata simply skip
+		// the cache.
+		return readMediaFormat(ctx, filePath)
+	}
+	cache := s.mediaProbes
+	if cache == nil {
+		return readMediaFormat(ctx, filePath)
+	}
+	modTime := info.ModTime().UnixNano()
+	cache.mu.Lock()
+	if entry, ok := cache.entries[filePath]; ok && entry.size == info.Size() && entry.modTime == modTime {
+		cache.mu.Unlock()
+		return entry.format, nil
+	}
+	if flight, ok := cache.inFlight[filePath]; ok {
+		cache.mu.Unlock()
+		select {
+		case <-flight.done:
+			return flight.format, flight.err
+		case <-ctx.Done():
+			return mediaFormat{}, ctx.Err()
+		}
+	}
+	flight := &mediaProbeFlight{done: make(chan struct{})}
+	cache.inFlight[filePath] = flight
+	cache.mu.Unlock()
+
+	format, probeErr := readMediaFormat(ctx, filePath)
+	cache.mu.Lock()
+	if probeErr == nil {
+		cache.entries[filePath] = mediaProbeCacheEntry{size: info.Size(), modTime: modTime, format: format}
+	}
+	flight.format, flight.err = format, probeErr
+	delete(cache.inFlight, filePath)
+	close(flight.done)
+	cache.mu.Unlock()
+	return format, probeErr
+}
+
+func readMediaFormat(ctx context.Context, filePath string) (mediaFormat, error) {
 	data, err := runFFprobeFormat(ctx, filePath)
 	if err != nil {
 		return mediaFormat{}, err
@@ -3008,9 +3077,10 @@ type growingFileReader struct {
 	ctx      context.Context
 	filePath string
 	offset   int64
+	file     *os.File
 }
 
-func newGrowingFileReader(ctx context.Context, filePath string, offset int64) io.Reader {
+func newGrowingFileReader(ctx context.Context, filePath string, offset int64) io.ReadCloser {
 	if offset < 0 {
 		offset = 0
 	}
@@ -3024,26 +3094,47 @@ func (r *growingFileReader) Read(p []byte) (int, error) {
 			return 0, r.ctx.Err()
 		default:
 		}
-		file, resolvedPath, err := openGrowingFile(r.filePath)
-		if err != nil {
-			return 0, err
+		if r.file == nil {
+			file, resolvedPath, err := openGrowingFile(r.filePath)
+			if err != nil {
+				return 0, err
+			}
+			r.file, r.filePath = file, resolvedPath
+			if _, err := r.file.Seek(r.offset, io.SeekStart); err != nil {
+				_ = r.Close()
+				return 0, err
+			}
 		}
-		r.filePath = resolvedPath
-		if _, err := file.Seek(r.offset, io.SeekStart); err != nil {
-			_ = file.Close()
-			return 0, err
-		}
-		n, readErr := file.Read(p)
-		_ = file.Close()
+		n, readErr := r.file.Read(p)
 		if n > 0 {
 			r.offset += int64(n)
+			// See the EOF branch below. Windows requires the handle to be
+			// released between reads so the recorder can rename .part.
+			if runtime.GOOS == "windows" {
+				if err := r.reopen(); err != nil {
+					return 0, err
+				}
+			}
 			return n, nil
 		}
 		if readErr != nil && readErr != io.EOF {
 			return 0, readErr
 		}
+		// Windows cannot rename the writer's .part file while a regular
+		// os.File handle is open. Release it while waiting for more data so a
+		// completed recording can be promoted without being blocked by viewers.
+		if runtime.GOOS == "windows" {
+			if err := r.reopen(); err != nil {
+				return 0, err
+			}
+		}
 		if info, err := os.Stat(r.filePath); err == nil && info.Size() < r.offset {
 			r.offset = 0
+			if err := r.reopen(); err != nil {
+				return 0, err
+			}
+		} else if resolved := completedRecordingPath(r.filePath); resolved != r.filePath {
+			r.filePath = resolved
 		}
 		timer := time.NewTimer(200 * time.Millisecond)
 		select {
@@ -3053,6 +3144,19 @@ func (r *growingFileReader) Read(p []byte) (int, error) {
 		case <-timer.C:
 		}
 	}
+}
+
+func (r *growingFileReader) reopen() error {
+	if r.file == nil {
+		return nil
+	}
+	err := r.file.Close()
+	r.file = nil
+	return err
+}
+
+func (r *growingFileReader) Close() error {
+	return r.reopen()
 }
 
 func openGrowingFile(filePath string) (*os.File, string, error) {
@@ -3878,6 +3982,9 @@ func (s *server) streamFFmpeg(w http.ResponseWriter, r *http.Request, input io.R
 }
 
 func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, input io.Reader, format string, live bool, status int) {
+	if closer, ok := input.(io.Closer); ok {
+		defer closer.Close()
+	}
 	encoder := ""
 	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
 		var err error
