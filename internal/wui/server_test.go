@@ -988,6 +988,33 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 	}
 }
 
+func TestPlayersAbortSubtitleRequestsWhenClosed(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "app.js"): {
+			`function resetPlayerSubtitleTrack(track)`,
+			`track.parentNode.replaceChild(replacement, track);`,
+			`resetPlayerSubtitleTrack(track);`,
+		},
+		filepath.Join("..", "..", "web", "player.html"): {
+			`window.addEventListener("pagehide"`,
+			`subtitleTrack.removeAttribute("src");`,
+			`subtitleTrack.remove();`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
 func TestNativeDashboardShowsProgramCategoryChips(t *testing.T) {
 	files := map[string][]string{
 		filepath.Join("..", "..", "web", "app.js"): {

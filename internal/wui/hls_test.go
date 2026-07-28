@@ -144,7 +144,12 @@ func TestHLSSessionStopCancelsAndRemovesSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := newHLSSessionManager(Paths{})
 	id := hlsSessionID("recording.m2ts", "540p", 12, 30, "")
-	m.sessions[id] = &hlsSession{id: id, dir: dir, cancel: cancel, done: make(chan struct{})}
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		close(done)
+	}()
+	m.sessions[id] = &hlsSession{id: id, dir: dir, cancel: cancel, done: done}
 
 	m.stop("recording.m2ts", "540p", 12, 30, "")
 
@@ -155,6 +160,29 @@ func TestHLSSessionStopCancelsAndRemovesSession(t *testing.T) {
 	}
 	if m.sessions[id] != nil {
 		t.Fatal("session was not removed")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("session directory still exists: %v", err)
+	}
+}
+
+func TestHLSSessionTerminationWaitsForProcessExit(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		time.Sleep(25 * time.Millisecond)
+		close(done)
+	}()
+
+	m := newHLSSessionManager(Paths{})
+	m.terminate(&hlsSession{id: "waiting", dir: dir, cancel: cancel, done: done})
+
+	select {
+	case <-done:
+	default:
+		t.Fatal("termination returned before the process exit notification")
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("session directory still exists: %v", err)

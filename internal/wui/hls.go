@@ -52,6 +52,7 @@ type hlsSessionManager struct {
 }
 
 const hlsSessionIdleTimeout = 15 * time.Second
+const hlsSessionStopTimeout = 5 * time.Second
 const maxHLSSessions = 8
 
 var errHLSSessionCapacity = errors.New("HLS session capacity reached")
@@ -310,7 +311,7 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 	}
 	m.sessions[id] = session
 	session.timer = time.AfterFunc(hlsSessionIdleTimeout, func() { m.expire(id) })
-	_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "SPAWN HLS: ffmpeg %s", strings.Join(args, " "))
+	_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "SPAWN HLS: ffmpeg session=%s pid=%d %s", id, cmd.Process.Pid, strings.Join(args, " "))
 	go func() {
 		err := cmd.Wait()
 		if input != nil {
@@ -321,6 +322,7 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		session.err = err
 		close(session.done)
 		m.mu.Unlock()
+		_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "EXIT HLS: ffmpeg session=%s pid=%d error=%v", id, cmd.Process.Pid, err)
 	}()
 	return session, nil
 }
@@ -381,11 +383,7 @@ func (m *hlsSessionManager) expire(id string) {
 	}
 	delete(m.sessions, id)
 	m.mu.Unlock()
-	session.cancel()
-	if session.input != nil {
-		_ = session.input.Close()
-	}
-	_ = os.RemoveAll(session.dir)
+	m.terminate(session)
 }
 
 func (m *hlsSessionManager) stop(filePath, quality string, start, duration int, audio string) {
@@ -405,11 +403,26 @@ func (m *hlsSessionManager) expireNow(id string) {
 	if session == nil {
 		return
 	}
+	m.terminate(session)
+}
+
+func (m *hlsSessionManager) terminate(session *hlsSession) {
 	session.cancel()
 	if session.input != nil {
 		_ = session.input.Close()
 	}
-	_ = os.RemoveAll(session.dir)
+	if session.done != nil {
+		timer := time.NewTimer(hlsSessionStopTimeout)
+		select {
+		case <-session.done:
+			timer.Stop()
+		case <-timer.C:
+			_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "ERROR: HLS ffmpeg did not exit within %s session=%s", hlsSessionStopTimeout, session.id)
+		}
+	}
+	if err := os.RemoveAll(session.dir); err != nil {
+		_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "ERROR: remove HLS session directory %s: %v", session.id, err)
+	}
 }
 
 func channelHLSKey(channelID string) string {

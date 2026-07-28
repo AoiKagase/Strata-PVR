@@ -266,6 +266,12 @@
       });
       window.addEventListener("pagehide", function () {
         clearRecoveryTimer();
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        subtitleTrack.track.mode = "disabled";
+        subtitleTrack.removeAttribute("src");
+        subtitleTrack.remove();
         if (/\/api\/recorded\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src) || /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(resolvedSrc || src)) {
           fetch(resolvedSrc || src, { method: "DELETE", keepalive: true }).catch(function () {});
         }

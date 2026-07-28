@@ -2667,9 +2667,28 @@
       }
     }
     if (track && !enabled) {
-      track.track.mode = "disabled";
-      track.removeAttribute("src");
+      resetPlayerSubtitleTrack(track);
     }
+  }
+
+  function resetPlayerSubtitleTrack(track) {
+    if (!track) {
+      return null;
+    }
+    if (track.track) {
+      track.track.mode = "disabled";
+    }
+    track.removeAttribute("src");
+    if (!track.parentNode) {
+      return track;
+    }
+    // Replacing the element forces browsers to abort a long-lived WebVTT
+    // request. Removing src alone can leave the subtitle HTTP connection open,
+    // which keeps the server-side Mirakurun and FFmpeg session alive.
+    var replacement = track.cloneNode(false);
+    track.parentNode.replaceChild(replacement, track);
+    bindPlayerSubtitleEvents(replacement);
+    return replacement;
   }
 
   function updatePlayerSubtitleTrack(query) {
@@ -2689,12 +2708,7 @@
       return;
     }
     if (track.getAttribute("src") !== url) {
-      track.track.mode = "disabled";
-      track.removeAttribute("src");
-      var replacement = track.cloneNode(false);
-      track.parentNode.replaceChild(replacement, track);
-      track = replacement;
-      bindPlayerSubtitleEvents(track);
+      track = resetPlayerSubtitleTrack(track);
       track.setAttribute("src", url);
     }
     track.track.mode = "showing";
