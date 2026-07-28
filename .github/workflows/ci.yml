@@ -37,6 +37,9 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Scan known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   build:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: test
