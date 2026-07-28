@@ -660,7 +660,7 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		if !identity.bearer && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !validSameOrigin(r) {
+		if !identity.bearer && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !s.validSameOrigin(r) {
 			legacyHTTPError(w, r, http.StatusForbidden)
 			return
 		}
@@ -686,7 +686,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
-	if !validSameOrigin(r) {
+	if !s.validSameOrigin(r) {
 		legacyHTTPError(w, r, http.StatusForbidden)
 		return
 	}
@@ -703,7 +703,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", HttpOnly: true, Secure: requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", HttpOnly: true, Secure: s.requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode})
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -717,7 +717,7 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearSession(cookie.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -2531,7 +2531,7 @@ func (s *server) handleRecordedPlaybackURL(w http.ResponseWriter, r *http.Reques
 		legacyHTTPError(w, r, http.StatusInternalServerError)
 		return
 	}
-	target := requestOrigin(r) + "/api/recorded/" + url.PathEscape(id) + "/watch.m2ts?playback=" + url.QueryEscape(ticket)
+	target := s.requestOrigin(r) + "/api/recorded/" + url.PathEscape(id) + "/watch.m2ts?playback=" + url.QueryEscape(ticket)
 	w.Header().Set("Cache-Control", "no-store")
 	writePrettyJSON(w, http.StatusOK, map[string]string{
 		"url":       target,
@@ -2586,7 +2586,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		target := xspfTarget(r, ext)
+		target := s.xspfTarget(r, ext)
 		target = appendPlaybackTicket(target, ticket)
 		w.Header().Set("Content-Type", "application/xspf+xml")
 		w.Header().Set("Cache-Control", "no-store")
@@ -3718,7 +3718,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
-		target := appendPlaybackTicket(xspfTarget(r, ext), ticket)
+		target := appendPlaybackTicket(s.xspfTarget(r, ext), ticket)
 		w.Header().Set("Content-Type", "application/xspf+xml")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xspf"`, channel.ID))
@@ -4443,7 +4443,7 @@ func writeXSPF(w io.Writer, target, title string) {
 	fmt.Fprintf(w, "</playlist>\n")
 }
 
-func xspfTarget(r *http.Request, ext string) string {
+func (s *server) xspfTarget(r *http.Request, ext string) string {
 	prefix := r.URL.Query().Get("prefix")
 	query := r.URL.Query()
 	// prefix and ext describe XSPF generation only.  They must not be passed
@@ -4466,19 +4466,7 @@ func xspfTarget(r *http.Request, ext string) string {
 			path += "?" + encodedQuery
 		}
 	}
-	scheme := r.Header.Get("X-Forwarded-Proto")
-	if scheme != "http" && scheme != "https" {
-		if r.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
-		}
-	}
-	host := r.Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
-	}
-	return scheme + "://" + host + path
+	return s.requestOrigin(r) + path
 }
 
 func appendPlaybackTicket(target, ticket string) string {

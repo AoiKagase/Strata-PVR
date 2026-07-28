@@ -64,9 +64,10 @@ type PostProcessCommand struct {
 }
 
 type WebSettings struct {
-	ListenAddress  string                 `json:"listenAddress"`
-	Port           int                    `json:"port"`
-	Authentication AuthenticationSettings `json:"authentication"`
+	ListenAddress         string                 `json:"listenAddress"`
+	Port                  int                    `json:"port"`
+	TrustForwardedHeaders bool                   `json:"trustForwardedHeaders,omitempty"`
+	Authentication        AuthenticationSettings `json:"authentication"`
 }
 
 type AuthenticationSettings struct {
@@ -109,6 +110,7 @@ type Config struct {
 	WUIAuthenticationEnabled   bool
 	WUIPort                    int
 	WUIHost                    string
+	WUITrustForwardedHeaders   bool
 	WUIWebDir                  string
 	NormalizationForm          string
 	MP4VideoEncoder            string
@@ -291,6 +293,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.PostProcessMaxConcurrent = doc.Recording.PostProcess.MaxConcurrentRuns
 	cfg.WUIHost = doc.Web.ListenAddress
 	cfg.WUIPort = doc.Web.Port
+	cfg.WUITrustForwardedHeaders = doc.Web.TrustForwardedHeaders
 	cfg.WUIWebDir = doc.WUIWebDir
 	cfg.WUIAuthenticationEnabled = doc.Web.Authentication.Enabled
 	if doc.Web.Authentication.Enabled {

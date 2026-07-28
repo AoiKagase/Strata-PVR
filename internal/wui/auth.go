@@ -17,6 +17,7 @@ import (
 
 const sessionCookieName = "strata_session"
 const sessionDuration = 8 * time.Hour
+
 // Playback tickets remain valid for the viewing session because media players
 // issue fresh Range requests whenever the user seeks.
 const playbackTicketDuration = sessionDuration
@@ -190,30 +191,33 @@ func (s *server) verifyLogin(username, password string, r *http.Request) bool {
 	return false
 }
 
-func requestUsesHTTPS(r *http.Request) bool {
+func (s *server) requestUsesHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
+	}
+	if s.cfg == nil || !s.cfg.WUITrustForwardedHeaders {
+		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]), "https")
 }
 
-func requestOrigin(r *http.Request) string {
+func (s *server) requestOrigin(r *http.Request) string {
 	scheme := "http"
-	if requestUsesHTTPS(r) {
+	if s.requestUsesHTTPS(r) {
 		scheme = "https"
 	}
 	host := r.Host
-	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwarded != "" {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwarded != "" && s.cfg != nil && s.cfg.WUITrustForwardedHeaders {
 		host = forwarded
 	}
 	return scheme + "://" + host
 }
 
-func validSameOrigin(r *http.Request) bool {
+func (s *server) validSameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return false
 	}
 	parsed, err := url.Parse(origin)
-	return err == nil && strings.EqualFold(parsed.Scheme+"://"+parsed.Host, requestOrigin(r))
+	return err == nil && strings.EqualFold(parsed.Scheme+"://"+parsed.Host, s.requestOrigin(r))
 }

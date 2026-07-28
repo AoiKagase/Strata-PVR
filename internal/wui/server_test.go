@@ -4731,7 +4731,7 @@ func TestAPIAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}})
+	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}, WUITrustForwardedHeaders: true})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
