@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"strata-pvr/internal/config"
@@ -118,6 +119,14 @@ func TestWatchFFmpegArgsUsesFrequentAMFKeyframes(t *testing.T) {
 		}
 	}
 	t.Fatalf("AMF args do not flush MP4 packets: %v", args)
+}
+
+func TestWatchFFmpegArgsFragmentsEveryResizedLiveFrame(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/watch.mp4?s=640x360", nil)
+	args := strings.Join(watchFFmpegArgs(request, "mp4", true, "h264_amf"), " ")
+	if !strings.Contains(args, "-movflags frag_every_frame+empty_moov+faststart+default_base_moof") {
+		t.Fatalf("resized live MP4 does not fragment every frame: %s", args)
+	}
 }
 
 func TestAPIEncodersReturnsOnlyUsableEncoders(t *testing.T) {

@@ -4183,6 +4183,42 @@ func TestStreamFFmpegOutputFlushesFirstMediaBytes(t *testing.T) {
 	}
 }
 
+func TestCopyFFmpegOutputFlushesEveryChunkBeforeStreamCloses(t *testing.T) {
+	sourceReader, sourceWriter := io.Pipe()
+	response := &countingFlushRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		flushed:          make(chan struct{}, 2),
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- copyFFmpegOutput(response, sourceReader)
+	}()
+
+	for _, chunk := range []string{"first-fragment", "second-fragment"} {
+		if _, err := io.WriteString(sourceWriter, chunk); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-response.flushed:
+			if got := response.Body.String(); !strings.Contains(got, chunk) {
+				t.Fatalf("flushed body = %q, want %q", got, chunk)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%q was buffered until the stream closed", chunk)
+		}
+	}
+
+	_ = sourceWriter.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("copy error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("copy did not stop after source closed")
+	}
+}
+
 type failingStreamResponseWriter struct {
 	header http.Header
 }

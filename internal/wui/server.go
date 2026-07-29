@@ -4157,22 +4157,19 @@ func copyFFmpegOutput(w http.ResponseWriter, output io.Reader) error {
 	for {
 		n, err := output.Read(buffer)
 		if n > 0 {
-			if _, writeErr := w.Write(buffer[:n]); writeErr != nil {
+			written, writeErr := w.Write(buffer[:n])
+			if writeErr != nil {
 				return writeErr
 			}
-			// FFmpeg's fragmented MP4 initialization segment can be smaller than
-			// net/http's response buffer. Flush only after valid media bytes exist
-			// so proxies receive neither an empty response nor a delayed segment.
+			if written != n {
+				return io.ErrShortWrite
+			}
+			// Fragmented live MP4 output is often below net/http and proxy
+			// buffer thresholds after downscaling. Flush every FFmpeg chunk so
+			// Chromium receives each fragment while the stream is still open.
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()
 			}
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					return nil
-				}
-				return err
-			}
-			break
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -4181,8 +4178,6 @@ func copyFFmpegOutput(w http.ResponseWriter, output io.Reader) error {
 			return err
 		}
 	}
-	_, err := io.Copy(w, output)
-	return err
 }
 
 func (s *server) logFFmpegWaitError(ctx context.Context, err error) {
@@ -4363,7 +4358,11 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		args = appendH264CompatibilityArgs(args, videoCodec)
 	}
 	if container == "mp4" {
-		args = append(args, "-movflags", "frag_keyframe+empty_moov+faststart+default_base_moof")
+		fragmentMode := "frag_keyframe"
+		if live && q.Get("s") != "" {
+			fragmentMode = "frag_every_frame"
+		}
+		args = append(args, "-movflags", fragmentMode+"+empty_moov+faststart+default_base_moof")
 		if videoCodec == "h264_amf" {
 			// AMF packets are substantially larger than software-encoded packets.
 			// Interleave each sample so AAC reaches streaming clients without
