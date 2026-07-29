@@ -4326,6 +4326,9 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if !live && seekBeforeInput {
 		args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
 	}
+	if audioCodec != "copy" {
+		args = append(args, "-dual_mono_mode", watchDualMonoMode(q.Get("audio")))
+	}
 	args = append(args, "-f", "mpegts", "-i", input, "-threads", "0")
 	if !live {
 		if !seekBeforeInput {
@@ -4336,7 +4339,11 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		args = append(args, "-t", duration)
 	}
 	if format == "mp4" || mse {
-		args = append(args, "-map", "0:v:0", "-map", watchAudioMap(q.Get("audio")), "-sn", "-dn")
+		args = append(args, "-map", "0:v:0")
+		for _, audioMap := range watchAudioMaps(q.Get("audio")) {
+			args = append(args, "-map", audioMap)
+		}
+		args = append(args, "-sn", "-dn")
 		if videoCodec == "h264_amf" {
 			// AMF can begin video at a different timestamp from MPEG-TS audio.
 			// Normalize AAC timestamps for fragmented MP4 browser playback.
@@ -4401,11 +4408,21 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	return append(args, "-y", "-f", container, "pipe:1")
 }
 
-func watchAudioMap(value string) string {
+func watchAudioMaps(value string) []string {
 	if value == "secondary" {
-		return "0:a:1?"
+		// Prefer a separate secondary audio PID when present, then retain the
+		// first PID as a fallback for ARIB dual-mono broadcasts. The selected
+		// PID is emitted first, which is the track browsers play by default.
+		return []string{"0:a:1?", "0:a:0?"}
 	}
-	return "0:a:0?"
+	return []string{"0:a:0?"}
+}
+
+func watchDualMonoMode(value string) string {
+	if value == "secondary" {
+		return "sub"
+	}
+	return "main"
 }
 
 func legacyWatchStart(value string) string {

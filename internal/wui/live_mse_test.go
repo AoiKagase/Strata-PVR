@@ -103,7 +103,8 @@ func TestLiveMSEFFmpegArgsUseOneProcessForM2TSAndWebVTT(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
 		"-c:s libaribcaption -sub_type ass -fflags",
-		"-map 0:v:0 -map 0:a:1? -sn -dn",
+		"-dual_mono_mode sub -f mpegts -i pipe:0",
+		"-map 0:v:0 -map 0:a:1? -map 0:a:0? -sn -dn",
 		"-c:v libx264",
 		"-s 1280x720",
 		"-y -f mpegts pipe:1 -map 0:s:0 -vn -an -c:s webvtt",

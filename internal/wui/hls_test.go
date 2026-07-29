@@ -17,7 +17,7 @@ func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
 	args := hlsFFmpegArgs("recording.m2ts", dir, hlsPresets["540p"], 12, 30, "secondary", "libopenh264")
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
-		"-re", "-ss 12", "-t 30", "-map 0:a:1?", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p",
+		"-re", "-ss 12 -dual_mono_mode sub -f mpegts -i recording.m2ts", "-t 30", "-map 0:v:0 -map 0:a:1? -map 0:a:0? -sn -dn", "-c:v libopenh264", "-profile:v constrained_baseline", "-pix_fmt yuv420p",
 		"-c:a aac", "-ac 2", "-ar 48000", "-hls_time 4", "-hls_playlist_type event",
 		filepath.Join(dir, "segment%05d.ts"),
 	} {
@@ -30,7 +30,7 @@ func TestHLSFFmpegArgsUseIPhoneCompatibleCodecs(t *testing.T) {
 func TestHLSFFmpegArgsCanReadLiveInputFromPipe(t *testing.T) {
 	args := hlsFFmpegArgs("pipe:0", t.TempDir(), hlsPresets["540p"], 0, 0, "", "libx264")
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-re", "-f mpegts -i pipe:0", "-hls_playlist_type event", "-hls_time 4"} {
+	for _, want := range []string{"-re", "-dual_mono_mode main -f mpegts -i pipe:0", "-hls_playlist_type event", "-hls_time 4"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live HLS args missing %q: %s", want, joined)
 		}

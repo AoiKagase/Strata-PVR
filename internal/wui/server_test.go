@@ -2906,7 +2906,7 @@ func TestAPIRecordedWatchMP4UsesFFmpeg(t *testing.T) {
 	if encoder == "libx264" {
 		encoderOptions = "-profile:v main -preset veryfast -pix_fmt yuv420p"
 	}
-	for _, want := range []string{"-ss 2 -f mpegts -i " + recordedPath, "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v " + encoder, encoderOptions, "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-t 30"} {
+	for _, want := range []string{"-ss 2 -dual_mono_mode main -f mpegts -i " + recordedPath, "-f mp4", "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:v " + encoder, encoderOptions, "-movflags frag_keyframe+empty_moov+faststart+default_base_moof", "-s 640x360", "-b:v 1m", "-bufsize:v 8388608", "-b:a 96k", "-bufsize:a 786432", "-t 30"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
@@ -2950,7 +2950,7 @@ func TestAPIRecordedWatchMP4MapsAudioForBrowserPlayback(t *testing.T) {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-v error", "-ss 2 -f mpegts -i " + recordedPath, "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:a aac", "-ac 2"} {
+	for _, want := range []string{"-v error", "-ss 2 -dual_mono_mode main -f mpegts -i " + recordedPath, "-map 0:v:0 -map 0:a:0?", "-sn -dn", "-c:a aac", "-ac 2"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("ffmpeg args missing %q: %s", want, joined)
 		}
@@ -3043,8 +3043,11 @@ func TestAPIRecordedWatchMP4CanSelectSecondaryAudio(t *testing.T) {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
 	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "-map 0:v:0 -map 0:a:1?") {
-		t.Fatalf("ffmpeg args should select secondary audio: %s", joined)
+	if !strings.Contains(joined, "-dual_mono_mode sub -f mpegts -i "+recordedPath) {
+		t.Fatalf("ffmpeg args should select the dual-mono sub channel: %s", joined)
+	}
+	if !strings.Contains(joined, "-map 0:v:0 -map 0:a:1? -map 0:a:0? -sn -dn") {
+		t.Fatalf("ffmpeg args should prefer a secondary PID and retain the dual-mono fallback: %s", joined)
 	}
 }
 
@@ -3202,7 +3205,7 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
-	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 15 -f mpegts -i "+recordedPath) {
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 15 -dual_mono_mode main -f mpegts -i "+recordedPath) {
 		t.Fatalf("ffmpeg args missing input-side legacy ss: %s", joined)
 	}
 
@@ -3213,7 +3216,7 @@ func TestAPIRecordedWatchMP4HonorsLegacyStartSecond(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("mp4 low-ss status=%d body=%q", res.Code, res.Body.String())
 	}
-	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2 -f mpegts -i "+recordedPath) {
+	if joined := strings.Join(gotArgs, " "); !strings.Contains(joined, "-ss 2 -dual_mono_mode main -f mpegts -i "+recordedPath) {
 		t.Fatalf("ffmpeg args did not clamp input-side legacy ss: %s", joined)
 	}
 }

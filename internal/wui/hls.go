@@ -453,16 +453,16 @@ func hlsFFmpegArgs(input, dir string, p hlsPreset, start, duration int, audio, e
 	if start > 0 {
 		args = append(args, "-ss", strconv.Itoa(start))
 	}
-	args = append(args, "-f", "mpegts", "-i", input)
+	args = append(args, "-dual_mono_mode", watchDualMonoMode(audio), "-f", "mpegts", "-i", input)
 	if duration > 0 {
 		args = append(args, "-t", strconv.Itoa(duration))
 	}
-	audioMap := "0:a:0?"
-	if audio == "secondary" {
-		audioMap = "0:a:1?"
-	}
 	filter := fmt.Sprintf("yadif,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", p.width, p.height, p.width, p.height)
-	args = append(args, "-map", "0:v:0", "-map", audioMap, "-sn", "-dn", "-filter:v", filter, "-c:v", encoder)
+	args = append(args, "-map", "0:v:0")
+	for _, audioMap := range watchAudioMaps(audio) {
+		args = append(args, "-map", audioMap)
+	}
+	args = append(args, "-sn", "-dn", "-filter:v", filter, "-c:v", encoder)
 	args = appendH264CompatibilityArgs(args, encoder)
 	args = append(args, "-r", "24", "-g", "48", "-keyint_min", "48",
 		"-b:v", p.video, "-maxrate:v", p.video, "-bufsize:v", bitrateTimes(p.video, 2),
