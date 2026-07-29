@@ -202,7 +202,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), playbackRequests: newPlaybackRequestSessions(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
@@ -243,6 +243,7 @@ type server struct {
 	recordingPreviews  *recordingPreviewCache
 	mediaProbes        *mediaProbeCache
 	liveSubtitles      *liveSubtitleManager
+	liveMSE            *liveMSESessionManager
 	playbackRequests   *playbackRequestSessions
 	metricsOnce        sync.Once
 	configMu           sync.Mutex
@@ -612,6 +613,9 @@ func shutdownServers(paths Paths, servers []runningServer) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for _, srv := range servers {
+		if srv.wui != nil && srv.wui.liveMSE != nil {
+			srv.wui.liveMSE.stopAll()
+		}
 		if err := srv.server.Shutdown(shutdownCtx); err != nil {
 			_ = logging.AppendLine(filepath.Join(logDir(paths), "wui"), "ERROR: %v", err)
 			return err
@@ -2562,6 +2566,9 @@ func (s *server) beginPlaybackRequest(r *http.Request) (*http.Request, func()) {
 }
 
 func (s *server) stopPlaybackRequest(w http.ResponseWriter, r *http.Request) {
+	if s.liveMSE != nil {
+		s.liveMSE.stop(r.URL.Query().Get("session"))
+	}
 	if s.playbackRequests != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), playbackRequestStopTimeout)
 		defer cancel()
@@ -3882,6 +3889,10 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
 		}
+		if r.URL.Query().Get("mode") == "mse" {
+			s.handleLiveMSEVideo(w, r, channel.ID, serviceID)
+			return
+		}
 		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
@@ -3948,6 +3959,10 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
+	if r.URL.Query().Get("mode") == "mse" {
+		s.handleLiveMSESubtitles(w, r)
+		return
+	}
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -4265,13 +4280,17 @@ func (s *server) aribCaptionDecoder() (string, error) {
 
 func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input string, seekBeforeInput bool, encoder string) []string {
 	q := r.URL.Query()
+	mse := live && format == "m2ts" && q.Get("mode") == "mse"
 	videoCodec := q.Get("c:v")
 	audioCodec := q.Get("c:a")
 	container := q.Get("f")
 	videoBitrate := q.Get("b:v")
 	audioBitrate := q.Get("b:a")
-	if format == "mp4" {
+	if format == "mp4" || mse {
 		container = "mp4"
+		if mse {
+			container = "mpegts"
+		}
 		if videoCodec == "" {
 			videoCodec = encoder
 		}
@@ -4316,7 +4335,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if duration := q.Get("t"); duration != "" {
 		args = append(args, "-t", duration)
 	}
-	if format == "mp4" {
+	if format == "mp4" || mse {
 		args = append(args, "-map", "0:v:0", "-map", watchAudioMap(q.Get("audio")), "-sn", "-dn")
 		if videoCodec == "h264_amf" {
 			// AMF can begin video at a different timestamp from MPEG-TS audio.
@@ -4330,7 +4349,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	}
 	if audioCodec != "" {
 		args = append(args, "-c:a", audioCodec)
-		if format == "mp4" && audioCodec != "copy" {
+		if (format == "mp4" || mse) && audioCodec != "copy" {
 			args = append(args, "-ac", "2")
 		}
 	}
@@ -4369,6 +4388,15 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 			// waiting behind an entire video fragment.
 			args = append(args, "-frag_interleave", "1", "-flush_packets", "1")
 		}
+	}
+	if mse {
+		args = append(args,
+			"-max_delay", "250000",
+			"-max_interleave_delta", "1",
+			"-muxdelay", "0",
+			"-muxpreload", "0",
+			"-flush_packets", "1",
+		)
 	}
 	return append(args, "-y", "-f", container, "pipe:1")
 }

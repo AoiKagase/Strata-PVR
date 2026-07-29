@@ -985,13 +985,15 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 		},
 		filepath.Join("..", "..", "web", "player.html"): {
 			`<video id="externalPlayer" controls autoplay playsinline aria-label="視聴プレイヤー">`,
-			`<track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語" default>`,
+			`<track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語">`,
+			`<script src="/mpegts.js"></script>`,
 			`var src = params.get("src");`,
 			`var subtitles = params.get("subtitles");`,
 			`var mediaURL = new URL(src, window.location.href);`,
 			`function recoverLivePlayback(reason)`,
-			`video.src = mediaURL.toString();`,
-			`subtitleURL.searchParams.set("session", subtitleSessionToken);`,
+			`resolvedSrc = mediaURL.toString();`,
+			`window.mpegts.createPlayer({`,
+			`subtitleURL.searchParams.set("session", playbackSessionToken);`,
 			`subtitleTrack.src = subtitleURL.toString();`,
 		},
 	}
@@ -1015,9 +1017,11 @@ func TestPlayersAbortSubtitleRequestsWhenClosed(t *testing.T) {
 			`function resetPlayerSubtitleTrack(track)`,
 			`track.parentNode.replaceChild(replacement, track);`,
 			`resetPlayerSubtitleTrack(track);`,
-			`function withPlaybackSession(url)`,
+			`function withPlaybackSession(url, token)`,
 			`var playerSourceGeneration = 0;`,
 			`var playerSourceStopPromise = Promise.resolve();`,
+			`destroyPlayerMSE(video);`,
+			`playerSubtitleAbort.abort();`,
 			`queuePlaybackStop(previousURL).finally(function ()`,
 			`sourceGeneration !== playerSourceGeneration`,
 			`queuePlaybackStop(playerCurrentURL);`,
@@ -1025,6 +1029,8 @@ func TestPlayersAbortSubtitleRequestsWhenClosed(t *testing.T) {
 		},
 		filepath.Join("..", "..", "web", "player.html"): {
 			`window.addEventListener("pagehide"`,
+			`destroyMSEPlayer();`,
+			`subtitleAbort.abort();`,
 			`subtitleTrack.removeAttribute("src");`,
 			`subtitleTrack.remove();`,
 			`mediaURL.searchParams.set("session", playbackSessionToken);`,
@@ -1041,6 +1047,66 @@ func TestPlayersAbortSubtitleRequestsWhenClosed(t *testing.T) {
 			if !strings.Contains(source, want) {
 				t.Fatalf("%s missing %q", path, want)
 			}
+		}
+	}
+}
+
+func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	appSource := string(app)
+	for _, want := range []string{
+		`return channelURL(channelID, "watch", "m2ts", mseQuery);`,
+		`return liveChannelSubtitlesURL(channelID, query);`,
+		`var nextURL = withPlaybackSession(url, nextToken);`,
+		`type: "m2ts"`,
+		`liveBufferLatencyChasing: true`,
+		`var requestURL = withPlaybackSession(url, playerPlaybackToken);`,
+		`return consumePlayerLiveWebVTT(response, textTrack, sourceGeneration, controller.signal);`,
+	} {
+		if !strings.Contains(appSource, want) {
+			t.Fatalf("web/app.js missing %q", want)
+		}
+	}
+	if got := strings.Count(appSource, `return channelSubtitlesURL(`); got != 1 {
+		t.Fatalf("live subtitle builders should use the MSE-aware URL, direct channelSubtitlesURL returns=%d", got)
+	}
+
+	index, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSource := string(index)
+	mpegtsIndex := strings.Index(indexSource, `<script src="/mpegts.js"></script>`)
+	appIndex := strings.Index(indexSource, `<script src="/app.js"></script>`)
+	if mpegtsIndex < 0 || appIndex < 0 || mpegtsIndex > appIndex {
+		t.Fatal("web/index.html must load mpegts.js before app.js")
+	}
+
+	player, err := os.ReadFile(filepath.Join("..", "..", "web", "player.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	playerSource := string(player)
+	for _, want := range []string{
+		`window.mpegts.createPlayer({`,
+		`type: "m2ts"`,
+		`subtitleURL.searchParams.set("session", playbackSessionToken);`,
+		`return consumeLiveWebVTT(response, generation, controller.signal);`,
+		`["pause", "unload", "detachMediaElement", "destroy"]`,
+	} {
+		if !strings.Contains(playerSource, want) {
+			t.Fatalf("web/player.html missing %q", want)
+		}
+	}
+	for path, source := range map[string]string{
+		"web/app.js":      appSource,
+		"web/player.html": playerSource,
+	} {
+		if strings.Contains(strings.ToLower(source), "aribb24.js") {
+			t.Fatalf("%s unexpectedly depends on aribb24.js", path)
 		}
 	}
 }
@@ -5405,6 +5471,7 @@ func TestStaticServingUsesEmbeddedAssetsWithoutExternalDirectory(t *testing.T) {
 		{path: "/styles.css", contentType: "text/css; charset=utf-8", contains: "--"},
 		{path: "/app.js", contentType: "application/javascript", contains: "playerSubtitleSourceBuilder"},
 		{path: "/app.js", contentType: "application/javascript", contains: "removeStaleLiveSubtitleCues"},
+		{path: "/mpegts.js", contentType: "application/javascript", contains: `return"1.8.0"`},
 	} {
 		req := httptest.NewRequest(http.MethodGet, test.path, nil)
 		res := httptest.NewRecorder()

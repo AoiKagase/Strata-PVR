@@ -32,6 +32,11 @@
   var playerFallbackDuration = 0;
   var playerKnownDuration = 0;
   var playerCurrentURL = "";
+  var playerPlaybackToken = "";
+  var playerMSE = null;
+  var playerSubtitleAbort = null;
+  var playerLiveTextTrack = null;
+  var playerLiveCueLimit = 128;
   var playerSourceGeneration = 0;
   var playerSourceStopPromise = Promise.resolve();
   var pendingConfirmResolve = null;
@@ -2157,8 +2162,8 @@
     return programSubtitlesURL("recording", program, query);
   }
 
-  function channelSubtitlesURL(channelID) {
-    return channelURL(channelID, "subtitles", "vtt");
+  function channelSubtitlesURL(channelID, query) {
+    return channelURL(channelID, "subtitles", "vtt", query);
   }
 
   function channelLogoURL(channelID) {
@@ -2254,7 +2259,30 @@
       }
       return channelURL(channelID, "hls/index", "m3u8", hlsQuery);
     }
+    if (liveMSESupported()) {
+      var mseQuery = cloneQuery(query || {});
+      mseQuery.mode = "mse";
+      return channelURL(channelID, "watch", "m2ts", mseQuery);
+    }
     return channelURL(channelID, "watch", "mp4", query);
+  }
+
+  function liveMSESupported() {
+    if (!window.mpegts || typeof window.mpegts.isSupported !== "function" || !window.mpegts.isSupported()) {
+      return false;
+    }
+    var features = typeof window.mpegts.getFeatureList === "function" ? window.mpegts.getFeatureList() : null;
+    return !features || features.mseLivePlayback !== false;
+  }
+
+  function liveChannelSubtitlesURL(channelID, query) {
+    var subtitleQuery = cloneQuery(query || {});
+    if (liveMSESupported()) {
+      subtitleQuery.mode = "mse";
+    } else {
+      delete subtitleQuery.mode;
+    }
+    return channelSubtitlesURL(channelID, subtitleQuery);
   }
 
   function openURL(url) {
@@ -2522,12 +2550,14 @@
     }
     var sourceGeneration = ++playerSourceGeneration;
     var previousURL = playerCurrentURL;
-    var nextURL = withPlaybackSession(url);
+    var nextToken = newPlaybackSessionToken();
+    var nextURL = withPlaybackSession(url, nextToken);
     setPlayerStatus("");
     playerCurrentURL = "";
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
+    playerPlaybackToken = "";
+    stopPlayerLiveSubtitles();
+    destroyPlayerMSE(video);
+    resetPlayerSubtitleTrack(byId("playerSubtitleTrack"));
     playerBaseQuery = cloneQuery(query || {});
     playerKnownDuration = playerConfiguredDuration();
     updatePlayerControls();
@@ -2535,11 +2565,26 @@
       if (sourceGeneration !== playerSourceGeneration) {
         return;
       }
-      video.src = nextURL;
       playerCurrentURL = nextURL;
+      playerPlaybackToken = nextToken;
+      try {
+        if (isLiveMSEURL(nextURL)) {
+          startPlayerMSE(video, nextURL, sourceGeneration);
+        } else {
+          video.src = nextURL;
+        }
+      } catch (error) {
+        playerCurrentURL = "";
+        playerPlaybackToken = "";
+        destroyPlayerMSE(video);
+        queuePlaybackStop(nextURL);
+        setPlayerStatus("ライブ再生を初期化できませんでした。再試行してください。");
+        return;
+      }
       updatePlayerSubtitleTrack(playerBaseQuery);
       updatePlayerControls();
-      video.play().catch(function (error) {
+      var playPromise = playerMSE ? playerMSE.play() : video.play();
+      Promise.resolve(playPromise).catch(function (error) {
         if (sourceGeneration !== playerSourceGeneration) {
           return;
         }
@@ -2553,6 +2598,75 @@
         }
       });
     });
+  }
+
+  function isLiveMSEURL(url) {
+    if (!url) {
+      return false;
+    }
+    try {
+      var parsed = new URL(url, window.location.href);
+      return /\/api\/channel\/[^/]+\/watch\.m2ts$/.test(parsed.pathname) && parsed.searchParams.get("mode") === "mse";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function startPlayerMSE(video, url, sourceGeneration) {
+    if (!video || !liveMSESupported()) {
+      throw new Error("mpegts.js is not available");
+    }
+    configureMPEGTSLogging();
+    playerMSE = window.mpegts.createPlayer({
+      type: "m2ts",
+      isLive: true,
+      url: new URL(url, window.location.href).toString(),
+      withCredentials: true
+    }, {
+      enableWorker: true,
+      liveBufferLatencyChasing: true,
+      liveBufferLatencyMinRemain: 1.0,
+      liveBufferLatencyMaxLatency: 2.0
+    });
+    playerMSE.on(window.mpegts.Events.ERROR, function () {
+      if (sourceGeneration !== playerSourceGeneration) {
+        return;
+      }
+      setPlayerStatus("ライブ配信が中断されました。再試行してください。");
+      updatePlayerControls();
+    });
+    playerMSE.attachMediaElement(video);
+    playerMSE.load();
+  }
+
+  function configureMPEGTSLogging() {
+    var logging = window.mpegts && window.mpegts.LoggingControl;
+    if (!logging) {
+      return;
+    }
+    logging.enableVerbose = false;
+    logging.enableDebug = false;
+    logging.enableInfo = false;
+    logging.enableWarn = false;
+  }
+
+  function destroyPlayerMSE(video) {
+    var mse = playerMSE;
+    playerMSE = null;
+    if (mse) {
+      ["pause", "unload", "detachMediaElement", "destroy"].forEach(function (method) {
+        try {
+          mse[method]();
+        } catch (error) {
+          // A partially initialized MSE player may already be detached.
+        }
+      });
+    }
+    if (video) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
   }
 
   function togglePlayerPlayback() {
@@ -2646,6 +2760,9 @@
     video.addEventListener("playing", function () {
       setPlayerStatus("");
     });
+    video.addEventListener("timeupdate", function () {
+      prunePlayerLiveSubtitleCues(video.currentTime);
+    });
   }
 
   function bindPlayerSubtitleEvents(track) {
@@ -2720,6 +2837,21 @@
   function updatePlayerSubtitleTrack(query) {
     var select = byId("playerSubtitle");
     var track = byId("playerSubtitleTrack");
+    if (isLiveMSEURL(playerCurrentURL)) {
+      if (track) {
+        resetPlayerSubtitleTrack(track);
+      }
+      stopPlayerLiveSubtitles();
+      if (!select || !playerSubtitleSourceBuilder || select.value !== "ja") {
+        return;
+      }
+      var liveURL = playerSubtitleSourceBuilder(cloneQuery(query || {}));
+      if (liveURL) {
+        startPlayerLiveSubtitles(liveURL, playerSourceGeneration);
+      }
+      return;
+    }
+    stopPlayerLiveSubtitles();
     if (!select || !track || !playerSubtitleSourceBuilder || select.value !== "ja") {
       if (track) {
         resetPlayerSubtitleTrack(track);
@@ -2734,9 +2866,226 @@
     if (track.getAttribute("data-source-url") !== url) {
       track = resetPlayerSubtitleTrack(track);
       track.setAttribute("data-source-url", url);
-      track.setAttribute("src", withPlaybackSession(url));
+      track.setAttribute("src", withPlaybackSession(url, playerPlaybackToken));
     }
     track.track.mode = "showing";
+  }
+
+  function livePlayerTextTrack() {
+    var video = byId("playerVideo");
+    if (!video) {
+      return null;
+    }
+    if (!playerLiveTextTrack) {
+      playerLiveTextTrack = video.addTextTrack("subtitles", "日本語", "ja");
+    }
+    return playerLiveTextTrack;
+  }
+
+  function clearPlayerLiveSubtitleCues() {
+    if (!playerLiveTextTrack || !playerLiveTextTrack.cues) {
+      return;
+    }
+    Array.prototype.slice.call(playerLiveTextTrack.cues).forEach(function (cue) {
+      try {
+        playerLiveTextTrack.removeCue(cue);
+      } catch (error) {
+        // The cue may have expired while the cue list was copied.
+      }
+    });
+  }
+
+  function stopPlayerLiveSubtitles() {
+    if (playerSubtitleAbort) {
+      playerSubtitleAbort.abort();
+      playerSubtitleAbort = null;
+    }
+    clearPlayerLiveSubtitleCues();
+    if (playerLiveTextTrack) {
+      playerLiveTextTrack.mode = "disabled";
+    }
+  }
+
+  function parseVTTTimestamp(value) {
+    var parts = String(value || "").replace(",", ".").split(":");
+    if (parts.length !== 2 && parts.length !== 3) {
+      return NaN;
+    }
+    var seconds = Number(parts.pop());
+    var minutes = Number(parts.pop());
+    var hours = parts.length ? Number(parts.pop()) : 0;
+    if (![seconds, minutes, hours].every(isFinite)) {
+      return NaN;
+    }
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  function applyVTTCueSettings(cue, settings) {
+    String(settings || "").trim().split(/\s+/).forEach(function (setting) {
+      var separator = setting.indexOf(":");
+      if (separator < 1) {
+        return;
+      }
+      var key = setting.slice(0, separator);
+      var value = setting.slice(separator + 1);
+      try {
+        if (key === "align") {
+          cue.align = value;
+        } else if (key === "vertical") {
+          cue.vertical = value;
+        } else if (key === "line") {
+          cue.line = value === "auto" ? "auto" : Number(value.replace("%", ""));
+        } else if (key === "position") {
+          cue.position = Number(value.replace("%", ""));
+        } else if (key === "size") {
+          cue.size = Number(value.replace("%", ""));
+        }
+      } catch (error) {
+        // Ignore settings unsupported by the current browser.
+      }
+    });
+  }
+
+  function appendPlayerLiveVTTBlock(block, textTrack, sourceGeneration) {
+    if (sourceGeneration !== playerSourceGeneration || !block) {
+      return;
+    }
+    var lines = block.split("\n");
+    if (!lines.length || /^WEBVTT(?:\s|$)/.test(lines[0]) || /^(NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0])) {
+      return;
+    }
+    var timingIndex = lines[0].indexOf("-->") >= 0 ? 0 : 1;
+    if (!lines[timingIndex]) {
+      return;
+    }
+    var timing = lines[timingIndex].match(/^(\S+)\s+-->\s+(\S+)(.*)$/);
+    if (!timing) {
+      return;
+    }
+    var start = parseVTTTimestamp(timing[1]);
+    var end = parseVTTTimestamp(timing[2]);
+    if (!isFinite(start) || !isFinite(end) || end <= start || typeof window.VTTCue !== "function") {
+      return;
+    }
+    var existingCues = textTrack.cues ? Array.prototype.slice.call(textTrack.cues) : [];
+    var previousCue = existingCues.length ? existingCues[existingCues.length - 1] : null;
+    if (previousCue && previousCue.endTime > start) {
+      previousCue.endTime = start;
+    }
+    var cueText = lines.slice(timingIndex + 1).join("\n");
+    if (!cueText.trim()) {
+      prunePlayerLiveSubtitleCues(start);
+      return;
+    }
+    if (end - start > 60) {
+      end = start + 10;
+    }
+    var cue = new window.VTTCue(start, end, cueText);
+    applyVTTCueSettings(cue, timing[3]);
+    textTrack.addCue(cue);
+    prunePlayerLiveSubtitleCues(byId("playerVideo") ? byId("playerVideo").currentTime : 0);
+  }
+
+  function prunePlayerLiveSubtitleCues(currentTime) {
+    if (!playerLiveTextTrack || !playerLiveTextTrack.cues) {
+      return;
+    }
+    var cues = Array.prototype.slice.call(playerLiveTextTrack.cues);
+    var staleBefore = Math.max(0, Number(currentTime) - 30);
+    cues.forEach(function (cue, index) {
+      if (cue.endTime < staleBefore || index < cues.length - playerLiveCueLimit) {
+        try {
+          playerLiveTextTrack.removeCue(cue);
+        } catch (error) {
+          // The cue may already have been removed.
+        }
+      }
+    });
+  }
+
+  function consumePlayerLiveWebVTT(response, textTrack, sourceGeneration, signal) {
+    if (!response.body || typeof response.body.getReader !== "function") {
+      return response.text().then(function (body) {
+        body.replace(/\r\n/g, "\n").split(/\n\n+/).forEach(function (block) {
+          appendPlayerLiveVTTBlock(block.trim(), textTrack, sourceGeneration);
+        });
+      });
+    }
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder("utf-8");
+    var pending = "";
+    function emitCompleteBlocks(flush) {
+      pending = pending.replace(/\r\n/g, "\n");
+      var separator;
+      while ((separator = pending.indexOf("\n\n")) >= 0) {
+        var block = pending.slice(0, separator);
+        pending = pending.slice(separator + 2);
+        appendPlayerLiveVTTBlock(block.trim(), textTrack, sourceGeneration);
+      }
+      if (flush && pending.trim()) {
+        appendPlayerLiveVTTBlock(pending.trim(), textTrack, sourceGeneration);
+        pending = "";
+      }
+    }
+    function pump() {
+      if (signal.aborted || sourceGeneration !== playerSourceGeneration) {
+        return reader.cancel();
+      }
+      return reader.read().then(function (result) {
+        if (result.done) {
+          pending += decoder.decode();
+          emitCompleteBlocks(true);
+          return;
+        }
+        pending += decoder.decode(result.value, { stream: true });
+        emitCompleteBlocks(false);
+        return pump();
+      });
+    }
+    return pump();
+  }
+
+  function startPlayerLiveSubtitles(url, sourceGeneration) {
+    var textTrack = livePlayerTextTrack();
+    if (!textTrack || !playerPlaybackToken) {
+      return;
+    }
+    var controller = new AbortController();
+    playerSubtitleAbort = controller;
+    clearPlayerLiveSubtitleCues();
+    textTrack.mode = "showing";
+    var requestURL = withPlaybackSession(url, playerPlaybackToken);
+    fetch(requestURL, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal
+    }).then(function (response) {
+      if (sourceGeneration !== playerSourceGeneration || controller.signal.aborted) {
+        return null;
+      }
+      if (response.status === 204) {
+        return null;
+      }
+      if (!response.ok) {
+        var error = new Error("subtitle request failed");
+        error.status = response.status;
+        throw error;
+      }
+      return consumePlayerLiveWebVTT(response, textTrack, sourceGeneration, controller.signal);
+    }).catch(function (error) {
+      if (controller.signal.aborted || sourceGeneration !== playerSourceGeneration || error && error.name === "AbortError") {
+        return;
+      }
+      if (error && error.status === 503) {
+        setPlayerStatus("字幕を利用できません。FFmpegにlibaribcaptionを含むビルドが必要です。");
+        return;
+      }
+      setPlayerStatus("ライブ字幕を受信できませんでした。再試行してください。");
+    }).finally(function () {
+      if (playerSubtitleAbort === controller) {
+        playerSubtitleAbort = null;
+      }
+    });
   }
 
   function changePlayerSubtitle() {
@@ -2877,9 +3226,9 @@
     playerSourceGeneration += 1;
     queuePlaybackStop(playerCurrentURL);
     playerCurrentURL = "";
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
+    playerPlaybackToken = "";
+    stopPlayerLiveSubtitles();
+    destroyPlayerMSE(video);
     playerSourceBuilder = null;
     playerSubtitleSourceBuilder = null;
     playerBaseQuery = null;
@@ -2902,12 +3251,12 @@
     return "playback_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2);
   }
 
-  function withPlaybackSession(url) {
+  function withPlaybackSession(url, token) {
     if (!url) {
       return url;
     }
     var parsed = new URL(url, window.location.href);
-    parsed.searchParams.set("session", newPlaybackSessionToken());
+    parsed.searchParams.set("session", token || newPlaybackSessionToken());
     return parsed.pathname + parsed.search + parsed.hash;
   }
 
@@ -3050,8 +3399,8 @@
           row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
             openAdjustablePlayer(program.title || channelID || "チャンネル", function (query) {
               return liveChannelPlaybackURL(channelID, query);
-            }, null, false, 0, "", function () {
-              return channelSubtitlesURL(channelID);
+            }, null, false, 0, "", function (query) {
+              return liveChannelSubtitlesURL(channelID, query);
             });
           }));
         }
@@ -3463,8 +3812,8 @@
       actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
         openAdjustablePlayer(group.name || group.id || "チャンネル", function (query) {
           return liveChannelPlaybackURL(group.id, query);
-        }, null, false, 0, "", function () {
-          return channelSubtitlesURL(group.id);
+        }, null, false, 0, "", function (query) {
+          return liveChannelSubtitlesURL(group.id, query);
         });
       }, "small-button"));
     }
@@ -4396,8 +4745,8 @@
     row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
       openAdjustablePlayer(label || channelID || "チャンネル", function (query) {
         return liveChannelPlaybackURL(channelID, query);
-      }, null, false, 0, "", function () {
-        return channelSubtitlesURL(channelID);
+      }, null, false, 0, "", function (query) {
+        return liveChannelSubtitlesURL(channelID, query);
       });
     }));
     return row;
@@ -6981,6 +7330,7 @@
         playerDialogReturnFocus = null;
       });
     }
+    window.addEventListener("pagehide", stopPlayerVideo);
     var forceSchedulerButton = byId("forceSchedulerButton");
     if (forceSchedulerButton) {
       forceSchedulerButton.addEventListener("click", forceScheduler);

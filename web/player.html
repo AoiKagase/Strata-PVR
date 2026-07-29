@@ -128,13 +128,14 @@
   </header>
   <main>
     <video id="externalPlayer" controls autoplay playsinline aria-label="視聴プレイヤー">
-      <track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語" default>
+      <track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語">
     </video>
     <div class="message" id="message" role="status" aria-live="polite" hidden>
       <p id="messageText">再生 URL が指定されていません。</p>
       <button id="retryButton" type="button" hidden>再試行</button>
     </div>
   </main>
+  <script src="/mpegts.js"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
@@ -152,7 +153,11 @@
       var reconnectAttempts = 0;
       var maxReconnectAttempts = 5;
       var playbackSessionToken = "";
-      var subtitleSessionToken = "";
+      var msePlayer = null;
+      var subtitleAbort = null;
+      var liveTextTrack = null;
+      var loadGeneration = 0;
+      var liveCueLimit = 128;
       document.title = title;
       titleNode.textContent = title;
 
@@ -180,7 +185,19 @@
       }
 
       function isLiveStream() {
-        return /\/api\/channel\/[^/]+\/hls\/index\.m3u8(?:\?|$)/.test(src || "");
+        return /\/api\/channel\/[^/]+\/(?:hls\/index\.m3u8|watch\.m2ts)(?:\?|$)/.test(src || "");
+      }
+
+      function isMSEStream() {
+        if (!src || !window.mpegts || typeof window.mpegts.isSupported !== "function" || !window.mpegts.isSupported()) {
+          return false;
+        }
+        try {
+          var parsed = new URL(src, window.location.href);
+          return /\/api\/channel\/[^/]+\/watch\.m2ts$/.test(parsed.pathname) && parsed.searchParams.get("mode") === "mse";
+        } catch (error) {
+          return false;
+        }
       }
 
       function clearRecoveryTimer() {
@@ -199,18 +216,216 @@
 
       function stopPlaybackRequest(url) {
         if (!url) {
-          return;
+          return Promise.resolve();
         }
         var target;
         try {
           target = new URL(url, window.location.href);
         } catch (error) {
-          return;
+          return Promise.resolve();
         }
         if (target.origin !== window.location.origin || !/\/api\/(?:recorded|recording|channel)\/[^/]+\/(?:hls\/index\.m3u8|watch\.(?:mp4|m2ts)|subtitles\.vtt)$/.test(target.pathname)) {
+          return Promise.resolve();
+        }
+        return fetch(target.toString(), { method: "DELETE", keepalive: true }).catch(function () {});
+      }
+
+      function destroyMSEPlayer() {
+        var player = msePlayer;
+        msePlayer = null;
+        if (!player) {
           return;
         }
-        fetch(target.toString(), { method: "DELETE", keepalive: true }).catch(function () {});
+        ["pause", "unload", "detachMediaElement", "destroy"].forEach(function (method) {
+          try {
+            player[method]();
+          } catch (error) {
+            // A failed startup may leave the player only partially attached.
+          }
+        });
+      }
+
+      function clearLiveSubtitleCues() {
+        if (!liveTextTrack || !liveTextTrack.cues) {
+          return;
+        }
+        Array.prototype.slice.call(liveTextTrack.cues).forEach(function (cue) {
+          try {
+            liveTextTrack.removeCue(cue);
+          } catch (error) {
+            // The cue may already have expired.
+          }
+        });
+      }
+
+      function stopLiveSubtitles() {
+        if (subtitleAbort) {
+          subtitleAbort.abort();
+          subtitleAbort = null;
+        }
+        clearLiveSubtitleCues();
+        if (liveTextTrack) {
+          liveTextTrack.mode = "disabled";
+        }
+      }
+
+      function parseVTTTimestamp(value) {
+        var parts = String(value || "").replace(",", ".").split(":");
+        if (parts.length !== 2 && parts.length !== 3) {
+          return NaN;
+        }
+        var seconds = Number(parts.pop());
+        var minutes = Number(parts.pop());
+        var hours = parts.length ? Number(parts.pop()) : 0;
+        return isFinite(seconds) && isFinite(minutes) && isFinite(hours) ? hours * 3600 + minutes * 60 + seconds : NaN;
+      }
+
+      function pruneLiveSubtitleCues() {
+        if (!liveTextTrack || !liveTextTrack.cues) {
+          return;
+        }
+        var cues = Array.prototype.slice.call(liveTextTrack.cues);
+        var staleBefore = Math.max(0, video.currentTime - 30);
+        cues.forEach(function (cue, index) {
+          if (cue.endTime < staleBefore || index < cues.length - liveCueLimit) {
+            try {
+              liveTextTrack.removeCue(cue);
+            } catch (error) {
+              // The cue may already have been removed.
+            }
+          }
+        });
+      }
+
+      function appendLiveVTTBlock(block, generation) {
+        if (!block || generation !== loadGeneration || typeof window.VTTCue !== "function") {
+          return;
+        }
+        var lines = block.split("\n");
+        if (!lines.length || /^WEBVTT(?:\s|$)/.test(lines[0]) || /^(NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0])) {
+          return;
+        }
+        var timingIndex = lines[0].indexOf("-->") >= 0 ? 0 : 1;
+        var timing = lines[timingIndex] && lines[timingIndex].match(/^(\S+)\s+-->\s+(\S+)(.*)$/);
+        if (!timing) {
+          return;
+        }
+        var start = parseVTTTimestamp(timing[1]);
+        var end = parseVTTTimestamp(timing[2]);
+        if (!isFinite(start) || !isFinite(end) || end <= start) {
+          return;
+        }
+        var existingCues = liveTextTrack.cues ? Array.prototype.slice.call(liveTextTrack.cues) : [];
+        var previousCue = existingCues.length ? existingCues[existingCues.length - 1] : null;
+        if (previousCue && previousCue.endTime > start) {
+          previousCue.endTime = start;
+        }
+        var cueText = lines.slice(timingIndex + 1).join("\n");
+        if (!cueText.trim()) {
+          pruneLiveSubtitleCues();
+          return;
+        }
+        if (end - start > 60) {
+          end = start + 10;
+        }
+        var cue = new window.VTTCue(start, end, cueText);
+        String(timing[3] || "").trim().split(/\s+/).forEach(function (setting) {
+          var separator = setting.indexOf(":");
+          if (separator < 1) {
+            return;
+          }
+          var key = setting.slice(0, separator);
+          var value = setting.slice(separator + 1);
+          try {
+            if (key === "align") {
+              cue.align = value;
+            } else if (key === "vertical") {
+              cue.vertical = value;
+            } else if (key === "line") {
+              cue.line = value === "auto" ? "auto" : Number(value.replace("%", ""));
+            } else if (key === "position") {
+              cue.position = Number(value.replace("%", ""));
+            } else if (key === "size") {
+              cue.size = Number(value.replace("%", ""));
+            }
+          } catch (error) {
+            // Ignore cue settings unsupported by the current browser.
+          }
+        });
+        liveTextTrack.addCue(cue);
+        pruneLiveSubtitleCues();
+      }
+
+      function consumeLiveWebVTT(response, generation, signal) {
+        var reader = response.body && typeof response.body.getReader === "function" ? response.body.getReader() : null;
+        if (!reader) {
+          return response.text().then(function (body) {
+            body.replace(/\r\n/g, "\n").split(/\n\n+/).forEach(function (block) {
+              appendLiveVTTBlock(block.trim(), generation);
+            });
+          });
+        }
+        var decoder = new TextDecoder("utf-8");
+        var pending = "";
+        function emitBlocks(flush) {
+          pending = pending.replace(/\r\n/g, "\n");
+          var separator;
+          while ((separator = pending.indexOf("\n\n")) >= 0) {
+            var block = pending.slice(0, separator);
+            pending = pending.slice(separator + 2);
+            appendLiveVTTBlock(block.trim(), generation);
+          }
+          if (flush && pending.trim()) {
+            appendLiveVTTBlock(pending.trim(), generation);
+            pending = "";
+          }
+        }
+        function pump() {
+          if (signal.aborted || generation !== loadGeneration) {
+            return reader.cancel();
+          }
+          return reader.read().then(function (result) {
+            if (result.done) {
+              pending += decoder.decode();
+              emitBlocks(true);
+              return;
+            }
+            pending += decoder.decode(result.value, { stream: true });
+            emitBlocks(false);
+            return pump();
+          });
+        }
+        return pump();
+      }
+
+      function startLiveSubtitles(url, generation) {
+        liveTextTrack = liveTextTrack || video.addTextTrack("subtitles", "日本語", "ja");
+        clearLiveSubtitleCues();
+        liveTextTrack.mode = "showing";
+        var controller = new AbortController();
+        subtitleAbort = controller;
+        fetch(url, {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal
+        }).then(function (response) {
+          if (response.status === 204 || generation !== loadGeneration || controller.signal.aborted) {
+            return null;
+          }
+          if (!response.ok) {
+            throw new Error("subtitle HTTP " + response.status);
+          }
+          return consumeLiveWebVTT(response, generation, controller.signal);
+        }).catch(function (error) {
+          if (controller.signal.aborted || generation !== loadGeneration || error && error.name === "AbortError") {
+            return;
+          }
+          // Caption failures must not interrupt the live video session.
+        }).finally(function () {
+          if (subtitleAbort === controller) {
+            subtitleAbort = null;
+          }
+        });
       }
 
       function recoverLivePlayback(reason) {
@@ -239,35 +454,84 @@
         if (!isRecovery) {
           reconnectAttempts = 0;
         }
+        var generation = ++loadGeneration;
         try {
-          stopPlaybackRequest(resolvedSrc);
-          stopPlaybackRequest(subtitleTrack.getAttribute("src"));
+          var previousMedia = resolvedSrc || video.src;
+          var previousSubtitle = subtitleTrack.getAttribute("src");
+          stopLiveSubtitles();
+          destroyMSEPlayer();
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+          subtitleTrack.track.mode = "disabled";
+          subtitleTrack.removeAttribute("src");
           playbackSessionToken = newSessionToken();
-          subtitleSessionToken = newSessionToken();
           var mediaURL = new URL(src, window.location.href);
           mediaURL.searchParams.set("session", playbackSessionToken);
           if (isRecovery) {
             mediaURL.searchParams.set("reconnect", String(Date.now()));
           }
-          video.src = mediaURL.toString();
-          if (subtitles) {
-            try {
-              var subtitleURL = new URL(subtitles, window.location.href);
-              subtitleURL.searchParams.set("session", subtitleSessionToken);
-              subtitleTrack.src = subtitleURL.toString();
-            } catch (error) {
-              subtitleTrack.removeAttribute("src");
+          resolvedSrc = mediaURL.toString();
+          Promise.all([
+            stopPlaybackRequest(previousMedia),
+            stopPlaybackRequest(previousSubtitle)
+          ]).finally(function () {
+            if (generation !== loadGeneration) {
+              return;
             }
-          } else {
-            subtitleTrack.removeAttribute("src");
-          }
-          resolvedSrc = video.src;
-          video.hidden = false;
-          message.hidden = true;
-          retryButton.hidden = true;
-          video.load();
-          video.play().catch(function () {
-            // The browser may require a manual click before playback starts.
+            try {
+              if (isMSEStream()) {
+                var logging = window.mpegts.LoggingControl;
+                if (logging) {
+                  logging.enableVerbose = false;
+                  logging.enableDebug = false;
+                  logging.enableInfo = false;
+                  logging.enableWarn = false;
+                }
+                msePlayer = window.mpegts.createPlayer({
+                  type: "m2ts",
+                  isLive: true,
+                  url: resolvedSrc,
+                  withCredentials: true
+                }, {
+                  enableWorker: true,
+                  liveBufferLatencyChasing: true,
+                  liveBufferLatencyMinRemain: 1.0,
+                  liveBufferLatencyMaxLatency: 2.0
+                });
+                msePlayer.on(window.mpegts.Events.ERROR, function () {
+                  if (generation === loadGeneration) {
+                    recoverLivePlayback("ライブ配信が中断されました。");
+                  }
+                });
+                msePlayer.attachMediaElement(video);
+                msePlayer.load();
+              } else {
+                video.src = resolvedSrc;
+                video.load();
+              }
+              if (subtitles) {
+                var subtitleURL = new URL(subtitles, window.location.href);
+                subtitleURL.searchParams.set("session", playbackSessionToken);
+                if (isMSEStream()) {
+                  startLiveSubtitles(subtitleURL.toString(), generation);
+                } else {
+                  subtitleTrack.src = subtitleURL.toString();
+                  subtitleTrack.track.mode = "showing";
+                }
+              }
+              video.hidden = false;
+              message.hidden = true;
+              retryButton.hidden = true;
+              var playPromise = msePlayer ? msePlayer.play() : video.play();
+              Promise.resolve(playPromise).catch(function () {
+                // The browser may require a manual click before playback starts.
+              });
+            } catch (error) {
+              destroyMSEPlayer();
+              stopPlaybackRequest(resolvedSrc);
+              showMessage("再生を初期化できませんでした。再試行してください。", true);
+            }
           });
         } catch (error) {
           showMessage("再生 URL を読み取れません。リンクを作り直して再試行してください。", true);
@@ -277,6 +541,10 @@
       retryButton.addEventListener("click", function () { loadVideo(false); });
       subtitleTrack.track.addEventListener("cuechange", removeStaleLiveSubtitleCues);
       video.addEventListener("error", function () {
+        if (isMSEStream()) {
+          // mpegts.js reports actionable MSE failures through Events.ERROR.
+          return;
+        }
         if (isLiveStream()) {
           recoverLivePlayback("ライブ配信が中断されました。");
           return;
@@ -284,7 +552,7 @@
         showMessage("再生に失敗しました。録画状態と WUI ログを確認して再試行してください。", true);
       });
       video.addEventListener("waiting", function () {
-        if (isLiveStream() && !video.paused && !recoveryTimer) {
+        if (isLiveStream() && !isMSEStream() && !video.paused && !recoveryTimer) {
           recoveryTimer = window.setTimeout(function () {
             recoveryTimer = 0;
             recoverLivePlayback("ライブ配信の受信が遅れています。");
@@ -292,12 +560,16 @@
         }
       });
       video.addEventListener("timeupdate", clearRecoveryTimer);
+      video.addEventListener("timeupdate", pruneLiveSubtitleCues);
       video.addEventListener("playing", function () {
         clearRecoveryTimer();
         reconnectAttempts = 0;
       });
       window.addEventListener("pagehide", function () {
+        loadGeneration += 1;
         clearRecoveryTimer();
+        stopLiveSubtitles();
+        destroyMSEPlayer();
         stopPlaybackRequest(resolvedSrc || video.src);
         stopPlaybackRequest(subtitleTrack.getAttribute("src"));
         video.pause();
