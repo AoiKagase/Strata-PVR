@@ -4101,9 +4101,6 @@ func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, outp
 		w.Header().Set("Content-Type", "video/MP2T")
 	}
 	w.WriteHeader(status)
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
 	_, _ = io.Copy(w, output)
 	s.logFFmpegWaitError(r.Context(), wait())
 }

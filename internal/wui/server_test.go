@@ -4117,7 +4117,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 }
 
-func TestStreamFFmpegOutputDoesNotLogExpectedCancellationAsError(t *testing.T) {
+func TestStreamFFmpegOutputDoesNotFlushEmptyResponseOrLogExpectedCancellation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -4144,8 +4144,8 @@ func TestStreamFFmpegOutputDoesNotLogExpectedCancellationAsError(t *testing.T) {
 	if logText := string(logBytes); strings.Contains(logText, "#ffmpeg:") {
 		t.Fatalf("expected cancellation was logged as an FFmpeg error: %q", logText)
 	}
-	if !res.Flushed {
-		t.Fatal("FFmpeg response headers were not flushed before the first media fragment")
+	if res.Flushed {
+		t.Fatal("empty FFmpeg response was flushed before the first media fragment")
 	}
 }
 
