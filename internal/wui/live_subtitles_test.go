@@ -73,6 +73,56 @@ func TestCopySharedLiveWebVTTAddsHeader(t *testing.T) {
 	}
 }
 
+type countingFlushRecorder struct {
+	*httptest.ResponseRecorder
+	flushed chan struct{}
+}
+
+func (r *countingFlushRecorder) Flush() {
+	r.ResponseRecorder.Flush()
+	r.flushed <- struct{}{}
+}
+
+func TestCopySharedLiveWebVTTFlushesEachCueBeforeSourceCloses(t *testing.T) {
+	sourceReader, sourceWriter := io.Pipe()
+	response := &countingFlushRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		flushed:          make(chan struct{}, 2),
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := copySharedLiveWebVTT(response, sourceReader)
+		done <- err
+	}()
+
+	select {
+	case <-response.flushed:
+	case <-time.After(time.Second):
+		t.Fatal("WebVTT header was not flushed")
+	}
+	if _, err := io.WriteString(sourceWriter, "00:00:01.000 --> 00:00:02.000\nlive\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-response.flushed:
+		if got := response.Body.String(); !strings.Contains(got, "\nlive\n") {
+			t.Fatalf("flushed response = %q, want live cue", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("live subtitle cue was buffered until the source closed")
+	}
+
+	_ = sourceWriter.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("copy error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("copy did not stop after source closed")
+	}
+}
+
 func TestServerCachesARIBCaptionDecoderDetection(t *testing.T) {
 	old := runFFmpegDecoders
 	defer func() { runFFmpegDecoders = old }()

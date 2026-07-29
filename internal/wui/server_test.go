@@ -4358,6 +4358,9 @@ func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
 	if got := res.Header().Get("Content-Type"); got != "text/vtt; charset=utf-8" {
 		t.Fatalf("subtitle content-type = %q", got)
 	}
+	if got := res.Header().Get("X-Accel-Buffering"); got != "no" {
+		t.Fatalf("subtitle X-Accel-Buffering = %q, want no", got)
+	}
 	if len(requests) != 1 || requests[0] != "/api/services/123/stream?decode=1" {
 		t.Fatalf("mirakurun requests = %#v", requests)
 	}

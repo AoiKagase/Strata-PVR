@@ -3947,6 +3947,7 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 	}
 	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Accel-Buffering", "no")
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -4006,11 +4007,35 @@ func copySharedLiveWebVTT(w http.ResponseWriter, source io.Reader) (int64, error
 	if err != nil {
 		return int64(n), err
 	}
-	if flusher, ok := w.(http.Flusher); ok {
+	flusher, canFlush := w.(http.Flusher)
+	if canFlush {
 		flusher.Flush()
 	}
-	copied, err := io.Copy(w, source)
-	return int64(n) + copied, err
+
+	buffer := make([]byte, 32*1024)
+	written := int64(n)
+	for {
+		read, readErr := source.Read(buffer)
+		if read > 0 {
+			count, writeErr := w.Write(buffer[:read])
+			written += int64(count)
+			if writeErr != nil {
+				return written, writeErr
+			}
+			if count != read {
+				return written, io.ErrShortWrite
+			}
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return written, nil
+			}
+			return written, readErr
+		}
+	}
 }
 
 func copyLiveWebVTT(w http.ResponseWriter, source io.Reader) (int64, error) {
