@@ -17,6 +17,13 @@ var h264EncoderDetection struct {
 	err      error
 }
 
+var h264SoftwareEncoderDetection struct {
+	sync.Mutex
+	done    bool
+	encoder string
+	err     error
+}
+
 type h264EncoderCapability struct {
 	Name     string `json:"name"`
 	Hardware bool   `json:"hardware"`
@@ -51,16 +58,28 @@ var runH264EncoderProbe = func(ctx context.Context, encoder string) error {
 }
 
 func detectedH264Encoder() (string, error) {
-	encoders, err := availableH264Encoders()
-	if err != nil {
-		return "", err
+	h264SoftwareEncoderDetection.Lock()
+	defer h264SoftwareEncoderDetection.Unlock()
+	if h264SoftwareEncoderDetection.done {
+		return h264SoftwareEncoderDetection.encoder, h264SoftwareEncoderDetection.err
 	}
-	for _, encoder := range encoders {
-		if !encoder.Hardware {
+	h264SoftwareEncoderDetection.done = true
+	var failures []error
+	for _, encoder := range h264EncoderCandidates {
+		if encoder.Hardware {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := runH264EncoderProbe(ctx, encoder.Name)
+		cancel()
+		if err == nil {
+			h264SoftwareEncoderDetection.encoder = encoder.Name
 			return encoder.Name, nil
 		}
+		failures = append(failures, fmt.Errorf("%s: %w", encoder.Name, err))
 	}
-	return "", errors.New("no usable software H.264 encoder found")
+	h264SoftwareEncoderDetection.err = fmt.Errorf("no usable software H.264 encoder: %w", errors.Join(failures...))
+	return "", h264SoftwareEncoderDetection.err
 }
 
 func availableH264Encoders() ([]h264EncoderCapability, error) {

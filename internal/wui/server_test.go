@@ -3898,14 +3898,14 @@ func TestAPIRecordingWatchMP4UsesGeneratedGrowingInput(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("recording watch did not read the generated file")
 	}
-	if res.Code != http.StatusOK || res.Body.String() != "mp4data" {
+	if res.Code != http.StatusOK || res.Body.String() != string(mp4StreamingPreamble)+"mp4data" {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
 	if gotInput != "live" {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 3000000", "-probesize 5000000", "-f mpegts", "-i pipe:0", "-b:v 1m", "-c:a aac"} {
+	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 1000000", "-probesize 2000000", "-f mpegts", "-i pipe:0", "-b:v 1m", "-c:a aac"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live recording ffmpeg args missing %q: %s", want, joined)
 		}
@@ -4097,7 +4097,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4?c:v=libx264", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || res.Body.String() != "livemp4" {
+	if res.Code != http.StatusOK || res.Body.String() != string(mp4StreamingPreamble)+"livemp4" {
 		t.Fatalf("mp4 status=%d body=%q", res.Code, res.Body.String())
 	}
 	if len(requests) != 1 || requests[0] != "/api/services/123/stream?decode=1" {
@@ -4107,7 +4107,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 3000000", "-probesize 5000000", "-f mpegts", "-i pipe:0"} {
+	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 1000000", "-probesize 2000000", "-f mpegts", "-i pipe:0"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live ffmpeg args missing %q: %s", want, joined)
 		}
@@ -4117,7 +4117,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	}
 }
 
-func TestStreamFFmpegOutputDoesNotFlushEmptyResponseOrLogExpectedCancellation(t *testing.T) {
+func TestStreamFFmpegOutputSendsValidPreambleAndDoesNotLogExpectedCancellation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -4135,6 +4135,7 @@ func TestStreamFFmpegOutputDoesNotFlushEmptyResponseOrLogExpectedCancellation(t 
 		[]string{"-f", "mp4", "pipe:1"},
 		"mp4",
 		http.StatusOK,
+		true,
 	)
 
 	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
@@ -4144,8 +4145,99 @@ func TestStreamFFmpegOutputDoesNotFlushEmptyResponseOrLogExpectedCancellation(t 
 	if logText := string(logBytes); strings.Contains(logText, "#ffmpeg:") {
 		t.Fatalf("expected cancellation was logged as an FFmpeg error: %q", logText)
 	}
-	if res.Flushed {
-		t.Fatal("empty FFmpeg response was flushed before the first media fragment")
+	if got := res.Body.Bytes(); !bytes.Equal(got, mp4StreamingPreamble) {
+		t.Fatalf("body=%v, want MP4 free box %v", got, mp4StreamingPreamble)
+	}
+	if !res.Flushed {
+		t.Fatal("valid MP4 preamble was not flushed while waiting for FFmpeg")
+	}
+}
+
+func TestStreamFFmpegOutputFlushesFirstMediaBytes(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/abc/watch.mp4", nil)
+	res := httptest.NewRecorder()
+	s := &server{paths: paths.runtime()}
+
+	s.streamFFmpegOutput(
+		res,
+		req,
+		io.NopCloser(strings.NewReader("valid-mp4")),
+		func() error { return nil },
+		nil,
+		[]string{"-f", "mp4", "pipe:1"},
+		"mp4",
+		http.StatusOK,
+		true,
+	)
+
+	if got := res.Body.Bytes(); !bytes.Equal(got, append(append([]byte(nil), mp4StreamingPreamble...), []byte("valid-mp4")...)) {
+		t.Fatalf("body=%v", got)
+	}
+	if got := res.Header().Get("X-Accel-Buffering"); got != "no" {
+		t.Fatalf("X-Accel-Buffering=%q", got)
+	}
+	if !res.Flushed {
+		t.Fatal("first valid FFmpeg media bytes were not flushed")
+	}
+}
+
+type failingStreamResponseWriter struct {
+	header http.Header
+}
+
+func (w *failingStreamResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (*failingStreamResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("client disconnected")
+}
+
+func (*failingStreamResponseWriter) WriteHeader(int) {}
+
+func (*failingStreamResponseWriter) Flush() {}
+
+type closeTrackingReader struct {
+	io.Reader
+	closed bool
+}
+
+func (r *closeTrackingReader) Close() error {
+	r.closed = true
+	return nil
+}
+
+func TestStreamFFmpegOutputReapsProcessAfterClientWriteFailure(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/abc/watch.mp4", nil)
+	res := &failingStreamResponseWriter{header: make(http.Header)}
+	output := &closeTrackingReader{Reader: strings.NewReader("valid-mp4")}
+	waited := false
+	s := &server{paths: paths.runtime()}
+
+	s.streamFFmpegOutput(
+		res,
+		req,
+		output,
+		func() error {
+			waited = true
+			return errors.New("signal: killed")
+		},
+		nil,
+		[]string{"-f", "mp4", "pipe:1"},
+		"mp4",
+		http.StatusOK,
+		true,
+	)
+
+	if !output.closed {
+		t.Fatal("FFmpeg output was not closed after client write failure")
+	}
+	if !waited {
+		t.Fatal("FFmpeg process was not reaped after client write failure")
 	}
 }
 

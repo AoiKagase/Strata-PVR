@@ -69,6 +69,8 @@ const recordingWatchInitialBytes int64 = recordingPreviewTailBytes
 const recordingPreviewTimeout = 10 * time.Second
 const playbackRequestStopTimeout = 5 * time.Second
 
+var mp4StreamingPreamble = []byte{0, 0, 0, 8, 'f', 'r', 'e', 'e'}
+
 var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	cmd.Stdin = input
@@ -4067,7 +4069,7 @@ func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, 
 	}
 	args := watchFFmpegArgs(r, format, live, encoder)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
-	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status)
+	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status, live)
 }
 
 func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
@@ -4083,10 +4085,10 @@ func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePa
 	}
 	args := watchFFmpegFileArgs(r, format, filePath, encoder)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
-	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK)
+	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK, false)
 }
 
-func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, output io.ReadCloser, wait func() error, err error, args []string, format string, status int) {
+func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, output io.ReadCloser, wait func() error, err error, args []string, format string, status int, live bool) {
 	if err != nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s: %v", strings.Join(args, " "), err)
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
@@ -4100,9 +4102,62 @@ func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, outp
 	default:
 		w.Header().Set("Content-Type", "video/MP2T")
 	}
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(status)
-	_, _ = io.Copy(w, output)
-	s.logFFmpegWaitError(r.Context(), wait())
+	var copyErr error
+	if live && format == "mp4" {
+		// A top-level `free` box is valid ISO BMFF data and can precede `ftyp`.
+		// Send it while a cold tuner is starting so short proxy timeouts see a
+		// non-empty, valid MP4 response without inventing track metadata.
+		if _, copyErr = w.Write(mp4StreamingPreamble); copyErr == nil {
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+	}
+	if copyErr == nil {
+		copyErr = copyFFmpegOutput(w, output)
+	}
+	if copyErr != nil {
+		_ = output.Close()
+	}
+	waitErr := wait()
+	if copyErr == nil {
+		s.logFFmpegWaitError(r.Context(), waitErr)
+	}
+}
+
+func copyFFmpegOutput(w http.ResponseWriter, output io.Reader) error {
+	buffer := make([]byte, 32*1024)
+	for {
+		n, err := output.Read(buffer)
+		if n > 0 {
+			if _, writeErr := w.Write(buffer[:n]); writeErr != nil {
+				return writeErr
+			}
+			// FFmpeg's fragmented MP4 initialization segment can be smaller than
+			// net/http's response buffer. Flush only after valid media bytes exist
+			// so proxies receive neither an empty response nor a delayed segment.
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+			break
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+	}
+	_, err := io.Copy(w, output)
+	return err
 }
 
 func (s *server) logFFmpegWaitError(ctx context.Context, err error) {
@@ -4115,16 +4170,19 @@ func (s *server) mp4VideoEncoder() (string, error) {
 	s.configMu.Lock()
 	configured := s.cfg.MP4VideoEncoder
 	s.configMu.Unlock()
-	encoders, err := availableH264Encoders()
-	if err != nil {
-		return "", err
-	}
-	for _, encoder := range encoders {
-		if encoder.Name == configured {
-			return encoder.Name, nil
-		}
+	if encoder, ok := configuredH264Encoder(configured); ok {
+		return encoder, nil
 	}
 	return detectedH264Encoder()
+}
+
+func configuredH264Encoder(configured string) (string, bool) {
+	for _, encoder := range h264EncoderCandidates {
+		if encoder.Name == configured {
+			return encoder.Name, true
+		}
+	}
+	return "", false
 }
 
 func watchFFmpegArgs(r *http.Request, format string, live bool, encoder string) []string {
@@ -4222,7 +4280,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		// Live MPEG-TS already arrives at broadcast speed. Applying -re here
 		// throttles any initial Mirakurun buffer and makes FFmpeg spend the full
 		// probe window before producing the first fragmented MP4 response.
-		args = append(args, "-analyzeduration", "3000000", "-probesize", "5000000")
+		args = append(args, "-analyzeduration", "1000000", "-probesize", "2000000")
 	} else {
 		args = append(args, "-analyzeduration", "10000000", "-probesize", "10000000")
 	}

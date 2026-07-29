@@ -63,16 +63,18 @@ func TestAvailableH264EncodersIncludesUsableHardware(t *testing.T) {
 }
 
 func TestMP4VideoEncoderUsesConfiguredHardwareEncoder(t *testing.T) {
+	var probed []string
 	withH264Probe(t, func(_ context.Context, encoder string) error {
-		if encoder == "libx264" || encoder == "h264_nvenc" {
-			return nil
-		}
-		return errors.New("not available")
+		probed = append(probed, encoder)
+		return errors.New("configured encoder must not trigger capability scan")
 	})
 	s := &server{cfg: &config.Config{MP4VideoEncoder: "h264_nvenc"}}
 	encoder, err := s.mp4VideoEncoder()
 	if err != nil || encoder != "h264_nvenc" {
 		t.Fatalf("encoder=%q err=%v", encoder, err)
+	}
+	if len(probed) != 0 {
+		t.Fatalf("configured encoder triggered probes: %v", probed)
 	}
 	args := watchFFmpegArgs(httptest.NewRequest(http.MethodGet, "/watch.mp4", nil), "mp4", true, encoder)
 	if !slices.Contains(args, "h264_nvenc") {
@@ -145,16 +147,27 @@ func withH264Probe(t *testing.T, probe func(context.Context, string) error) {
 	h264EncoderDetection.Lock()
 	oldDone, oldEncoders, oldErr := h264EncoderDetection.done, h264EncoderDetection.encoders, h264EncoderDetection.err
 	h264EncoderDetection.Unlock()
+	h264SoftwareEncoderDetection.Lock()
+	oldSoftwareDone, oldSoftwareEncoder, oldSoftwareErr := h264SoftwareEncoderDetection.done, h264SoftwareEncoderDetection.encoder, h264SoftwareEncoderDetection.err
+	h264SoftwareEncoderDetection.Unlock()
 	runH264EncoderProbe = probe
 	h264EncoderDetection.Lock()
 	h264EncoderDetection.done = false
 	h264EncoderDetection.encoders = nil
 	h264EncoderDetection.err = nil
 	h264EncoderDetection.Unlock()
+	h264SoftwareEncoderDetection.Lock()
+	h264SoftwareEncoderDetection.done = false
+	h264SoftwareEncoderDetection.encoder = ""
+	h264SoftwareEncoderDetection.err = nil
+	h264SoftwareEncoderDetection.Unlock()
 	t.Cleanup(func() {
 		runH264EncoderProbe = oldProbe
 		h264EncoderDetection.Lock()
 		h264EncoderDetection.done, h264EncoderDetection.encoders, h264EncoderDetection.err = oldDone, oldEncoders, oldErr
 		h264EncoderDetection.Unlock()
+		h264SoftwareEncoderDetection.Lock()
+		h264SoftwareEncoderDetection.done, h264SoftwareEncoderDetection.encoder, h264SoftwareEncoderDetection.err = oldSoftwareDone, oldSoftwareEncoder, oldSoftwareErr
+		h264SoftwareEncoderDetection.Unlock()
 	})
 }
