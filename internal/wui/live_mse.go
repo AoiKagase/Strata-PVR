@@ -429,6 +429,11 @@ func liveMSEFFmpegArgs(r *http.Request, encoder, decoder, subtitleURL string) []
 	if decoder == "" || subtitleURL == "" {
 		return args
 	}
+	// The low-latency video path intentionally uses a short probe.  That is
+	// sufficient for video and audio, but ARIB data streams can be identified
+	// only after their PMT and first caption PES have both arrived.  Use the
+	// established subtitle probe window when this shared process emits WebVTT.
+	args = liveMSESubtitleProbeArgs(args)
 	insertAt := 0
 	for index, arg := range args {
 		if arg == "-fflags" {
@@ -444,6 +449,17 @@ func liveMSEFFmpegArgs(r *http.Request, encoder, decoder, subtitleURL string) []
 		"-map", "0:s:0", "-vn", "-an", "-c:s", "webvtt",
 		"-flush_packets", "1", "-f", "webvtt", subtitleURL,
 	)
+}
+
+func liveMSESubtitleProbeArgs(args []string) []string {
+	adjusted := append([]string(nil), args...)
+	for index := 0; index+1 < len(adjusted); index += 2 {
+		switch adjusted[index] {
+		case "-analyzeduration", "-probesize":
+			adjusted[index+1] = "10000000"
+		}
+	}
+	return adjusted
 }
 
 type prefixedReadCloser struct {

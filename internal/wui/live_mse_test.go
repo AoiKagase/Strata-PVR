@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -103,6 +104,7 @@ func TestLiveMSEFFmpegArgsUseOneProcessForM2TSAndWebVTT(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
 		"-c:s libaribcaption -sub_type ass -fflags",
+		"-analyzeduration 10000000 -probesize 10000000",
 		"-dual_mono_mode sub -f mpegts -i pipe:0",
 		"-map 0:v:0 -map 0:a:1? -map 0:a:0? -sn -dn",
 		"-c:v libx264",
@@ -116,6 +118,20 @@ func TestLiveMSEFFmpegArgsUseOneProcessForM2TSAndWebVTT(t *testing.T) {
 	}
 	if strings.Count(joined, "pipe:1") != 1 {
 		t.Fatalf("unexpected media outputs: %s", joined)
+	}
+}
+
+func TestLiveMSESubtitleProbeArgsOnlyExpandsInputProbe(t *testing.T) {
+	got := liveMSESubtitleProbeArgs([]string{
+		"-v", "error", "-analyzeduration", "1000000", "-probesize", "2000000",
+		"-f", "mpegts", "-i", "pipe:0", "-max_delay", "250000",
+	})
+	want := []string{
+		"-v", "error", "-analyzeduration", "10000000", "-probesize", "10000000",
+		"-f", "mpegts", "-i", "pipe:0", "-max_delay", "250000",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("subtitle probe args = %q, want %q", got, want)
 	}
 }
 
