@@ -259,7 +259,7 @@ func TestAPIHeadMethodsMatchLegacyResources(t *testing.T) {
 		{"/api/config", "GET, PUT"},
 		{"/api/preview-cache", "DELETE"},
 		{"/api/logo-cache", "DELETE"},
-		{"/api/recorded/abc/watch.m2ts", "GET"},
+		{"/api/recorded/abc/watch.m2ts", "GET, DELETE"},
 	} {
 		req = httptest.NewRequest(http.MethodHead, tc.path, nil)
 		res = httptest.NewRecorder()
@@ -320,6 +320,26 @@ func TestAPIBadKnownResourcePathMatchesLegacyWUI(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("unknown resource without extension status=%d body=%q", res.Code, res.Body.String())
+	}
+}
+
+func TestPlaybackRequestRoutesAllowExplicitStop(t *testing.T) {
+	handler := newTestHandler(t, testPaths(t.TempDir()), &config.Config{})
+	const session = "playback_session_test"
+	for _, path := range []string{
+		"/api/recording/abc/watch.mp4",
+		"/api/recording/abc/subtitles.vtt",
+		"/api/recorded/abc/watch.mp4",
+		"/api/recorded/abc/subtitles.vtt",
+		"/api/channel/abc/watch.mp4",
+		"/api/channel/abc/subtitles.vtt",
+	} {
+		req := httptest.NewRequest(http.MethodDelete, path+"?session="+session, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusNoContent {
+			t.Fatalf("%s DELETE status=%d body=%q", path, res.Code, res.Body.String())
+		}
 	}
 }
 
@@ -4088,6 +4108,86 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 			t.Fatalf("live ffmpeg args missing %q: %s", want, joined)
 		}
 	}
+}
+
+func TestAPIChannelWatchResolutionSwitchCancelsPreviousFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	chid := strconv.FormatInt(123, 36)
+	if err := storage.WriteJSONAtomic(paths.Schedule, []legacy.ChannelSchedule{{
+		Channel: legacy.Channel{ID: chid, Name: "Service"},
+	}}, false); err != nil {
+		t.Fatal(err)
+	}
+	mirakurunServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/services/123/stream" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("livets"))
+	}))
+	defer mirakurunServer.Close()
+
+	oldRunFFmpegStream := runFFmpegStream
+	started := make(chan context.Context, 2)
+	runFFmpegStream = func(ctx context.Context, _ io.Reader, _ ...string) (io.ReadCloser, func() error, error) {
+		output, writer := io.Pipe()
+		started <- ctx
+		go func() {
+			<-ctx.Done()
+			_ = writer.CloseWithError(ctx.Err())
+		}()
+		return output, func() error { return nil }, nil
+	}
+	defer func() { runFFmpegStream = oldRunFFmpegStream }()
+
+	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
+	runPlayback := func(token, quality string) (<-chan struct{}, context.Context) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			path := "/api/channel/" + chid + "/watch.mp4?c:v=libx264&session=" + token
+			if quality != "" {
+				path += "&s=" + quality
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+		}()
+		select {
+		case ctx := <-started:
+			return done, ctx
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for FFmpeg to start")
+			return nil, nil
+		}
+	}
+	stopPlayback := func(token string) {
+		path := "/api/channel/" + chid + "/watch.mp4?session=" + token
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, path, nil))
+		if res.Code != http.StatusNoContent {
+			t.Fatalf("DELETE status=%d body=%q", res.Code, res.Body.String())
+		}
+	}
+	assertStopped := func(done <-chan struct{}, ctx context.Context) {
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+			t.Fatal("DELETE did not cancel the FFmpeg context")
+		}
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("FFmpeg stream handler did not finish after cancellation")
+		}
+	}
+
+	firstDone, firstCtx := runPlayback("playback_session_old", "")
+	stopPlayback("playback_session_old")
+	assertStopped(firstDone, firstCtx)
+
+	secondDone, secondCtx := runPlayback("playback_session_new", "640x360")
+	stopPlayback("playback_session_new")
+	assertStopped(secondDone, secondCtx)
 }
 
 func TestAPIChannelSubtitlesVTTUsesMirakurunAndFFmpeg(t *testing.T) {
