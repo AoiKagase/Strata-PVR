@@ -32,6 +32,8 @@
   var playerFallbackDuration = 0;
   var playerKnownDuration = 0;
   var playerCurrentURL = "";
+  var playerSourceGeneration = 0;
+  var playerSourceStopPromise = Promise.resolve();
   var pendingConfirmResolve = null;
   var scheduleMenuTouchStart = null;
   var metricsRefreshTimer = null;
@@ -2518,24 +2520,39 @@
       setPlayerStatus("再生URLを作成できませんでした。録画状態を確認して再試行してください");
       return;
     }
+    var sourceGeneration = ++playerSourceGeneration;
+    var previousURL = playerCurrentURL;
+    var nextURL = withPlaybackSession(url);
     setPlayerStatus("");
-    stopPlaybackRequest(playerCurrentURL);
+    playerCurrentURL = "";
     video.pause();
     video.removeAttribute("src");
     video.load();
-    url = withPlaybackSession(url);
-    video.src = url;
-    playerCurrentURL = url;
     playerBaseQuery = cloneQuery(query || {});
     playerKnownDuration = playerConfiguredDuration();
-    updatePlayerSubtitleTrack(playerBaseQuery);
     updatePlayerControls();
-    video.play().catch(function (error) {
-      if (!error || error.name !== "NotAllowedError") {
-        setPlayerStatus("再生を開始できませんでした。録画が開始直後の場合は、数秒後に再試行してください");
+    queuePlaybackStop(previousURL).finally(function () {
+      if (sourceGeneration !== playerSourceGeneration) {
+        return;
       }
-      // Browsers may block autoplay; controls remain available for manual start.
-    }).finally(updatePlayerControls);
+      video.src = nextURL;
+      playerCurrentURL = nextURL;
+      updatePlayerSubtitleTrack(playerBaseQuery);
+      updatePlayerControls();
+      video.play().catch(function (error) {
+        if (sourceGeneration !== playerSourceGeneration) {
+          return;
+        }
+        if (!error || error.name !== "NotAllowedError") {
+          setPlayerStatus("再生を開始できませんでした。録画が開始直後の場合は、数秒後に再試行してください");
+        }
+        // Browsers may block autoplay; controls remain available for manual start.
+      }).finally(function () {
+        if (sourceGeneration === playerSourceGeneration) {
+          updatePlayerControls();
+        }
+      });
+    });
   }
 
   function togglePlayerPlayback() {
@@ -2620,8 +2637,14 @@
       video.addEventListener(name, updatePlayerControls);
     });
     video.addEventListener("error", function () {
+      if (!playerCurrentURL) {
+        return;
+      }
       setPlayerStatus(playerMediaErrorMessage(video));
       updatePlayerControls();
+    });
+    video.addEventListener("playing", function () {
+      setPlayerStatus("");
     });
   }
 
@@ -2851,7 +2874,8 @@
     if (!video) {
       return;
     }
-    stopPlaybackRequest(playerCurrentURL);
+    playerSourceGeneration += 1;
+    queuePlaybackStop(playerCurrentURL);
     playerCurrentURL = "";
     video.pause();
     video.removeAttribute("src");
@@ -2889,9 +2913,16 @@
 
   function stopPlaybackRequest(url) {
     if (!url || !/\/api\/(?:recorded|recording|channel)\/[^/]+\/(?:hls\/index\.m3u8|watch\.(?:mp4|m2ts)|subtitles\.vtt)(?:\?|$)/.test(url)) {
-      return;
+      return Promise.resolve();
     }
-    fetch(url, { method: "DELETE", keepalive: true }).catch(function () {});
+    return fetch(url, { method: "DELETE", keepalive: true }).catch(function () {});
+  }
+
+  function queuePlaybackStop(url) {
+    playerSourceStopPromise = playerSourceStopPromise.then(function () {
+      return stopPlaybackRequest(url);
+    });
+    return playerSourceStopPromise;
   }
 
   var mp4Presets = {

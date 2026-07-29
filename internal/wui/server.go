@@ -67,6 +67,7 @@ const strataErrorCodeHeader = "X-Strata-Error-Code"
 const strataErrorTunerUnavailable = "tuner-unavailable"
 const recordingWatchInitialBytes int64 = recordingPreviewTailBytes
 const recordingPreviewTimeout = 10 * time.Second
+const playbackRequestStopTimeout = 5 * time.Second
 
 var runFFmpegPreview = func(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
@@ -2560,7 +2561,9 @@ func (s *server) beginPlaybackRequest(r *http.Request) (*http.Request, func()) {
 
 func (s *server) stopPlaybackRequest(w http.ResponseWriter, r *http.Request) {
 	if s.playbackRequests != nil {
-		s.playbackRequests.stop(r.URL.Query().Get("session"))
+		ctx, cancel := context.WithTimeout(r.Context(), playbackRequestStopTimeout)
+		defer cancel()
+		s.playbackRequests.stopAndWait(ctx, r.URL.Query().Get("session"))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
