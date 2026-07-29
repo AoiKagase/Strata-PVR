@@ -156,6 +156,7 @@
       var msePlayer = null;
       var subtitleAbort = null;
       var liveTextTrack = null;
+      var liveSubtitleTimeOffset = null;
       var loadGeneration = 0;
       var liveCueLimit = 128;
       document.title = title;
@@ -264,6 +265,7 @@
           subtitleAbort = null;
         }
         clearLiveSubtitleCues();
+        liveSubtitleTimeOffset = null;
         if (liveTextTrack) {
           liveTextTrack.mode = "disabled";
         }
@@ -313,6 +315,16 @@
         var start = parseVTTTimestamp(timing[1]);
         var end = parseVTTTimestamp(timing[2]);
         if (!isFinite(start) || !isFinite(end) || end <= start) {
+          return;
+        }
+        // The M2TS subtitle PTS is broadcast-relative, whereas this MSE
+        // media element starts its timeline at this playback session.
+        if (liveSubtitleTimeOffset === null) {
+          liveSubtitleTimeOffset = (isFinite(video.currentTime) ? video.currentTime : 0) - start;
+        }
+        start += liveSubtitleTimeOffset;
+        end += liveSubtitleTimeOffset;
+        if (end <= start) {
           return;
         }
         var existingCues = liveTextTrack.cues ? Array.prototype.slice.call(liveTextTrack.cues) : [];
@@ -401,6 +413,7 @@
       function startLiveSubtitles(url, generation) {
         liveTextTrack = liveTextTrack || video.addTextTrack("subtitles", "日本語", "ja");
         clearLiveSubtitleCues();
+        liveSubtitleTimeOffset = null;
         liveTextTrack.mode = "showing";
         var controller = new AbortController();
         subtitleAbort = controller;

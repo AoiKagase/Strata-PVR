@@ -36,6 +36,7 @@
   var playerMSE = null;
   var playerSubtitleAbort = null;
   var playerLiveTextTrack = null;
+  var playerLiveSubtitleTimeOffset = null;
   var playerLiveCueLimit = 128;
   var playerSourceGeneration = 0;
   var playerSourceStopPromise = Promise.resolve();
@@ -2901,6 +2902,7 @@
       playerSubtitleAbort = null;
     }
     clearPlayerLiveSubtitleCues();
+    playerLiveSubtitleTimeOffset = null;
     if (playerLiveTextTrack) {
       playerLiveTextTrack.mode = "disabled";
     }
@@ -2967,6 +2969,18 @@
     if (!isFinite(start) || !isFinite(end) || end <= start || typeof window.VTTCue !== "function") {
       return;
     }
+    var video = byId("playerVideo");
+    // The shared M2TS input retains broadcast-relative subtitle PTS, while
+    // MSE starts its media timeline at the current playback session.
+    if (playerLiveSubtitleTimeOffset === null) {
+      var currentTime = video && isFinite(video.currentTime) ? video.currentTime : 0;
+      playerLiveSubtitleTimeOffset = currentTime - start;
+    }
+    start += playerLiveSubtitleTimeOffset;
+    end += playerLiveSubtitleTimeOffset;
+    if (end <= start) {
+      return;
+    }
     var existingCues = textTrack.cues ? Array.prototype.slice.call(textTrack.cues) : [];
     var previousCue = existingCues.length ? existingCues[existingCues.length - 1] : null;
     if (previousCue && previousCue.endTime > start) {
@@ -2983,7 +2997,7 @@
     var cue = new window.VTTCue(start, end, cueText);
     applyVTTCueSettings(cue, timing[3]);
     textTrack.addCue(cue);
-    prunePlayerLiveSubtitleCues(byId("playerVideo") ? byId("playerVideo").currentTime : 0);
+    prunePlayerLiveSubtitleCues(video ? video.currentTime : 0);
   }
 
   function prunePlayerLiveSubtitleCues(currentTime) {
@@ -3053,6 +3067,7 @@
     var controller = new AbortController();
     playerSubtitleAbort = controller;
     clearPlayerLiveSubtitleCues();
+    playerLiveSubtitleTimeOffset = null;
     textTrack.mode = "showing";
     var requestURL = withPlaybackSession(url, playerPlaybackToken);
     fetch(requestURL, {
