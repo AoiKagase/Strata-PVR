@@ -2766,9 +2766,7 @@ func (s *server) handleProgramSubtitles(w http.ResponseWriter, r *http.Request, 
 	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, output)
-	if err := wait(); err != nil {
-		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
-	}
+	s.logFFmpegWaitError(r.Context(), wait())
 }
 
 func watchNeedsTranscode(r *http.Request) bool {
@@ -3987,9 +3985,7 @@ func (s *server) handleChannelSubtitles(w http.ResponseWriter, r *http.Request, 
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN: ffmpeg %s", strings.Join(args, " "))
 		waitWithLog := func() error {
 			waitErr := wait()
-			if waitErr != nil && sessionCtx.Err() == nil {
-				_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", waitErr)
-			}
+			s.logFFmpegWaitError(sessionCtx, waitErr)
 			return waitErr
 		}
 		return liveSubtitleSource{output: output, wait: waitWithLog, close: body.Close}, nil
@@ -4105,8 +4101,15 @@ func (s *server) streamFFmpegOutput(w http.ResponseWriter, r *http.Request, outp
 		w.Header().Set("Content-Type", "video/MP2T")
 	}
 	w.WriteHeader(status)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 	_, _ = io.Copy(w, output)
-	if err := wait(); err != nil {
+	s.logFFmpegWaitError(r.Context(), wait())
+}
+
+func (s *server) logFFmpegWaitError(ctx context.Context, err error) {
+	if err != nil && ctx.Err() == nil {
 		_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "#ffmpeg: %v", err)
 	}
 }
@@ -4217,10 +4220,15 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 	if !q.Has("debug") {
 		args = append(args, "-v", "error")
 	}
+	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err")
 	if live {
-		args = append(args, "-re")
+		// Live MPEG-TS already arrives at broadcast speed. Applying -re here
+		// throttles any initial Mirakurun buffer and makes FFmpeg spend the full
+		// probe window before producing the first fragmented MP4 response.
+		args = append(args, "-analyzeduration", "3000000", "-probesize", "5000000")
+	} else {
+		args = append(args, "-analyzeduration", "10000000", "-probesize", "10000000")
 	}
-	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err", "-analyzeduration", "10000000", "-probesize", "10000000")
 	if !live && seekBeforeInput {
 		args = append(args, "-ss", legacyWatchStart(q.Get("ss")))
 	}

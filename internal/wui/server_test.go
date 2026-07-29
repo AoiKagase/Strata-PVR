@@ -3881,7 +3881,7 @@ func TestAPIRecordingWatchMP4UsesGeneratedGrowingInput(t *testing.T) {
 	}
 	defer func() { runFFmpegStream = old }()
 	handler := newTestHandler(t, paths, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.mp4?b:v=1m", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/recording/abc/watch.mp4?b:v=1m&c:v=libx264", nil)
 	res := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
@@ -3905,12 +3905,12 @@ func TestAPIRecordingWatchMP4UsesGeneratedGrowingInput(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-re", "-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 10000000", "-probesize 10000000", "-f mpegts", "-i pipe:0", "-b:v 1m", "-c:a aac"} {
+	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 3000000", "-probesize 5000000", "-f mpegts", "-i pipe:0", "-b:v 1m", "-c:a aac"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live recording ffmpeg args missing %q: %s", want, joined)
 		}
 	}
-	for _, notWant := range []string{"-ss", "-bufsize:v", "-b:a 96k", "-bufsize:a"} {
+	for _, notWant := range []string{"-re", "-ss", "-bufsize:v", "-b:a 96k", "-bufsize:a"} {
 		if strings.Contains(joined, notWant) {
 			t.Fatalf("live recording ffmpeg args should not contain %q: %s", notWant, joined)
 		}
@@ -4094,7 +4094,7 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 	restore := installFakeFFmpegStream(t, "livemp4", &gotInput, &gotArgs)
 	defer restore()
 	handler := newTestHandler(t, paths, &config.Config{MirakurunPath: mirakurunServer.URL + "/"})
-	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.mp4?c:v=libx264", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "livemp4" {
@@ -4107,10 +4107,45 @@ func TestAPIChannelWatchMP4UsesMirakurunAndFFmpeg(t *testing.T) {
 		t.Fatalf("ffmpeg input = %q", gotInput)
 	}
 	joined := strings.Join(gotArgs, " ")
-	for _, want := range []string{"-re", "-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-f mpegts", "-i pipe:0"} {
+	for _, want := range []string{"-fflags +genpts+discardcorrupt", "-err_detect ignore_err", "-analyzeduration 3000000", "-probesize 5000000", "-f mpegts", "-i pipe:0"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("live ffmpeg args missing %q: %s", want, joined)
 		}
+	}
+	if strings.Contains(joined, "-re") {
+		t.Fatalf("live FFmpeg input should not be throttled twice: %s", joined)
+	}
+}
+
+func TestStreamFFmpegOutputDoesNotLogExpectedCancellationAsError(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/abc/watch.mp4", nil).WithContext(ctx)
+	res := httptest.NewRecorder()
+	s := &server{paths: paths.runtime()}
+
+	s.streamFFmpegOutput(
+		res,
+		req,
+		io.NopCloser(strings.NewReader("")),
+		func() error { return errors.New("signal: killed: Invalid frame dimensions 0x0") },
+		nil,
+		[]string{"-f", "mp4", "pipe:1"},
+		"mp4",
+		http.StatusOK,
+	)
+
+	logBytes, err := os.ReadFile(filepath.Join(paths.LogDir, "wui"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if logText := string(logBytes); strings.Contains(logText, "#ffmpeg:") {
+		t.Fatalf("expected cancellation was logged as an FFmpeg error: %q", logText)
+	}
+	if !res.Flushed {
+		t.Fatal("FFmpeg response headers were not flushed before the first media fragment")
 	}
 }
 
