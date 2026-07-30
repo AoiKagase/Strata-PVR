@@ -5905,3 +5905,15 @@ func TestAcquireFFmpegSlotRejectsWhenCapacityIsFull(t *testing.T) {
 		t.Fatal("acquireFFmpegSlot accepted a request beyond capacity")
 	}
 }
+
+func TestAcquireMediaStreamRejectsWhenCapacityIsFull(t *testing.T) {
+	s := &server{mediaStreams: make(chan struct{}, 1)}
+	release, ok := s.acquireMediaStream(context.Background())
+	if !ok {
+		t.Fatal("first media stream acquisition failed")
+	}
+	defer release()
+	if _, ok := s.acquireMediaStream(context.Background()); ok {
+		t.Fatal("media stream acquisition accepted a request beyond capacity")
+	}
+}

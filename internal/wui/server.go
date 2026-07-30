@@ -202,7 +202,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(), ffmpegSlots: make(chan struct{}, maxConcurrentFFmpeg),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(), ffmpegSlots: make(chan struct{}, maxConcurrentFFmpeg), mediaStreams: make(chan struct{}, maxConcurrentMediaStreams),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), loginAttempts: make(map[string]loginAttempt), authWorkers: make(chan struct{}, 2),
 		schedulerGate:    newSchedulerGate(),
 		schedulerWaiters: make(chan struct{}, maxPendingSchedulerRuns),
@@ -247,6 +247,7 @@ type server struct {
 	liveMSE            *liveMSESessionManager
 	playbackRequests   *playbackRequestSessions
 	ffmpegSlots        chan struct{}
+	mediaStreams       chan struct{}
 	metricsOnce        sync.Once
 	configMu           sync.Mutex
 	schedulerMu        sync.Mutex
@@ -2727,6 +2728,15 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	if r.Method == http.MethodGet && (apiType == "m2ts" || apiType == "mp4") {
+		if release, ok := s.acquireMediaStream(r.Context()); ok {
+			defer release()
+		} else {
+			w.Header().Set("Retry-After", "5")
+			legacyHTTPError(w, r, http.StatusTooManyRequests)
+			return
+		}
+	}
 	r, release := s.beginPlaybackRequest(r)
 	defer release()
 	program, found, err := s.readProgram(r.Context(), collection, id)
@@ -4000,6 +4010,15 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		legacyHTTPError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
+	if r.Method == http.MethodGet && (apiType == "m2ts" || apiType == "mp4") {
+		if release, ok := s.acquireMediaStream(r.Context()); ok {
+			defer release()
+		} else {
+			w.Header().Set("Retry-After", "5")
+			legacyHTTPError(w, r, http.StatusTooManyRequests)
+			return
+		}
+	}
 	r, release := s.beginPlaybackRequest(r)
 	defer release()
 	channel, ok := s.findChannel(id)
@@ -4582,6 +4601,21 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 }
 
 const maxConcurrentFFmpeg = 8
+const maxConcurrentMediaStreams = 16
+
+func (s *server) acquireMediaStream(ctx context.Context) (func(), bool) {
+	if s.mediaStreams == nil {
+		s.mediaStreams = make(chan struct{}, maxConcurrentMediaStreams)
+	}
+	select {
+	case s.mediaStreams <- struct{}{}:
+		return func() { <-s.mediaStreams }, true
+	case <-ctx.Done():
+		return nil, false
+	default:
+		return nil, false
+	}
+}
 
 func (s *server) acquireFFmpegSlot(ctx context.Context) (func(), bool) {
 	if s.ffmpegSlots == nil {
