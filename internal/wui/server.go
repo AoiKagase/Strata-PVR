@@ -3614,6 +3614,9 @@ func (s *server) readPreviewCache(ctx context.Context, cacheKey, sourcePath stri
 }
 
 func (s *server) storePreviewCache(ctx context.Context, cacheKey, programID, sourcePath string, info os.FileInfo, codec string, output []byte) error {
+	// Apply retention after every successful write so a long-running WUI does
+	// not wait for its next restart before enforcing the configured limits.
+	defer s.cleanupPreviewCache(context.Background())
 	if err := os.MkdirAll(s.previewCacheDir(), 0o755); err != nil {
 		return err
 	}
