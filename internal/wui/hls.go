@@ -35,6 +35,7 @@ var hlsPresets = map[string]hlsPreset{
 
 type hlsSession struct {
 	id, dir    string
+	subject    string
 	lastAccess time.Time
 	live       bool
 	cancel     context.CancelFunc
@@ -54,8 +55,10 @@ type hlsSessionManager struct {
 const hlsSessionIdleTimeout = 15 * time.Second
 const hlsSessionStopTimeout = 5 * time.Second
 const maxHLSSessions = 8
+const maxHLSSessionsPerSubject = 2
 
 var errHLSSessionCapacity = errors.New("HLS session capacity reached")
+var errHLSSubjectCapacity = errors.New("HLS subject session capacity reached")
 
 func newHLSSessionManager(paths Paths) *hlsSessionManager {
 	return &hlsSessionManager{paths: paths, sessions: make(map[string]*hlsSession)}
@@ -95,7 +98,7 @@ func (s *server) handleRecordedHLS(w http.ResponseWriter, r *http.Request, id, r
 		return
 	}
 	if apiType == "m3u8" && resource == "index" {
-		s.serveHLSPlaylist(w, r, filePath)
+		s.serveHLSPlaylist(w, r, filePath, s.hlsSubject(r))
 		return
 	}
 	if apiType == "ts" && validHLSSegmentName(resource+".ts") {
@@ -148,7 +151,7 @@ func (s *server) handleChannelHLS(w http.ResponseWriter, r *http.Request, channe
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	session, err := s.hls.getOrStartStream(channelHLSKey(channelID), body, quality, preset, start, duration, audio)
+	session, err := s.hls.getOrStartStream(channelHLSKey(channelID), body, quality, preset, start, duration, audio, s.hlsSubject(r))
 	if err != nil {
 		_ = body.Close()
 		hlsStartError(w, r, err)
@@ -157,13 +160,13 @@ func (s *server) handleChannelHLS(w http.ResponseWriter, r *http.Request, channe
 	s.serveHLSPlaylistSession(w, r, session)
 }
 
-func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePath string) {
+func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePath, subject string) {
 	quality, preset, start, duration, audio, ok := hlsRequestOptions(r)
 	if !ok {
 		legacyHTTPError(w, r, http.StatusBadRequest)
 		return
 	}
-	session, err := s.hls.getOrStart(filePath, quality, preset, start, duration, audio)
+	session, err := s.hls.getOrStart(filePath, quality, preset, start, duration, audio, subject)
 	if err != nil {
 		hlsStartError(w, r, err)
 		return
@@ -172,12 +175,19 @@ func (s *server) serveHLSPlaylist(w http.ResponseWriter, r *http.Request, filePa
 }
 
 func hlsStartError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, errHLSSessionCapacity) {
+	if errors.Is(err, errHLSSessionCapacity) || errors.Is(err, errHLSSubjectCapacity) {
 		w.Header().Set("Retry-After", "15")
 		legacyHTTPError(w, r, http.StatusTooManyRequests)
 		return
 	}
 	legacyHTTPError(w, r, http.StatusServiceUnavailable)
+}
+
+func (s *server) hlsSubject(r *http.Request) string {
+	if subject, ok := r.Context().Value(authSubjectContextKey{}).(string); ok && subject != "" {
+		return subject
+	}
+	return "remote:" + s.remoteAddress(r)
 }
 
 func (s *server) serveHLSPlaylistSession(w http.ResponseWriter, r *http.Request, session *hlsSession) {
@@ -247,15 +257,22 @@ func (s *server) serveHLSSegment(w http.ResponseWriter, r *http.Request, name st
 	}
 }
 
-func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
-	return m.getOrStartSource(filePath, nil, quality, preset, start, duration, audio)
+func (m *hlsSessionManager) getOrStart(filePath, quality string, preset hlsPreset, start, duration int, audio string, subjects ...string) (*hlsSession, error) {
+	return m.getOrStartSource(filePath, nil, quality, preset, start, duration, audio, hlsSessionSubject(subjects))
 }
 
-func (m *hlsSessionManager) getOrStartStream(key string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
-	return m.getOrStartSource(key, input, quality, preset, start, duration, audio)
+func (m *hlsSessionManager) getOrStartStream(key string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio string, subjects ...string) (*hlsSession, error) {
+	return m.getOrStartSource(key, input, quality, preset, start, duration, audio, hlsSessionSubject(subjects))
 }
 
-func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio string) (*hlsSession, error) {
+func hlsSessionSubject(subjects []string) string {
+	if len(subjects) == 0 {
+		return ""
+	}
+	return subjects[0]
+}
+
+func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser, quality string, preset hlsPreset, start, duration int, audio, subject string) (*hlsSession, error) {
 	encoder, err := detectedH264Encoder()
 	if err != nil {
 		return nil, err
@@ -277,6 +294,12 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		}
 		return nil, errHLSSessionCapacity
 	}
+	if subject != "" && m.sessionCountForSubjectLocked(subject) >= maxHLSSessionsPerSubject {
+		if input != nil {
+			_ = input.Close()
+		}
+		return nil, errHLSSubjectCapacity
+	}
 	if m.root == "" {
 		root, err := os.MkdirTemp("", "strata-pvr-hls-")
 		if err != nil {
@@ -289,7 +312,7 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	session := &hlsSession{id: id, dir: dir, lastAccess: time.Now(), live: input != nil, cancel: cancel, input: input, done: make(chan struct{})}
+	session := &hlsSession{id: id, dir: dir, subject: subject, lastAccess: time.Now(), live: input != nil, cancel: cancel, input: input, done: make(chan struct{})}
 	inputPath := source
 	if input != nil {
 		inputPath = "pipe:0"
@@ -329,6 +352,16 @@ func (m *hlsSessionManager) getOrStartSource(source string, input io.ReadCloser,
 		_ = logging.AppendLine(filepath.Join(logDir(m.paths), "wui"), "EXIT HLS: ffmpeg session=%s pid=%d error=%v", id, cmd.Process.Pid, err)
 	}()
 	return session, nil
+}
+
+func (m *hlsSessionManager) sessionCountForSubjectLocked(subject string) int {
+	count := 0
+	for _, session := range m.sessions {
+		if session.subject == subject {
+			count++
+		}
+	}
+	return count
 }
 
 func (m *hlsSessionManager) lookup(id string) *hlsSession {

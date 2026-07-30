@@ -738,7 +738,7 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 			legacyHTTPError(w, r, http.StatusForbidden)
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authSubjectContextKey{}, identity.subject())))
 	})
 }
 

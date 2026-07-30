@@ -48,6 +48,15 @@ type authIdentity struct {
 	scope    string
 }
 
+type authSubjectContextKey struct{}
+
+func (identity authIdentity) subject() string {
+	if identity.username != "" {
+		return "user:" + identity.username
+	}
+	return "authenticated"
+}
+
 func randomAuthValue(bytes int) (string, error) {
 	raw := make([]byte, bytes)
 	if _, err := rand.Read(raw); err != nil {

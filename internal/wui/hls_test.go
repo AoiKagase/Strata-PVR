@@ -129,6 +129,19 @@ func TestHLSSessionManagerRejectsNewSessionAtCapacity(t *testing.T) {
 	}
 }
 
+func TestHLSSessionManagerCountsSessionsPerSubject(t *testing.T) {
+	m := newHLSSessionManager(Paths{})
+	m.sessions["first"] = &hlsSession{subject: "user:alice"}
+	m.sessions["second"] = &hlsSession{subject: "user:alice"}
+	m.sessions["other"] = &hlsSession{subject: "user:bob"}
+	if got := m.sessionCountForSubjectLocked("user:alice"); got != maxHLSSessionsPerSubject {
+		t.Fatalf("alice session count = %d, want %d", got, maxHLSSessionsPerSubject)
+	}
+	if got := m.sessionCountForSubjectLocked("user:bob"); got != 1 {
+		t.Fatalf("bob session count = %d, want 1", got)
+	}
+}
+
 type testHLSReadCloser struct {
 	*strings.Reader
 	closed bool
