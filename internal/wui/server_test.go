@@ -1066,6 +1066,7 @@ func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
 		`var requestURL = withPlaybackSession(url, playerPlaybackToken);`,
 		`return consumePlayerLiveWebVTT(response, textTrack, sourceGeneration, controller.signal);`,
 		`playerLiveSubtitleTimeOffset = currentTime - start;`,
+		`previousCue.startTime < start && previousCue.endTime > start`,
 	} {
 		if !strings.Contains(appSource, want) {
 			t.Fatalf("web/app.js missing %q", want)
@@ -1097,6 +1098,7 @@ func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
 		`subtitleURL.searchParams.set("session", playbackSessionToken);`,
 		`return consumeLiveWebVTT(response, generation, controller.signal);`,
 		`liveSubtitleTimeOffset = (isFinite(video.currentTime) ? video.currentTime : 0) - start;`,
+		`previousCue.startTime < start && previousCue.endTime > start`,
 		`["pause", "unload", "detachMediaElement", "destroy"]`,
 	} {
 		if !strings.Contains(playerSource, want) {

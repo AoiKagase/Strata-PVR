@@ -2983,7 +2983,11 @@
     }
     var existingCues = textTrack.cues ? Array.prototype.slice.call(textTrack.cues) : [];
     var previousCue = existingCues.length ? existingCues[existingCues.length - 1] : null;
-    if (previousCue && previousCue.endTime > start) {
+    // ARIB caption PTS can arrive out of order (for example around a
+    // broadcast timestamp discontinuity). Do not make the preceding cue
+    // invalid: TextTrack throws when its end would precede its start, which
+    // would otherwise reject the reader loop and stop the live VTT request.
+    if (previousCue && previousCue.startTime < start && previousCue.endTime > start) {
       previousCue.endTime = start;
     }
     var cueText = lines.slice(timingIndex + 1).join("\n");
