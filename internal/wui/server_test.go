@@ -1810,6 +1810,18 @@ func TestHostHeaderRequiredMatchesLegacyWUI(t *testing.T) {
 	}
 }
 
+func TestHostHeaderRejectsNonLoopbackAuthority(t *testing.T) {
+	dir := t.TempDir()
+	handler := newTestHandler(t, testPaths(dir), &config.Config{WUIHost: "127.0.0.1"})
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.Host = "attacker.example"
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIRulesMutation(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
@@ -5183,7 +5195,8 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	}
 	handler := newTestHandler(t, paths, cfg)
 	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"pass"}`))
-	login.Header.Set("Origin", "http://example.com")
+	login.Host = "127.0.0.1"
+	login.Header.Set("Origin", "http://127.0.0.1")
 	loginRes := httptest.NewRecorder()
 	handler.ServeHTTP(loginRes, login)
 	if loginRes.Code != http.StatusNoContent {
@@ -5192,6 +5205,7 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	cookie := loginRes.Result().Cookies()[0]
 
 	create := httptest.NewRequest(http.MethodPost, "/api/auth/tokens", strings.NewReader(`{"name":"automation"}`))
+	create.Host = "127.0.0.1"
 	create.Header.Set("Content-Type", "application/json")
 	create.AddCookie(cookie)
 	createRes := httptest.NewRecorder()
@@ -5201,8 +5215,9 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	}
 
 	create = httptest.NewRequest(http.MethodPost, "/api/auth/tokens", strings.NewReader(`{"name":"automation"}`))
+	create.Host = "127.0.0.1"
 	create.Header.Set("Content-Type", "application/json")
-	create.Header.Set("Origin", "http://example.com")
+	create.Header.Set("Origin", "http://127.0.0.1")
 	create.AddCookie(cookie)
 	createRes = httptest.NewRecorder()
 	handler.ServeHTTP(createRes, create)
@@ -5218,6 +5233,7 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	}
 
 	bearer := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	bearer.Host = "127.0.0.1"
 	bearer.Header.Set("Authorization", "Bearer "+created.Token)
 	bearerRes := httptest.NewRecorder()
 	handler.ServeHTTP(bearerRes, bearer)
@@ -5226,6 +5242,7 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	}
 
 	configReq := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	configReq.Host = "127.0.0.1"
 	configReq.AddCookie(cookie)
 	configRes := httptest.NewRecorder()
 	handler.ServeHTTP(configRes, configReq)
@@ -5234,7 +5251,8 @@ func TestAPITokensAndCSRF(t *testing.T) {
 	}
 
 	remove := httptest.NewRequest(http.MethodDelete, "/api/auth/tokens/"+created.ID, nil)
-	remove.Header.Set("Origin", "http://example.com")
+	remove.Host = "127.0.0.1"
+	remove.Header.Set("Origin", "http://127.0.0.1")
 	remove.AddCookie(cookie)
 	removeRes := httptest.NewRecorder()
 	handler.ServeHTTP(removeRes, remove)
@@ -5441,10 +5459,18 @@ func TestStrataOpenListenerCanEnableAuthentication(t *testing.T) {
 	}
 	cfg.WUIAccounts = []config.WebUser{{Username: "admin", PasswordHash: "$argon2id$configured"}}
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.Host = "127.0.0.1"
 	res := httptest.NewRecorder()
 	servers[0].server.Handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("status after enabling authentication = %d", res.Code)
+	}
+}
+
+func TestBuildHTTPServersRejectsNonLoopbackListener(t *testing.T) {
+	paths := testPaths(t.TempDir()).runtime()
+	if _, err := buildHTTPServers(paths, &config.Config{WUIHost: "0.0.0.0", WUIPort: 20772}); err == nil {
+		t.Fatal("non-loopback WUI listener should be rejected")
 	}
 }
 

@@ -590,6 +590,16 @@ type serverError struct {
 }
 
 func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("WUI configuration is required")
+	}
+	host := cfg.WUIHost
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if !config.IsLoopbackAddress(host) {
+		return nil, fmt.Errorf("WUI listener must bind to a loopback address; use a TLS reverse proxy for external access")
+	}
 	assets, err := resolveAssetSource(paths, cfg)
 	if err != nil {
 		return nil, err
@@ -597,7 +607,7 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 	wui, handler := newServerWithAssets(paths, cfg, true, assets, nil)
 	return []runningServer{{
 		server: &http.Server{
-			Addr:              listenAddress(cfg.WUIHost, cfg.WUIPort),
+			Addr:              listenAddress(host, cfg.WUIPort),
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			// Bound slow request and idle connections. WriteTimeout remains unset
@@ -882,12 +892,36 @@ func (s *server) mutateAPITokens(mutate func([]config.APIToken) ([]config.APITok
 }
 func (s *server) withHostRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host == "" {
+		if !s.validWUIHost(r.Host) {
 			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *server) validWUIHost(value string) bool {
+	if s.cfg == nil || s.cfg.WUIHost == "" {
+		return value != ""
+	}
+	host, _, err := net.SplitHostPort(value)
+	if err != nil {
+		host = value
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if host == "" {
+		return false
+	}
+	allowed := []string{"localhost", "127.0.0.1", "::1"}
+	if s.cfg != nil && s.cfg.WUIHost != "" {
+		allowed = append(allowed, s.cfg.WUIHost)
+	}
+	for _, candidate := range allowed {
+		if strings.EqualFold(host, strings.Trim(candidate, "[]")) {
+			return true
+		}
+	}
+	return false
 }
 
 type statusRecorder struct {

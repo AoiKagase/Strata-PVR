@@ -247,15 +247,16 @@ func TestLoadStrataDocumentUsesOpenListenerWhenAuthenticationDisabled(t *testing
 	}
 }
 
-func TestParseRejectsUnauthenticatedNonLoopbackListener(t *testing.T) {
+func TestParseRejectsNonLoopbackListener(t *testing.T) {
 	doc := DefaultDocument()
 	doc.Web.ListenAddress = "0.0.0.0"
+	doc.Web.Authentication.Enabled = true
 	b, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Parse(b); err == nil {
-		t.Fatal("unauthenticated public listener should be rejected")
+		t.Fatal("public listener without native TLS should be rejected")
 	}
 }
 

@@ -315,8 +315,8 @@ func loadDocument(b []byte) (*Config, error) {
 		seenTokens[token.ID] = true
 	}
 	cfg.WUIAPITokens = doc.Web.Authentication.APITokens
-	if !isLoopbackAddress(doc.Web.ListenAddress) && !doc.Web.Authentication.Enabled {
-		return nil, fmt.Errorf("web.authentication must be enabled when web.listenAddress is not loopback")
+	if !IsLoopbackAddress(doc.Web.ListenAddress) {
+		return nil, fmt.Errorf("web.listenAddress must be loopback because the native WUI listener does not provide TLS; place any external access behind a TLS reverse proxy")
 	}
 	cfg.ExcludeServices = doc.Services.Excluded
 	cfg.ServiceOrder = doc.Services.Order
@@ -364,7 +364,7 @@ func defaultConfig() *Config {
 	}
 }
 
-func isLoopbackAddress(address string) bool {
+func IsLoopbackAddress(address string) bool {
 	if address == "localhost" {
 		return true
 	}
