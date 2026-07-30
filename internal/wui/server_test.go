@@ -4086,6 +4086,10 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
 		t.Fatalf("logo status=%d body=%q", res.Code, res.Body.String())
 	}
+	etag := res.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("logo ETag missing")
+	}
 	if data, err := os.ReadFile(filepath.Join(filepath.Dir(paths.Schedule), ".cache", "logos", chid+".png")); err != nil || string(data) != "pngdata" {
 		t.Fatalf("cached logo=%q err=%v", data, err)
 	}
@@ -4094,6 +4098,13 @@ func TestAPIChannelLogoAndWatchProxyMirakurun(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "pngdata" {
 		t.Fatalf("cached logo status=%d body=%q", res.Code, res.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/logo", nil)
+	req.Header.Set("If-None-Match", etag)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotModified || res.Body.Len() != 0 {
+		t.Fatalf("conditional logo status=%d body=%q", res.Code, res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/channel/"+chid+"/watch.m2ts", nil)

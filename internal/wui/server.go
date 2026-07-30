@@ -3925,9 +3925,14 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		legacyHTTPError(w, r, http.StatusNotFound)
 		return
 	}
-	if cached, err := s.readChannelLogoCache(channel.ID); err == nil {
-		serveChannelLogo(w, r, cached)
-		return
+	if etag, err := s.channelLogoCacheETag(channel.ID); err == nil {
+		if serveChannelLogoNotModified(w, r, etag) {
+			return
+		}
+		if cached, err := s.readChannelLogoCache(channel.ID); err == nil {
+			serveChannelLogo(w, r, cached, etag)
+			return
+		}
 	}
 	serviceID, err := strconv.ParseInt(channel.ID, 36, 64)
 	if err != nil {
@@ -3953,8 +3958,11 @@ func (s *server) handleChannelLogo(w http.ResponseWriter, r *http.Request, id, a
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	_ = s.storeChannelLogoCache(channel.ID, logo)
-	serveChannelLogo(w, r, logo)
+	etag := ""
+	if s.storeChannelLogoCache(channel.ID, logo) == nil {
+		etag, _ = s.channelLogoCacheETag(channel.ID)
+	}
+	serveChannelLogo(w, r, logo, etag)
 }
 
 var channelLogoFetchTimeout = 3 * time.Second
@@ -3982,6 +3990,18 @@ func (s *server) readChannelLogoCache(channelID string) ([]byte, error) {
 	return os.ReadFile(cachePath)
 }
 
+func (s *server) channelLogoCacheETag(channelID string) (string, error) {
+	cachePath, ok := s.channelLogoCachePath(channelID)
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixNano()), nil
+}
+
 func (s *server) storeChannelLogoCache(channelID string, logo []byte) error {
 	cachePath, ok := s.channelLogoCachePath(channelID)
 	if !ok {
@@ -3993,9 +4013,38 @@ func (s *server) storeChannelLogoCache(channelID string, logo []byte) error {
 	return storage.WriteFileAtomic(cachePath, logo)
 }
 
-func serveChannelLogo(w http.ResponseWriter, r *http.Request, logo []byte) {
+func serveChannelLogoNotModified(w http.ResponseWriter, r *http.Request, etag string) bool {
+	if !channelLogoETagMatches(r.Header.Get("If-None-Match"), etag) {
+		return false
+	}
+	setChannelLogoHeaders(w, etag)
+	w.WriteHeader(http.StatusNotModified)
+	return true
+}
+
+func channelLogoETagMatches(value, etag string) bool {
+	if etag == "" {
+		return false
+	}
+	for _, candidate := range strings.Split(value, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || candidate == etag {
+			return true
+		}
+	}
+	return false
+}
+
+func setChannelLogoHeaders(w http.ResponseWriter, etag string) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+	}
+}
+
+func serveChannelLogo(w http.ResponseWriter, r *http.Request, logo []byte, etag string) {
+	setChannelLogoHeaders(w, etag)
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodGet {
 		_, _ = w.Write(logo)
