@@ -207,6 +207,10 @@ func (s *server) serveHLSPlaylistSession(w http.ResponseWriter, r *http.Request,
 				legacyHTTPError(w, r, http.StatusServiceUnavailable)
 				return
 			}
+			// A completed process cannot create the still-missing playlist. Return
+			// instead of repeatedly selecting the already-closed done channel.
+			legacyHTTPError(w, r, http.StatusServiceUnavailable)
+			return
 		case <-deadline.C:
 			legacyHTTPError(w, r, http.StatusGatewayTimeout)
 			return
