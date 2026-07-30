@@ -72,8 +72,25 @@ func runPostProcessCommand(logPath string, timeout time.Duration, payload []byte
 		_ = logging.AppendLine(logPath, "ERROR: post-process %s command=%d: exit_code=%d error=%v output=%q", program.ID, index+1, exitCode, err, result)
 		return false
 	}
-	_ = logging.AppendLine(logPath, "POSTPROCESS: %s command=%d argv=%q output=%q", program.ID, index+1, args, result)
+	_ = logging.AppendLine(logPath, "POSTPROCESS: %s command=%d argv=%q output=%q", program.ID, index+1, redactedPostProcessArgs(args), result)
 	return true
+}
+
+func redactedPostProcessArgs(args []string) []string {
+	redacted := append([]string(nil), args...)
+	for index, value := range redacted {
+		lower := strings.ToLower(value)
+		if strings.Contains(lower, "token=") || strings.Contains(lower, "key=") || strings.Contains(lower, "secret=") || strings.Contains(lower, "password=") {
+			if equals := strings.Index(value, "="); equals >= 0 {
+				redacted[index] = value[:equals+1] + "REDACTED"
+				continue
+			}
+		}
+		if strings.HasPrefix(value, "--") && (strings.Contains(lower, "token") || strings.Contains(lower, "key") || strings.Contains(lower, "secret") || strings.Contains(lower, "password")) && index+1 < len(redacted) {
+			redacted[index+1] = "REDACTED"
+		}
+	}
+	return redacted
 }
 
 func postProcessLimiter(cfg *config.Config) chan struct{} {
