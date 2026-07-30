@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,6 @@ import (
 const (
 	liveMSEProbeLimit        = 2 * 1024 * 1024
 	liveMSESubtitleWait      = 5 * time.Second
-	liveMSESubtitleAccept    = 10 * time.Second
 	liveMSESubtitleCueLimit  = 128
 	liveMSESubtitleQueueSize = 32
 )
@@ -43,20 +41,19 @@ type liveMSEStart struct {
 }
 
 type liveMSESession struct {
-	token        string
-	key          string
-	ctx          context.Context
-	cancel       context.CancelFunc
-	media        io.ReadCloser
-	source       io.Closer
-	subtitles    *liveVTTHub
-	subtitleErr  error
-	listener     net.Listener
-	connMu       sync.Mutex
-	subtitleConn net.Conn
-	done         chan struct{}
-	finishOnce   sync.Once
-	stopOnce     sync.Once
+	token       string
+	key         string
+	ctx         context.Context
+	cancel      context.CancelFunc
+	media       io.ReadCloser
+	source      io.Closer
+	serviceID   int64
+	hasCaptions bool
+	decoder     string
+	subtitleErr error
+	done        chan struct{}
+	finishOnce  sync.Once
+	stopOnce    sync.Once
 }
 
 func newLiveMSESessionManager() *liveMSESessionManager {
@@ -191,34 +188,11 @@ func (m *liveMSESessionManager) stopAll() {
 	}
 }
 
-func (s *liveMSESession) setSubtitleConn(conn net.Conn) {
-	s.connMu.Lock()
-	s.subtitleConn = conn
-	s.connMu.Unlock()
-}
-
-func (s *liveMSESession) closeSubtitleConn() {
-	s.connMu.Lock()
-	conn := s.subtitleConn
-	s.subtitleConn = nil
-	s.connMu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
-	}
-}
-
 func (s *liveMSESession) finish() {
 	s.finishOnce.Do(func() {
 		s.cancel()
 		if s.source != nil {
 			_ = s.source.Close()
-		}
-		if s.listener != nil {
-			_ = s.listener.Close()
-		}
-		s.closeSubtitleConn()
-		if s.subtitles != nil {
-			s.subtitles.finish()
 		}
 		close(s.done)
 	})
@@ -233,10 +207,6 @@ func (s *liveMSESession) stop() {
 		if s.media != nil {
 			_ = s.media.Close()
 		}
-		if s.listener != nil {
-			_ = s.listener.Close()
-		}
-		s.closeSubtitleConn()
 	})
 	select {
 	case <-s.done:
@@ -319,11 +289,15 @@ func (s *server) handleLiveMSESubtitles(w http.ResponseWriter, r *http.Request) 
 		legacyHTTPError(w, r, http.StatusServiceUnavailable)
 		return
 	}
-	if session.subtitles == nil {
+	if !session.hasCaptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	reader := session.subtitles.subscribe(r.Context())
+	reader, err := s.subscribeLiveMSESubtitles(r.Context(), session)
+	if err != nil {
+		legacyHTTPError(w, r, http.StatusServiceUnavailable)
+		return
+	}
 	defer reader.Close()
 	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -363,28 +337,9 @@ func (s *server) startLiveMSESession(
 	if hasCaption {
 		decoder, subtitleErr = s.aribCaptionDecoder()
 	}
-	var listener net.Listener
-	var subtitles *liveVTTHub
-	subtitleURL := ""
-	if hasCaption && subtitleErr == nil {
-		listener, err = net.Listen("tcp4", "127.0.0.1:0")
-		if err != nil {
-			_ = body.Close()
-			return nil, err
-		}
-		if tcpListener, ok := listener.(*net.TCPListener); ok {
-			_ = tcpListener.SetDeadline(time.Now().Add(liveMSESubtitleAccept))
-		}
-		subtitles = newLiveVTTHub()
-		subtitleURL = "tcp://" + listener.Addr().String()
-	}
-
-	args := liveMSEFFmpegArgs(r, encoder, decoder, subtitleURL)
+	args := liveMSEFFmpegArgs(r, encoder)
 	output, wait, err := runFFmpegStream(sessionCtx, input, args...)
 	if err != nil {
-		if listener != nil {
-			_ = listener.Close()
-		}
 		_ = body.Close()
 		return nil, err
 	}
@@ -394,13 +349,11 @@ func (s *server) startLiveMSESession(
 		cancel:      cancel,
 		media:       output,
 		source:      body,
-		subtitles:   subtitles,
+		serviceID:   serviceID,
+		hasCaptions: hasCaption,
+		decoder:     decoder,
 		subtitleErr: subtitleErr,
-		listener:    listener,
 		done:        make(chan struct{}),
-	}
-	if listener != nil {
-		go session.acceptSubtitles()
 	}
 	go func() {
 		waitErr := wait()
@@ -410,45 +363,39 @@ func (s *server) startLiveMSESession(
 	return session, nil
 }
 
-func (s *liveMSESession) acceptSubtitles() {
-	conn, err := s.listener.Accept()
-	_ = s.listener.Close()
-	if err != nil {
-		if s.subtitles != nil {
-			s.subtitles.finish()
-		}
-		return
+func (s *server) subscribeLiveMSESubtitles(ctx context.Context, session *liveMSESession) (io.ReadCloser, error) {
+	manager := s.liveSubtitles
+	if manager == nil {
+		manager = newLiveSubtitleManager()
+		s.liveSubtitles = manager
 	}
-	s.setSubtitleConn(conn)
-	s.subtitles.consume(conn)
-	s.closeSubtitleConn()
+	return manager.subscribe(ctx, "mse:\x00"+session.token, func(sessionCtx context.Context) (liveSubtitleSource, error) {
+		client, err := mirakurun.New(s.cfg.EffectiveMirakurunPath())
+		if err != nil {
+			return liveSubtitleSource{}, err
+		}
+		client.UserAgent = mirakurun.StrataUserAgent("wui")
+		body, err := client.ServiceStream(sessionCtx, session.serviceID, true)
+		if err != nil {
+			return liveSubtitleSource{}, err
+		}
+		args := subtitleFFmpegStreamArgs(session.decoder)
+		output, wait, err := runFFmpegStream(sessionCtx, body, args...)
+		if err != nil {
+			_ = body.Close()
+			return liveSubtitleSource{}, err
+		}
+		waitWithLog := func() error {
+			waitErr := wait()
+			s.logFFmpegWaitError(sessionCtx, waitErr)
+			return waitErr
+		}
+		return liveSubtitleSource{output: output, wait: waitWithLog, close: body.Close}, nil
+	})
 }
 
-func liveMSEFFmpegArgs(r *http.Request, encoder, decoder, subtitleURL string) []string {
-	args := watchFFmpegArgs(r, "m2ts", true, encoder)
-	if decoder == "" || subtitleURL == "" {
-		return args
-	}
-	// The low-latency video path intentionally uses a short probe.  That is
-	// sufficient for video and audio, but ARIB data streams can be identified
-	// only after their PMT and first caption PES have both arrived.  Use the
-	// established subtitle probe window when this shared process emits WebVTT.
-	args = liveMSESubtitleProbeArgs(args)
-	insertAt := 0
-	for index, arg := range args {
-		if arg == "-fflags" {
-			insertAt = index
-			break
-		}
-	}
-	withDecoder := make([]string, 0, len(args)+len(subtitleFFmpegDecoderArgs(decoder))+11)
-	withDecoder = append(withDecoder, args[:insertAt]...)
-	withDecoder = append(withDecoder, subtitleFFmpegDecoderArgs(decoder)...)
-	withDecoder = append(withDecoder, args[insertAt:]...)
-	return append(withDecoder,
-		"-map", "0:s:0", "-vn", "-an", "-c:s", "webvtt",
-		"-flush_packets", "1", "-f", "webvtt", subtitleURL,
-	)
+func liveMSEFFmpegArgs(r *http.Request, encoder string) []string {
+	return watchFFmpegArgs(r, "m2ts", true, encoder)
 }
 
 func liveMSESubtitleProbeArgs(args []string) []string {

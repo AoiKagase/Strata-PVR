@@ -95,22 +95,19 @@ func TestPSIAssemblerHandlesSectionSplitAcrossPayloads(t *testing.T) {
 	}
 }
 
-func TestLiveMSEFFmpegArgsUseOneProcessForM2TSAndWebVTT(t *testing.T) {
+func TestLiveMSEFFmpegArgsOnlyProducesM2TS(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "/api/channel/abc/watch.m2ts?mode=mse&s=1280x720&audio=secondary", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := liveMSEFFmpegArgs(req, "libx264", "libaribcaption", "tcp://127.0.0.1:21000")
+	args := liveMSEFFmpegArgs(req, "libx264")
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
-		"-c:s libaribcaption -sub_type ass -fflags",
-		"-analyzeduration 10000000 -probesize 10000000",
 		"-dual_mono_mode sub -f mpegts -i pipe:0",
 		"-map 0:v:0 -map 0:a:1? -map 0:a:0? -sn -dn",
 		"-c:v libx264",
 		"-s 1280x720",
-		"-y -f mpegts pipe:1 -map 0:s:0 -vn -an -c:s webvtt",
-		"-f webvtt tcp://127.0.0.1:21000",
+		"-y -f mpegts pipe:1",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("FFmpeg args missing %q: %s", want, joined)
@@ -118,6 +115,9 @@ func TestLiveMSEFFmpegArgsUseOneProcessForM2TSAndWebVTT(t *testing.T) {
 	}
 	if strings.Count(joined, "pipe:1") != 1 {
 		t.Fatalf("unexpected media outputs: %s", joined)
+	}
+	if strings.Contains(joined, "webvtt") || strings.Contains(joined, "tcp://") {
+		t.Fatalf("MSE video process must not multiplex subtitle output: %s", joined)
 	}
 }
 
@@ -135,12 +135,12 @@ func TestLiveMSESubtitleProbeArgsOnlyExpandsInputProbe(t *testing.T) {
 	}
 }
 
-func TestLiveMSEFFmpegArgsOmitSubtitleOutputWhenUnavailable(t *testing.T) {
+func TestLiveMSEFFmpegArgsDoesNotDependOnSubtitleAvailability(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "/api/channel/abc/watch.m2ts?mode=mse", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(liveMSEFFmpegArgs(req, "libx264", "", ""), " ")
+	joined := strings.Join(liveMSEFFmpegArgs(req, "libx264"), " ")
 	if strings.Contains(joined, "webvtt") || strings.Contains(joined, "tcp://") {
 		t.Fatalf("subtitle output should be omitted: %s", joined)
 	}
