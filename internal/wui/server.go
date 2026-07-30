@@ -67,6 +67,7 @@ const strataErrorTunerUnavailable = "tuner-unavailable"
 const recordingWatchInitialBytes int64 = recordingPreviewTailBytes
 const recordingPreviewTimeout = 10 * time.Second
 const playbackRequestStopTimeout = 5 * time.Second
+const maxPendingSchedulerRuns = 4
 
 var mp4StreamingPreamble = []byte{0, 0, 0, 8, 'f', 'r', 'e', 'e'}
 
@@ -203,8 +204,9 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(), ffmpegSlots: make(chan struct{}, maxConcurrentFFmpeg),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), loginAttempts: make(map[string]loginAttempt), authWorkers: make(chan struct{}, 2),
-		schedulerGate: newSchedulerGate(),
-		hls:           newHLSSessionManager(paths),
+		schedulerGate:    newSchedulerGate(),
+		schedulerWaiters: make(chan struct{}, maxPendingSchedulerRuns),
+		hls:              newHLSSessionManager(paths),
 	}
 	server.cleanupPreviewCache(context.Background())
 	mux.HandleFunc("/api/auth/login", server.handleLogin)
@@ -249,6 +251,7 @@ type server struct {
 	configMu           sync.Mutex
 	schedulerMu        sync.Mutex
 	schedulerGate      chan struct{}
+	schedulerWaiters   chan struct{}
 	authMu             sync.Mutex
 	playbackTickets    map[string]playbackTicket
 	sessions           map[string]authSession
@@ -275,7 +278,39 @@ func (s *server) schedulerChannel() chan struct{} {
 	return s.schedulerGate
 }
 
+func (s *server) schedulerWaiterChannel() chan struct{} {
+	s.schedulerMu.Lock()
+	defer s.schedulerMu.Unlock()
+	if s.schedulerWaiters == nil {
+		s.schedulerWaiters = make(chan struct{}, maxPendingSchedulerRuns)
+	}
+	return s.schedulerWaiters
+}
+
+var errSchedulerQueueFull = errors.New("scheduler request queue is full")
+
 func (s *server) acquireScheduler(ctx context.Context) error {
+	// Do not consume a waiting slot when the scheduler is currently idle.
+	select {
+	case <-s.schedulerChannel():
+		if err := ctx.Err(); err != nil {
+			s.releaseScheduler()
+			return err
+		}
+		return nil
+	default:
+	}
+
+	// Bound requests that wait behind a running scheduler.  Without this,
+	// authenticated clients can retain unbounded HTTP handlers and goroutines.
+	select {
+	case s.schedulerWaiterChannel() <- struct{}{}:
+		defer func() { <-s.schedulerWaiterChannel() }()
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return errSchedulerQueueFull
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1999,6 +2034,9 @@ func (s *server) handleScheduler(w http.ResponseWriter, r *http.Request, apiType
 	}
 	if r.Method == http.MethodPut {
 		if err := s.acquireScheduler(r.Context()); err != nil {
+			if errors.Is(err, errSchedulerQueueFull) {
+				legacyHTTPError(w, r, http.StatusTooManyRequests)
+			}
 			return
 		}
 		defer s.releaseScheduler()

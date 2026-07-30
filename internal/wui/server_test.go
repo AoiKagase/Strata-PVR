@@ -4943,6 +4943,66 @@ func TestAPISchedulerPutWaitsForActiveForce(t *testing.T) {
 	}
 }
 
+func TestAPISchedulerPutRejectsWhenWaitingQueueIsFull(t *testing.T) {
+	dir := t.TempDir()
+	paths := testPaths(dir)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	paths.Scheduler = func(_ context.Context, _ bool) error {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return nil
+	}
+	assets, err := resolveAssetSource(paths.runtime(), &config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, handler := newServerWithAssets(paths.runtime(), &config.Config{}, false, assets, nil)
+	handler = server.withCommonHeaders(handler)
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler/force", nil))
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("force scheduler did not start")
+	}
+
+	done := make([]chan struct{}, maxPendingSchedulerRuns)
+	for i := range done {
+		done[i] = make(chan struct{})
+		go func(done chan struct{}) {
+			defer close(done)
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/scheduler", nil))
+		}(done[i])
+	}
+	deadline := time.After(time.Second)
+	for len(server.schedulerWaiterChannel()) != maxPendingSchedulerRuns {
+		select {
+		case <-deadline:
+			t.Fatalf("waiting scheduler requests = %d, want %d", len(server.schedulerWaiterChannel()), maxPendingSchedulerRuns)
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	overflow := httptest.NewRecorder()
+	handler.ServeHTTP(overflow, httptest.NewRequest(http.MethodPut, "/api/scheduler", nil))
+	if overflow.Code != http.StatusTooManyRequests {
+		t.Fatalf("overflow scheduler PUT status = %d body=%q", overflow.Code, overflow.Body.String())
+	}
+
+	close(release)
+	for i, requestDone := range done {
+		select {
+		case <-requestDone:
+		case <-time.After(time.Second):
+			t.Fatalf("queued scheduler PUT %d did not finish", i)
+		}
+	}
+}
+
 func TestAPISchedulerPutCancellationDoesNotStartScheduler(t *testing.T) {
 	dir := t.TempDir()
 	paths := testPaths(dir)
