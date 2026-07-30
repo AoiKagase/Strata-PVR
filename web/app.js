@@ -2456,6 +2456,7 @@
     var time = byId("playerTime");
     var muteButton = byId("playerMuteButton");
     var volume = byId("playerVolume");
+    var pictureInPictureButton = byId("playerPictureInPictureButton");
     var quality = byId("playerQuality");
     var audio = byId("playerAudio");
     if (!video) {
@@ -2480,6 +2481,13 @@
     }
     if (volume && document.activeElement !== volume) {
       volume.value = String(video.muted ? 0 : video.volume);
+    }
+    if (pictureInPictureButton) {
+      var pictureInPictureAvailable = Boolean(document.pictureInPictureEnabled && typeof video.requestPictureInPicture === "function");
+      var pictureInPictureActive = document.pictureInPictureElement === video;
+      pictureInPictureButton.hidden = !pictureInPictureAvailable;
+      pictureInPictureButton.disabled = !pictureInPictureAvailable || !video.src;
+      setIconOnlyControl(pictureInPictureButton, "picture-in-picture", pictureInPictureActive ? "ピクチャー イン ピクチャーを終了" : "ピクチャー イン ピクチャー");
     }
     if (quality) {
       quality.disabled = !playerSourceBuilder;
@@ -2743,6 +2751,17 @@
     }
   }
 
+  function togglePlayerPictureInPicture() {
+    var video = byId("playerVideo");
+    if (!video || !document.pictureInPictureEnabled || typeof video.requestPictureInPicture !== "function") {
+      return;
+    }
+    var request = document.pictureInPictureElement === video && typeof document.exitPictureInPicture === "function" ? document.exitPictureInPicture() : video.requestPictureInPicture();
+    Promise.resolve(request).catch(function () {
+      // The browser can reject PiP before enough media data is available.
+    }).finally(updatePlayerControls);
+  }
+
   function bindPlayerVideoEvents() {
     var video = byId("playerVideo");
     if (!video) {
@@ -2751,6 +2770,8 @@
     ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "volumechange", "ended", "waiting", "playing"].forEach(function (name) {
       video.addEventListener(name, updatePlayerControls);
     });
+    video.addEventListener("enterpictureinpicture", updatePlayerControls);
+    video.addEventListener("leavepictureinpicture", updatePlayerControls);
     video.addEventListener("error", function () {
       if (!playerCurrentURL) {
         return;
@@ -7334,6 +7355,10 @@
     var playerFullscreenButton = byId("playerFullscreenButton");
     if (playerFullscreenButton) {
       playerFullscreenButton.addEventListener("click", togglePlayerFullscreen);
+    }
+    var playerPictureInPictureButton = byId("playerPictureInPictureButton");
+    if (playerPictureInPictureButton) {
+      playerPictureInPictureButton.addEventListener("click", togglePlayerPictureInPicture);
     }
     var playerDialog = byId("playerDialog");
     if (playerDialog) {

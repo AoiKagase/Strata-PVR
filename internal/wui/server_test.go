@@ -1067,6 +1067,8 @@ func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
 		`return consumePlayerLiveWebVTT(response, textTrack, sourceGeneration, controller.signal);`,
 		`playerLiveSubtitleTimeOffset = currentTime - start;`,
 		`previousCue.startTime < start && previousCue.endTime > start`,
+		`togglePlayerPictureInPicture`,
+		`playerPictureInPictureButton`,
 	} {
 		if !strings.Contains(appSource, want) {
 			t.Fatalf("web/app.js missing %q", want)
@@ -1081,6 +1083,9 @@ func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexSource := string(index)
+	if !strings.Contains(indexSource, `id="playerPictureInPictureButton"`) {
+		t.Fatal("web/index.html must provide a Picture-in-Picture control")
+	}
 	mpegtsIndex := strings.Index(indexSource, `<script src="/mpegts.js"></script>`)
 	appIndex := strings.Index(indexSource, `<script src="/app.js"></script>`)
 	if mpegtsIndex < 0 || appIndex < 0 || mpegtsIndex > appIndex {
