@@ -48,3 +48,33 @@ func TestReplaceRulesRollsBackInvalidInput(t *testing.T) {
 		t.Fatalf("rollback did not preserve rules: %s", got)
 	}
 }
+
+func TestRuleWritesRejectInvalidKnownFieldTypes(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "strata.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	invalid := json.RawMessage(`{"types":"not-an-array"}`)
+	if err := ReplaceRules(ctx, db, []json.RawMessage{invalid}); err == nil {
+		t.Fatal("ReplaceRules accepted a rule with an invalid known field type")
+	}
+	if err := AppendRule(ctx, db, invalid); err == nil {
+		t.Fatal("AppendRule accepted a rule with an invalid known field type")
+	}
+	if err := AppendRule(ctx, db, json.RawMessage(`{"unknown_legacy_field":"kept"}`)); err != nil {
+		t.Fatalf("AppendRule rejected an unknown compatibility field: %v", err)
+	}
+	if _, err := UpdateRule(ctx, db, 0, invalid); err == nil {
+		t.Fatal("UpdateRule accepted a rule with an invalid known field type")
+	}
+	rules, err := ReadRules(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 || string(rules[0]) != `{"unknown_legacy_field":"kept"}` {
+		t.Fatalf("invalid writes modified persisted rules: %s", rules)
+	}
+}

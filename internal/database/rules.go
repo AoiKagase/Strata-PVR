@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	legacy "strata-pvr/internal/domain"
 )
 
 func ReadRules(ctx context.Context, db *sql.DB) ([]json.RawMessage, error) {
@@ -42,12 +44,8 @@ func ReplaceRules(ctx context.Context, db *sql.DB, rules []json.RawMessage) erro
 	}
 	defer statement.Close()
 	for position, rule := range rules {
-		if len(rule) == 0 || !json.Valid(rule) {
-			return fmt.Errorf("replace rules: rule %d is not valid JSON", position)
-		}
-		var object map[string]json.RawMessage
-		if err := json.Unmarshal(rule, &object); err != nil || object == nil {
-			return fmt.Errorf("replace rules: rule %d must be a JSON object", position)
+		if err := validateRule(rule); err != nil {
+			return fmt.Errorf("replace rules: rule %d: %w", position, err)
 		}
 		if _, err := statement.ExecContext(ctx, position, string(rule)); err != nil {
 			return fmt.Errorf("replace rule %d: %w", position, err)
@@ -116,6 +114,12 @@ func validateRule(rule json.RawMessage) error {
 	var object map[string]json.RawMessage
 	if len(rule) == 0 || !json.Valid(rule) || json.Unmarshal(rule, &object) != nil || object == nil {
 		return fmt.Errorf("rule must be a valid JSON object")
+	}
+	// Keep unknown fields for compatibility, but reject malformed known fields
+	// before they can be persisted and repeatedly break scheduler reads.
+	var decoded legacy.Rule
+	if err := json.Unmarshal(rule, &decoded); err != nil {
+		return fmt.Errorf("rule has invalid field types: %w", err)
 	}
 	return nil
 }
