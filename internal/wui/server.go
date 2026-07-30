@@ -4824,7 +4824,7 @@ func decodeJSONObject(body io.Reader) (map[string]json.RawMessage, error) {
 
 func decodeRuleRequest(r *http.Request) (map[string]json.RawMessage, error) {
 	if r.Body != nil && r.ContentLength != 0 {
-		return decodeJSONObject(r.Body)
+		return decodeJSONObject(http.MaxBytesReader(nil, r.Body, 1<<20))
 	}
 	values := r.URL.Query()
 	if len(values) == 0 {
