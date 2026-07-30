@@ -390,6 +390,7 @@ func TestStaticImageCacheHeadersMatchLegacyWUI(t *testing.T) {
 	for key, want := range map[string]string{
 		"X-Content-Type-Options":  "nosniff",
 		"X-Frame-Options":         "SAMEORIGIN",
+		"Referrer-Policy":         "no-referrer",
 		"Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:",
 		"X-UA-Compatible":         "IE=Edge,chrome=1",
 		"X-XSS-Protection":        "1; mode=block",
