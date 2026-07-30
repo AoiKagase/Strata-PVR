@@ -202,7 +202,7 @@ func newHandlerWithAssets(paths Paths, cfg *config.Config, auth bool, assets ass
 func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets assetSource, assetErr error) (*server, http.Handler) {
 	mux := http.NewServeMux()
 	server := &server{
-		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(),
+		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(), ffmpegSlots: make(chan struct{}, maxConcurrentFFmpeg),
 		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
@@ -245,6 +245,7 @@ type server struct {
 	liveSubtitles      *liveSubtitleManager
 	liveMSE            *liveMSESessionManager
 	playbackRequests   *playbackRequestSessions
+	ffmpegSlots        chan struct{}
 	metricsOnce        sync.Once
 	configMu           sync.Mutex
 	schedulerMu        sync.Mutex
@@ -4097,6 +4098,10 @@ func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, 
 	if closer, ok := input.(io.Closer); ok {
 		defer closer.Close()
 	}
+	if !validWatchFFmpegOptions(r, "") {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
 	encoder := ""
 	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
 		var err error
@@ -4107,12 +4112,27 @@ func (s *server) streamFFmpegWithStatus(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
+	release, ok := s.acquireFFmpegSlot(r.Context())
+	if !ok {
+		w.Header().Set("Retry-After", "15")
+		legacyHTTPError(w, r, http.StatusTooManyRequests)
+		return
+	}
 	args := watchFFmpegArgs(r, format, live, encoder)
 	output, wait, err := runFFmpegStream(r.Context(), input, args...)
+	if err != nil {
+		release()
+	} else {
+		wait = releaseAfter(wait, release)
+	}
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, status, live)
 }
 
 func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePath string, format string) {
+	if !validWatchFFmpegOptions(r, "") {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
 	encoder := ""
 	if format == "mp4" && r.URL.Query().Get("c:v") == "" {
 		var err error
@@ -4123,8 +4143,19 @@ func (s *server) streamFFmpegFile(w http.ResponseWriter, r *http.Request, filePa
 			return
 		}
 	}
+	release, ok := s.acquireFFmpegSlot(r.Context())
+	if !ok {
+		w.Header().Set("Retry-After", "15")
+		legacyHTTPError(w, r, http.StatusTooManyRequests)
+		return
+	}
 	args := watchFFmpegFileArgs(r, format, filePath, encoder)
 	output, wait, err := runFFmpegFileStream(r.Context(), args...)
+	if err != nil {
+		release()
+	} else {
+		wait = releaseAfter(wait, release)
+	}
 	s.streamFFmpegOutput(w, r, output, wait, err, args, format, http.StatusOK, false)
 }
 
@@ -4406,6 +4437,71 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		)
 	}
 	return append(args, "-y", "-f", container, "pipe:1")
+}
+
+const maxConcurrentFFmpeg = 8
+
+func (s *server) acquireFFmpegSlot(ctx context.Context) (func(), bool) {
+	if s.ffmpegSlots == nil {
+		s.ffmpegSlots = make(chan struct{}, maxConcurrentFFmpeg)
+	}
+	select {
+	case s.ffmpegSlots <- struct{}{}:
+		return func() { <-s.ffmpegSlots }, true
+	case <-ctx.Done():
+		return nil, false
+	default:
+		return nil, false
+	}
+}
+
+func releaseAfter(wait func() error, release func()) func() error {
+	return func() error {
+		defer release()
+		return wait()
+	}
+}
+
+func validWatchFFmpegOptions(r *http.Request, encoder string) bool {
+	q := r.URL.Query()
+	if value := q.Get("s"); value != "" {
+		parts := strings.Split(value, "x")
+		if len(parts) != 2 || !validWatchInt(parts[0], 16, 3840) || !validWatchInt(parts[1], 16, 2160) {
+			return false
+		}
+	}
+	if value := q.Get("r"); value != "" && !validWatchInt(value, 1, 60) {
+		return false
+	}
+	if value := q.Get("ar"); value != "" && !validWatchInt(value, 8000, 48000) {
+		return false
+	}
+	if value := q.Get("b:v"); value != "" && !validWatchBitrate(value, 1024, 20*1024*1024) {
+		return false
+	}
+	if value := q.Get("b:a"); value != "" && !validWatchBitrate(value, 1024, 512*1024) {
+		return false
+	}
+	if value := q.Get("c:v"); value != "" && value != "copy" && value != "libx264" && value != "h264_amf" && value != encoder {
+		return false
+	}
+	if value := q.Get("c:a"); value != "" && value != "copy" && value != "aac" {
+		return false
+	}
+	if value := q.Get("audio"); value != "" && value != "secondary" {
+		return false
+	}
+	return true
+}
+
+func validWatchInt(value string, min, max int) bool {
+	n, err := strconv.Atoi(value)
+	return err == nil && n >= min && n <= max
+}
+
+func validWatchBitrate(value string, min, max int64) bool {
+	bits := legacyBitrateBits(value)
+	return bits >= min && bits <= max
 }
 
 func watchAudioMaps(value string) []string {

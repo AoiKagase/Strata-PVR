@@ -5784,3 +5784,36 @@ func TestRecordedSizeCacheTracksFileChanges(t *testing.T) {
 		t.Fatalf("removed cached size = %d, want 0", got)
 	}
 }
+
+func TestValidWatchFFmpegOptionsBoundsClientControlledValues(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "safe defaults", url: "/watch.mp4?s=1920x1080&r=60&ar=48000&b:v=20M&b:a=512k&c:v=libx264&c:a=aac", want: true},
+		{name: "oversized resolution", url: "/watch.mp4?s=9999x2160", want: false},
+		{name: "excessive frame rate", url: "/watch.mp4?r=61", want: false},
+		{name: "excessive bitrate", url: "/watch.mp4?b:v=21M", want: false},
+		{name: "unapproved video codec", url: "/watch.mp4?c:v=hevc_nvenc", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, test.url, nil)
+			if got := validWatchFFmpegOptions(req, "h264_amf"); got != test.want {
+				t.Fatalf("validWatchFFmpegOptions(%q) = %v, want %v", test.url, got, test.want)
+			}
+		})
+	}
+}
+
+func TestAcquireFFmpegSlotRejectsWhenCapacityIsFull(t *testing.T) {
+	s := &server{ffmpegSlots: make(chan struct{}, 1)}
+	release, ok := s.acquireFFmpegSlot(context.Background())
+	if !ok {
+		t.Fatal("first FFmpeg slot acquisition failed")
+	}
+	defer release()
+	if _, ok := s.acquireFFmpegSlot(context.Background()); ok {
+		t.Fatal("acquireFFmpegSlot accepted a request beyond capacity")
+	}
+}

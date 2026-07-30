@@ -229,6 +229,10 @@ func (s *server) handleLiveMSEVideo(w http.ResponseWriter, r *http.Request, chan
 		legacyHTTPError(w, r, http.StatusBadRequest)
 		return
 	}
+	if !validWatchFFmpegOptions(r, "") {
+		legacyHTTPError(w, r, http.StatusBadRequest)
+		return
+	}
 	if r.Method == http.MethodHead {
 		w.Header().Set("Content-Type", "video/MP2T")
 		w.Header().Set("Cache-Control", "no-store")
@@ -337,12 +341,23 @@ func (s *server) startLiveMSESession(
 	if hasCaption {
 		decoder, subtitleErr = s.aribCaptionDecoder()
 	}
+	if !validWatchFFmpegOptions(r, encoder) {
+		_ = body.Close()
+		return nil, errors.New("invalid live MSE FFmpeg options")
+	}
+	release, ok := s.acquireFFmpegSlot(sessionCtx)
+	if !ok {
+		_ = body.Close()
+		return nil, errors.New("FFmpeg capacity reached")
+	}
 	args := liveMSEFFmpegArgs(r, encoder)
 	output, wait, err := runFFmpegStream(sessionCtx, input, args...)
 	if err != nil {
+		release()
 		_ = body.Close()
 		return nil, err
 	}
+	wait = releaseAfter(wait, release)
 	_ = logging.AppendLine(filepath.Join(logDir(s.paths), "wui"), "SPAWN MSE: ffmpeg %s", strings.Join(args, " "))
 	session := &liveMSESession{
 		ctx:         sessionCtx,
