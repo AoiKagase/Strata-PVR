@@ -39,6 +39,7 @@ type authSession struct {
 
 type playbackTicket struct {
 	path    string
+	query   string
 	expires time.Time
 }
 
@@ -102,7 +103,7 @@ func (s *server) clearPlaybackTickets() {
 	s.authMu.Unlock()
 }
 
-func (s *server) createPlaybackTicket(path string) (string, error) {
+func (s *server) createPlaybackTicket(path string, queries ...url.Values) (string, error) {
 	token, err := randomAuthValue(32)
 	if err != nil {
 		return "", err
@@ -113,7 +114,11 @@ func (s *server) createPlaybackTicket(path string) (string, error) {
 		s.authMu.Unlock()
 		return "", errors.New("playback ticket capacity reached")
 	}
-	s.playbackTickets[token] = playbackTicket{path: path, expires: time.Now().Add(playbackTicketDuration)}
+	query := ""
+	if len(queries) > 0 {
+		query = playbackTicketQuery(queries[0])
+	}
+	s.playbackTickets[token] = playbackTicket{path: path, query: query, expires: time.Now().Add(playbackTicketDuration)}
 	s.authMu.Unlock()
 	return token, nil
 }
@@ -130,10 +135,20 @@ func (s *server) playbackTicketIdentity(r *http.Request) (authIdentity, bool) {
 	s.cleanupPlaybackTicketsLocked(time.Now())
 	ticket, ok := s.playbackTickets[token]
 	s.authMu.Unlock()
-	if !ok || ticket.path != r.URL.Path {
+	if !ok || ticket.path != r.URL.Path || ticket.query != playbackTicketQuery(r.URL.Query()) {
 		return authIdentity{}, false
 	}
 	return authIdentity{principal: "ticket:" + token, bearer: true, scope: "playback"}, true
+}
+
+func playbackTicketQuery(values url.Values) string {
+	query := make(url.Values, len(values))
+	for key, value := range values {
+		if key != "playback" && key != "prefix" && key != "ext" {
+			query[key] = append([]string(nil), value...)
+		}
+	}
+	return query.Encode()
 }
 
 func (s *server) cleanupPlaybackTicketsLocked(now time.Time) {

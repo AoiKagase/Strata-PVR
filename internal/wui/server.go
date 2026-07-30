@@ -2777,7 +2777,7 @@ func (s *server) handleProgramWatch(w http.ResponseWriter, r *http.Request, coll
 		if ext == "" {
 			ext = "m2ts"
 		}
-		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext)
+		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf")+"."+ext, r.URL.Query())
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
@@ -4034,7 +4034,7 @@ func (s *server) handleChannelWatch(w http.ResponseWriter, r *http.Request, id, 
 		if ext == "" {
 			ext = "m2ts"
 		}
-		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf") + "." + ext)
+		ticket, err := s.createPlaybackTicket(strings.TrimSuffix(r.URL.Path, ".xspf")+"."+ext, r.URL.Query())
 		if err != nil {
 			legacyHTTPError(w, r, http.StatusInternalServerError)
 			return
