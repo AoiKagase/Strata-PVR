@@ -5125,7 +5125,7 @@ func TestAPIAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}, WUITrustForwardedHeaders: true})
+	handler := newTestHandler(t, paths, &config.Config{WUIAccounts: []config.WebUser{{Username: "user", PasswordHash: hash}}, WUITrustForwardedHeaders: true, WUITrustedProxies: []string{"127.0.0.1"}})
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -5158,6 +5158,7 @@ func TestAPIAuth(t *testing.T) {
 	login.Header.Set("Origin", "https://example.com")
 	login.Header.Set("Content-Type", "application/json")
 	login.Header.Set("X-Forwarded-Proto", "https")
+	login.RemoteAddr = "127.0.0.1:12345"
 	loginRes := httptest.NewRecorder()
 	handler.ServeHTTP(loginRes, login)
 	if loginRes.Code != http.StatusNoContent {

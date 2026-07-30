@@ -597,7 +597,7 @@ func buildHTTPServers(paths Paths, cfg *config.Config) ([]runningServer, error) 
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	if !config.IsLoopbackAddress(host) {
+	if !config.IsLoopbackAddress(host) && (!cfg.WUIAuthenticationEnabled || !cfg.WUITrustForwardedHeaders || len(cfg.WUITrustedProxies) == 0) {
 		return nil, fmt.Errorf("WUI listener must bind to a loopback address; use a TLS reverse proxy for external access")
 	}
 	assets, err := resolveAssetSource(paths, cfg)
@@ -892,7 +892,7 @@ func (s *server) mutateAPITokens(mutate func([]config.APIToken) ([]config.APITok
 }
 func (s *server) withHostRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.validWUIHost(r.Host) {
+		if !s.validWUIHost(r) {
 			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
@@ -900,7 +900,11 @@ func (s *server) withHostRequired(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) validWUIHost(value string) bool {
+func (s *server) validWUIHost(r *http.Request) bool {
+	if s.requestFromTrustedProxy(r) {
+		return true
+	}
+	value := r.Host
 	if s.cfg == nil || s.cfg.WUIHost == "" {
 		return value != ""
 	}
@@ -1660,9 +1664,11 @@ type strataConfigUpdate struct {
 	Recording    config.RecordingSettings    `json:"recording"`
 	PreviewCache config.PreviewCacheSettings `json:"previewCache"`
 	Web          struct {
-		ListenAddress  string `json:"listenAddress"`
-		Port           int    `json:"port"`
-		Authentication struct {
+		ListenAddress         string   `json:"listenAddress"`
+		Port                  int      `json:"port"`
+		TrustForwardedHeaders bool     `json:"trustForwardedHeaders"`
+		TrustedProxies        []string `json:"trustedProxies"`
+		Authentication        struct {
 			Enabled bool `json:"enabled"`
 			Users   []struct {
 				Username           string `json:"username"`
@@ -1732,6 +1738,7 @@ func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, curr
 		Recording: update.Recording, PreviewCache: update.PreviewCache, Services: update.Services, Advanced: update.Advanced,
 		Web: config.WebSettings{
 			ListenAddress: update.Web.ListenAddress, Port: update.Web.Port,
+			TrustForwardedHeaders: update.Web.TrustForwardedHeaders, TrustedProxies: update.Web.TrustedProxies,
 			Authentication: config.AuthenticationSettings{Enabled: update.Web.Authentication.Enabled, Users: users, APITokens: current.Web.Authentication.APITokens},
 		},
 	}

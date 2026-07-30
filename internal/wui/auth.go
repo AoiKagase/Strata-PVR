@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -195,7 +196,7 @@ func (s *server) requestUsesHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if s.cfg == nil || !s.cfg.WUITrustForwardedHeaders {
+	if s.cfg == nil || !s.cfg.WUITrustForwardedHeaders || !s.requestFromTrustedProxy(r) {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]), "https")
@@ -207,10 +208,29 @@ func (s *server) requestOrigin(r *http.Request) string {
 		scheme = "https"
 	}
 	host := r.Host
-	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwarded != "" && s.cfg != nil && s.cfg.WUITrustForwardedHeaders {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwarded != "" && s.cfg != nil && s.cfg.WUITrustForwardedHeaders && s.requestFromTrustedProxy(r) {
 		host = forwarded
 	}
 	return scheme + "://" + host
+}
+
+func (s *server) requestFromTrustedProxy(r *http.Request) bool {
+	if s.cfg == nil {
+		return false
+	}
+	ip := net.ParseIP(s.remoteAddress(r))
+	if ip == nil {
+		return false
+	}
+	for _, value := range s.cfg.WUITrustedProxies {
+		if candidate := net.ParseIP(value); candidate != nil && candidate.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(value); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *server) validSameOrigin(r *http.Request) bool {

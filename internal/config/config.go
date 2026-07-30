@@ -67,6 +67,7 @@ type WebSettings struct {
 	ListenAddress         string                 `json:"listenAddress"`
 	Port                  int                    `json:"port"`
 	TrustForwardedHeaders bool                   `json:"trustForwardedHeaders,omitempty"`
+	TrustedProxies        []string               `json:"trustedProxies,omitempty"`
 	Authentication        AuthenticationSettings `json:"authentication"`
 }
 
@@ -111,6 +112,7 @@ type Config struct {
 	WUIPort                    int
 	WUIHost                    string
 	WUITrustForwardedHeaders   bool
+	WUITrustedProxies          []string
 	WUIWebDir                  string
 	NormalizationForm          string
 	MP4VideoEncoder            string
@@ -294,6 +296,7 @@ func loadDocument(b []byte) (*Config, error) {
 	cfg.WUIHost = doc.Web.ListenAddress
 	cfg.WUIPort = doc.Web.Port
 	cfg.WUITrustForwardedHeaders = doc.Web.TrustForwardedHeaders
+	cfg.WUITrustedProxies = append([]string(nil), doc.Web.TrustedProxies...)
 	cfg.WUIWebDir = doc.WUIWebDir
 	cfg.WUIAuthenticationEnabled = doc.Web.Authentication.Enabled
 	if doc.Web.Authentication.Enabled {
@@ -315,8 +318,13 @@ func loadDocument(b []byte) (*Config, error) {
 		seenTokens[token.ID] = true
 	}
 	cfg.WUIAPITokens = doc.Web.Authentication.APITokens
-	if !IsLoopbackAddress(doc.Web.ListenAddress) {
-		return nil, fmt.Errorf("web.listenAddress must be loopback because the native WUI listener does not provide TLS; place any external access behind a TLS reverse proxy")
+	for _, proxy := range doc.Web.TrustedProxies {
+		if _, _, err := net.ParseCIDR(proxy); err != nil && net.ParseIP(proxy) == nil {
+			return nil, fmt.Errorf("web.trustedProxies contains invalid IP or CIDR %q", proxy)
+		}
+	}
+	if !IsLoopbackAddress(doc.Web.ListenAddress) && (!doc.Web.Authentication.Enabled || !doc.Web.TrustForwardedHeaders || len(doc.Web.TrustedProxies) == 0) {
+		return nil, fmt.Errorf("non-loopback web.listenAddress requires authentication, trustForwardedHeaders, and at least one trustedProxies entry")
 	}
 	cfg.ExcludeServices = doc.Services.Excluded
 	cfg.ServiceOrder = doc.Services.Order

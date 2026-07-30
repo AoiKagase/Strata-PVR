@@ -18,6 +18,8 @@ func TestRequestOriginTrustsForwardedHeadersOnlyWhenEnabled(t *testing.T) {
 	}
 
 	server.cfg.WUITrustForwardedHeaders = true
+	server.cfg.WUITrustedProxies = []string{"127.0.0.1"}
+	request.RemoteAddr = "127.0.0.1:12345"
 	if got, want := server.requestOrigin(request), "https://public.example"; got != want {
 		t.Fatalf("forwarded origin = %q, want %q", got, want)
 	}
