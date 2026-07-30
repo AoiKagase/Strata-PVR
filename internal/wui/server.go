@@ -327,6 +327,8 @@ type recordingPreviewCache struct {
 	inFlight map[string]*recordingPreviewFlight
 }
 
+const maxRecordingPreviewCacheEntries = 64
+
 type recordingPreviewFlight struct {
 	done   chan struct{}
 	output []byte
@@ -362,6 +364,12 @@ func (c *recordingPreviewCache) run(ctx context.Context, key string, fn func() (
 	output, err := fn()
 	c.mu.Lock()
 	if err == nil && len(output) > 0 {
+		if _, exists := c.entries[key]; !exists && len(c.entries) >= maxRecordingPreviewCacheEntries {
+			for staleKey := range c.entries {
+				delete(c.entries, staleKey)
+				break
+			}
+		}
 		c.entries[key] = output
 	}
 	flight.output = output
