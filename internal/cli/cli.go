@@ -477,9 +477,17 @@ func convertLegacyConfig(old *config.LegacyConfig) (config.Document, []string, e
 		doc.Web.ListenAddress = old.WUIHost
 		doc.Web.Port = *old.WUIPort
 		doc.Web.Authentication.Enabled = len(old.WUIUsers) > 0
+		if !config.IsLoopbackAddress(old.WUIHost) {
+			doc.Web.ListenAddress = "127.0.0.1"
+			warnings = append(warnings, "legacy non-loopback WUI listener was changed to 127.0.0.1; configure web.trustForwardedHeaders and web.trustedProxies explicitly after migration when using a reverse proxy")
+		}
 	} else if old.WUIOpenServer {
 		doc.Web.ListenAddress = old.WUIOpenHost
 		doc.Web.Port = old.WUIOpenPort
+		if !config.IsLoopbackAddress(old.WUIOpenHost) {
+			doc.Web.ListenAddress = "127.0.0.1"
+			warnings = append(warnings, "legacy public WUI listener was changed to 127.0.0.1; configure an authenticated reverse proxy explicitly after migration if remote access is required")
+		}
 	} else {
 		warnings = append(warnings, "no legacy WUI listener was enabled; the default Strata listener was selected")
 	}

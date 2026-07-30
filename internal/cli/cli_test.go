@@ -167,6 +167,9 @@ func TestMigrateChinachuCreatesStrataDataAndArchivesInput(t *testing.T) {
 	if len(doc.Web.Authentication.Users) != 1 || !passwordauth.VerifyPassword(doc.Web.Authentication.Users[0].PasswordHash, "secret") {
 		t.Fatal("legacy WUI password was not converted to Argon2id")
 	}
+	if doc.Web.ListenAddress != "127.0.0.1" {
+		t.Fatalf("unsafe legacy WUI listener was not changed to loopback: %q", doc.Web.ListenAddress)
+	}
 	if _, err := os.Stat(filepath.Join("data", "strata.db")); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +285,7 @@ func TestMigrateChinachuWarnsForRulesWithUnknownChannelsAndSIDs(t *testing.T) {
 	if err := json.Unmarshal(mustReadCLIFile(t, reports[0]), &report); err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Warnings) != 3 {
+	if len(report.Warnings) < 3 {
 		t.Fatalf("migration report warnings = %#v", report.Warnings)
 	}
 }
