@@ -4431,10 +4431,10 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 		audioCodec = ""
 		audioBitrate = "96k"
 	}
-	args := []string{}
-	if !q.Has("debug") {
-		args = append(args, "-v", "error")
-	}
+	// Do not let a request enable FFmpeg's verbose stderr stream. The process
+	// runner retains stderr for diagnostics, so an untrusted query must not be
+	// able to turn that buffer into an unbounded allocation.
+	args := []string{"-v", "error"}
 	args = append(args, "-fflags", "+genpts+discardcorrupt", "-err_detect", "ignore_err")
 	if live {
 		// Live MPEG-TS already arrives at broadcast speed. Applying -re here
