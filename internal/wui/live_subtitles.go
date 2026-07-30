@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	liveSubtitleIdleTimeout = 3 * time.Second
-	liveSubtitleQueueSize   = 32
+	liveSubtitleIdleTimeout    = 3 * time.Second
+	liveSubtitleQueueSize      = 32
+	maxLiveSubtitleSubscribers = 16
 )
 
 type liveSubtitleSource struct {
@@ -57,6 +58,10 @@ func (m *liveSubtitleManager) subscribe(
 ) (io.ReadCloser, error) {
 	m.mu.Lock()
 	if session := m.sessions[key]; session != nil {
+		if len(session.subscribers) >= maxLiveSubtitleSubscribers {
+			m.mu.Unlock()
+			return nil, errors.New("live subtitle subscriber capacity reached")
+		}
 		reader := session.addSubscriberLocked(ctx)
 		m.mu.Unlock()
 		return reader, nil
