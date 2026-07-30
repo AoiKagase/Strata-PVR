@@ -203,7 +203,7 @@ func newServerWithAssets(paths Paths, cfg *config.Config, auth bool, assets asse
 	mux := http.NewServeMux()
 	server := &server{
 		paths: paths, cfg: cfg, db: paths.databaseHandle, assets: assets.files, assetLog: assets.log, assetErr: assetErr, metrics: newMetricHistory(), recordedSize: newRecordedSizeCache(), recordingPreviews: newRecordingPreviewCache(), mediaProbes: newMediaProbeCache(), liveSubtitles: newLiveSubtitleManager(), liveMSE: newLiveMSESessionManager(), playbackRequests: newPlaybackRequestSessions(), ffmpegSlots: make(chan struct{}, maxConcurrentFFmpeg),
-		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), authWorkers: make(chan struct{}, 2),
+		sessions: make(map[string]authSession), playbackTickets: make(map[string]playbackTicket), loginAttempts: make(map[string]loginAttempt), authWorkers: make(chan struct{}, 2),
 		schedulerGate: newSchedulerGate(),
 		hls:           newHLSSessionManager(paths),
 	}
@@ -253,6 +253,7 @@ type server struct {
 	authMu             sync.Mutex
 	playbackTickets    map[string]playbackTicket
 	sessions           map[string]authSession
+	loginAttempts      map[string]loginAttempt
 	authWorkers        chan struct{}
 	hls                *hlsSessionManager
 	captionDecoderOnce sync.Once
@@ -721,10 +722,20 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&credentials); err != nil || !s.verifyLogin(credentials.Username, credentials.Password, r) {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&credentials); err != nil {
 		legacyHTTPError(w, r, http.StatusUnauthorized)
 		return
 	}
+	if !s.allowLoginAttempt(r, credentials.Username) {
+		w.Header().Set("Retry-After", "60")
+		legacyHTTPError(w, r, http.StatusTooManyRequests)
+		return
+	}
+	if !s.verifyLogin(credentials.Username, credentials.Password, r) {
+		legacyHTTPError(w, r, http.StatusUnauthorized)
+		return
+	}
+	s.clearLoginAttempts(r, credentials.Username)
 	sessionID, err := s.createSession(credentials.Username)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)

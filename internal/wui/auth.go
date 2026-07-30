@@ -18,6 +18,13 @@ import (
 
 const sessionCookieName = "strata_session"
 const sessionDuration = 8 * time.Hour
+const loginAttemptWindow = time.Minute
+const maxLoginAttempts = 5
+
+type loginAttempt struct {
+	count int
+	since time.Time
+}
 
 // Playback tickets remain valid for the viewing session because media players
 // issue fresh Range requests whenever the user seeks.
@@ -190,6 +197,32 @@ func (s *server) verifyLogin(username, password string, r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+func (s *server) allowLoginAttempt(r *http.Request, username string) bool {
+	key := s.remoteAddress(r) + "\x00" + username
+	now := time.Now()
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.loginAttempts == nil {
+		s.loginAttempts = make(map[string]loginAttempt)
+	}
+	attempt := s.loginAttempts[key]
+	if now.Sub(attempt.since) >= loginAttemptWindow {
+		attempt = loginAttempt{since: now}
+	}
+	if attempt.count >= maxLoginAttempts {
+		return false
+	}
+	attempt.count++
+	s.loginAttempts[key] = attempt
+	return true
+}
+
+func (s *server) clearLoginAttempts(r *http.Request, username string) {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	delete(s.loginAttempts, s.remoteAddress(r)+"\x00"+username)
 }
 
 func (s *server) requestUsesHTTPS(r *http.Request) bool {
