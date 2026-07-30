@@ -485,6 +485,23 @@ func TestConvertLegacyConfigWarnsWhenListenersAreMerged(t *testing.T) {
 	}
 }
 
+func TestConvertLegacyConfigChangesUnsafePublicListenerToLoopback(t *testing.T) {
+	doc, warnings, err := convertLegacyConfig(&config.LegacyConfig{
+		WUIOpenServer: true,
+		WUIOpenHost:   "0.0.0.0",
+		WUIOpenPort:   20772,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Web.ListenAddress != "127.0.0.1" {
+		t.Fatalf("public WUI listener address = %q, want 127.0.0.1", doc.Web.ListenAddress)
+	}
+	if !strings.Contains(strings.Join(warnings, "\n"), "legacy public WUI listener was changed to 127.0.0.1") {
+		t.Fatalf("migration warning missing public-listener change: %v", warnings)
+	}
+}
+
 func TestConvertLegacyConfigConvertsRecordingMarginsFromMilliseconds(t *testing.T) {
 	doc, _, err := convertLegacyConfig(&config.LegacyConfig{
 		RecordingStartMargin: 4000,
