@@ -43,14 +43,18 @@ type playbackTicket struct {
 }
 
 type authIdentity struct {
-	username string
-	bearer   bool
-	scope    string
+	username  string
+	principal string
+	bearer    bool
+	scope     string
 }
 
 type authSubjectContextKey struct{}
 
 func (identity authIdentity) subject() string {
+	if identity.principal != "" {
+		return identity.principal
+	}
 	if identity.username != "" {
 		return "user:" + identity.username
 	}
@@ -129,7 +133,7 @@ func (s *server) playbackTicketIdentity(r *http.Request) (authIdentity, bool) {
 	if !ok || ticket.path != r.URL.Path {
 		return authIdentity{}, false
 	}
-	return authIdentity{bearer: true, scope: "playback"}, true
+	return authIdentity{principal: "ticket:" + token, bearer: true, scope: "playback"}, true
 }
 
 func (s *server) cleanupPlaybackTicketsLocked(now time.Time) {
@@ -197,7 +201,7 @@ func (s *server) bearerIdentity(r *http.Request) (authIdentity, bool) {
 			if scope == "" {
 				scope = "admin"
 			}
-			return authIdentity{username: token.Name, bearer: true, scope: scope}, true
+			return authIdentity{username: token.Name, principal: "token:" + token.ID, bearer: true, scope: scope}, true
 		}
 	}
 	return authIdentity{}, false

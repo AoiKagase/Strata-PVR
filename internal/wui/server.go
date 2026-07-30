@@ -247,6 +247,8 @@ type server struct {
 	liveMSE            *liveMSESessionManager
 	playbackRequests   *playbackRequestSessions
 	ffmpegSlots        chan struct{}
+	ffmpegMu           sync.Mutex
+	ffmpegSubjects     map[string]int
 	mediaStreams       chan struct{}
 	metricsOnce        sync.Once
 	configMu           sync.Mutex
@@ -4601,6 +4603,7 @@ func watchFFmpegArgsForInput(r *http.Request, format string, live bool, input st
 }
 
 const maxConcurrentFFmpeg = 8
+const maxConcurrentFFmpegPerSubject = 2
 const maxConcurrentMediaStreams = 16
 
 func (s *server) acquireMediaStream(ctx context.Context) (func(), bool) {
@@ -4618,15 +4621,39 @@ func (s *server) acquireMediaStream(ctx context.Context) (func(), bool) {
 }
 
 func (s *server) acquireFFmpegSlot(ctx context.Context) (func(), bool) {
+	subject, _ := ctx.Value(authSubjectContextKey{}).(string)
+	if subject == "" {
+		subject = "anonymous"
+	}
+	s.ffmpegMu.Lock()
 	if s.ffmpegSlots == nil {
 		s.ffmpegSlots = make(chan struct{}, maxConcurrentFFmpeg)
 	}
+	if s.ffmpegSubjects == nil {
+		s.ffmpegSubjects = make(map[string]int)
+	}
+	if s.ffmpegSubjects[subject] >= maxConcurrentFFmpegPerSubject {
+		s.ffmpegMu.Unlock()
+		return nil, false
+	}
 	select {
 	case s.ffmpegSlots <- struct{}{}:
-		return func() { <-s.ffmpegSlots }, true
+		s.ffmpegSubjects[subject]++
+		s.ffmpegMu.Unlock()
+		return func() {
+			s.ffmpegMu.Lock()
+			<-s.ffmpegSlots
+			s.ffmpegSubjects[subject]--
+			if s.ffmpegSubjects[subject] == 0 {
+				delete(s.ffmpegSubjects, subject)
+			}
+			s.ffmpegMu.Unlock()
+		}, true
 	case <-ctx.Done():
+		s.ffmpegMu.Unlock()
 		return nil, false
 	default:
+		s.ffmpegMu.Unlock()
 		return nil, false
 	}
 }

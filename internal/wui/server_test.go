@@ -5906,6 +5906,30 @@ func TestAcquireFFmpegSlotRejectsWhenCapacityIsFull(t *testing.T) {
 	}
 }
 
+func TestAcquireFFmpegSlotRejectsWhenSubjectCapacityIsFull(t *testing.T) {
+	s := &server{ffmpegSlots: make(chan struct{}, 4)}
+	ctx := context.WithValue(context.Background(), authSubjectContextKey{}, "user:alice")
+	first, ok := s.acquireFFmpegSlot(ctx)
+	if !ok {
+		t.Fatal("first FFmpeg slot acquisition failed")
+	}
+	defer first()
+	second, ok := s.acquireFFmpegSlot(ctx)
+	if !ok {
+		t.Fatal("second FFmpeg slot acquisition failed")
+	}
+	defer second()
+	if _, ok := s.acquireFFmpegSlot(ctx); ok {
+		t.Fatal("FFmpeg slot acquisition accepted a request beyond the subject capacity")
+	}
+	other := context.WithValue(context.Background(), authSubjectContextKey{}, "user:bob")
+	releaseOther, ok := s.acquireFFmpegSlot(other)
+	if !ok {
+		t.Fatal("FFmpeg slot acquisition rejected a different subject")
+	}
+	defer releaseOther()
+}
+
 func TestAcquireMediaStreamRejectsWhenCapacityIsFull(t *testing.T) {
 	s := &server{mediaStreams: make(chan struct{}, 1)}
 	release, ok := s.acquireMediaStream(context.Background())
