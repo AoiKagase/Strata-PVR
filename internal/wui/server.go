@@ -3746,7 +3746,7 @@ func validPreviewDimension(value string) bool {
 		return false
 	}
 	n, err := strconv.Atoi(value)
-	return err == nil && n > 0
+	return err == nil && n > 0 && n <= 1920
 }
 
 func previewPosition(r *http.Request) string {
