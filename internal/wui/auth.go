@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,6 +30,7 @@ type loginAttempt struct {
 // Playback tickets remain valid for the viewing session because media players
 // issue fresh Range requests whenever the user seeks.
 const playbackTicketDuration = sessionDuration
+const maxPlaybackTickets = 128
 
 type authSession struct {
 	username string
@@ -88,6 +90,10 @@ func (s *server) createPlaybackTicket(path string) (string, error) {
 	}
 	s.authMu.Lock()
 	s.cleanupPlaybackTicketsLocked(time.Now())
+	if len(s.playbackTickets) >= maxPlaybackTickets {
+		s.authMu.Unlock()
+		return "", errors.New("playback ticket capacity reached")
+	}
 	s.playbackTickets[token] = playbackTicket{path: path, expires: time.Now().Add(playbackTicketDuration)}
 	s.authMu.Unlock()
 	return token, nil
