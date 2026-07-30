@@ -76,6 +76,11 @@ func parseProgramSearchQuery(r *http.Request) (programSearchQuery, error) {
 		ProgramID:   firstQueryValue(values, "programID", "pgid"),
 		ChannelID:   firstQueryValue(values, "channelID", "chid"),
 	}
+	for _, value := range []string{query.Query, query.Title, query.Description, query.Category, query.Type, query.ProgramID, query.ChannelID} {
+		if len(value) > 256 {
+			return programSearchQuery{}, strconv.ErrSyntax
+		}
+	}
 	var err error
 	if query.StartHour, err = parseSearchHour(values, "startHour", "start", 0, 23); err != nil {
 		return programSearchQuery{}, err
