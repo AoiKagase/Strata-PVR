@@ -772,6 +772,7 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearSession(cookie.Value)
 	}
+	s.clearPlaybackTickets()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.requestUsesHTTPS(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
@@ -1811,6 +1812,7 @@ func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, curr
 	}
 	*s.cfg = *loaded
 	s.clearSessions()
+	s.clearPlaybackTickets()
 	public, err := publicStrataConfig(encoded)
 	if err != nil {
 		legacyHTTPError(w, r, http.StatusInternalServerError)

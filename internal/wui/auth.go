@@ -83,6 +83,12 @@ func (s *server) clearSessions() {
 	s.authMu.Unlock()
 }
 
+func (s *server) clearPlaybackTickets() {
+	s.authMu.Lock()
+	s.playbackTickets = make(map[string]playbackTicket)
+	s.authMu.Unlock()
+}
+
 func (s *server) createPlaybackTicket(path string) (string, error) {
 	token, err := randomAuthValue(32)
 	if err != nil {
