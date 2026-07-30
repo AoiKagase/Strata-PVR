@@ -68,6 +68,27 @@ func Read(ctx context.Context, databasePath, collection string) ([]legacy.Progra
 	return programs, nil
 }
 
+func ReadRecent(ctx context.Context, databasePath, collection string, limit int) ([]legacy.Program, error) {
+	db, release, err := database.Acquire(ctx, databasePath)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	documents, err := database.ReadRecentProgramCollection(ctx, db, collection, limit)
+	if err != nil {
+		return nil, err
+	}
+	programs := make([]legacy.Program, 0, len(documents))
+	for _, document := range documents {
+		var program legacy.Program
+		if err := json.Unmarshal(document, &program); err != nil {
+			return nil, err
+		}
+		programs = append(programs, program)
+	}
+	return programs, nil
+}
+
 func ReadIDs(ctx context.Context, databasePath, collection string) ([]string, error) {
 	db, release, err := database.Acquire(ctx, databasePath)
 	if err != nil {

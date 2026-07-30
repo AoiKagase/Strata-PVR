@@ -37,6 +37,26 @@ func ReadProgramCollection(ctx context.Context, db *sql.DB, collection string) (
 	return documents, nil
 }
 
+func ReadRecentProgramCollection(ctx context.Context, db *sql.DB, collection string, limit int) ([]json.RawMessage, error) {
+	if !validProgramCollection(collection) || limit < 1 {
+		return nil, fmt.Errorf("invalid program collection query")
+	}
+	rows, err := db.QueryContext(ctx, `SELECT document_json FROM program_collections WHERE collection = ? ORDER BY start_at DESC, program_id DESC LIMIT ?`, collection, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read recent %s: %w", collection, err)
+	}
+	defer rows.Close()
+	documents := []json.RawMessage{}
+	for rows.Next() {
+		var document string
+		if err := rows.Scan(&document); err != nil {
+			return nil, err
+		}
+		documents = append(documents, json.RawMessage(document))
+	}
+	return documents, rows.Err()
+}
+
 func ReadProgramIDs(ctx context.Context, db *sql.DB, collection string) ([]string, error) {
 	if !validProgramCollection(collection) {
 		return nil, fmt.Errorf("invalid program collection %q", collection)
