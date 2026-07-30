@@ -89,6 +89,8 @@ type APIToken struct {
 	Name      string `json:"name"`
 	TokenHash string `json:"tokenHash"`
 	CreatedAt string `json:"createdAt"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	Scope     string `json:"scope,omitempty"`
 }
 
 type ServiceSettings struct {

@@ -43,6 +43,7 @@ type playbackTicket struct {
 type authIdentity struct {
 	username string
 	bearer   bool
+	scope    string
 }
 
 func randomAuthValue(bytes int) (string, error) {
@@ -107,7 +108,7 @@ func (s *server) playbackTicketIdentity(r *http.Request) (authIdentity, bool) {
 	if !ok || ticket.path != r.URL.Path {
 		return authIdentity{}, false
 	}
-	return authIdentity{bearer: true}, true
+	return authIdentity{bearer: true, scope: "playback"}, true
 }
 
 func (s *server) cleanupPlaybackTicketsLocked(now time.Time) {
@@ -165,7 +166,17 @@ func (s *server) bearerIdentity(r *http.Request) (authIdentity, bool) {
 	s.configMu.Unlock()
 	for _, token := range tokens {
 		if subtle.ConstantTimeCompare([]byte(token.TokenHash), []byte(want)) == 1 {
-			return authIdentity{username: token.Name, bearer: true}, true
+			if token.ExpiresAt != "" {
+				expires, err := time.Parse(time.RFC3339, token.ExpiresAt)
+				if err != nil || !time.Now().Before(expires) {
+					continue
+				}
+			}
+			scope := token.Scope
+			if scope == "" {
+				scope = "admin"
+			}
+			return authIdentity{username: token.Name, bearer: true, scope: scope}, true
 		}
 	}
 	return authIdentity{}, false

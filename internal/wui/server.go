@@ -679,6 +679,10 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		if !valid {
 			identity, valid = s.authenticateRequest(r)
 		}
+		if identity.bearer && !identity.allows(r) {
+			legacyHTTPError(w, r, http.StatusForbidden)
+			return
+		}
 		if !valid {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				w.Header().Set("WWW-Authenticate", "Bearer")
@@ -694,6 +698,19 @@ func (s *server) withAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (identity authIdentity) allows(r *http.Request) bool {
+	if identity.scope == "admin" {
+		return true
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	if identity.scope == "read" {
+		return r.URL.Path != "/api/config" && !strings.HasPrefix(r.URL.Path, "/api/auth/")
+	}
+	return identity.scope == "playback" && strings.Contains(r.URL.Path, "/watch.")
 }
 
 func (s *server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -765,6 +782,8 @@ type apiTokenResponse struct {
 	Name      string `json:"name"`
 	CreatedAt string `json:"createdAt"`
 	Token     string `json:"token,omitempty"`
+	Scope     string `json:"scope"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
 func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
@@ -782,12 +801,14 @@ func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
 		s.configMu.Unlock()
 		response := make([]apiTokenResponse, 0, len(tokens))
 		for _, token := range tokens {
-			response = append(response, apiTokenResponse{ID: token.ID, Name: token.Name, CreatedAt: token.CreatedAt})
+			response = append(response, apiTokenResponse{ID: token.ID, Name: token.Name, CreatedAt: token.CreatedAt, Scope: token.Scope, ExpiresAt: token.ExpiresAt})
 		}
 		writePrettyJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var input struct {
-			Name string `json:"name"`
+			Name          string `json:"name"`
+			Scope         string `json:"scope"`
+			ExpiresInDays int    `json:"expiresInDays"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input); err != nil {
 			legacyHTTPError(w, r, http.StatusBadRequest)
@@ -795,6 +816,13 @@ func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
 		}
 		input.Name = strings.TrimSpace(input.Name)
 		if input.Name == "" || len(input.Name) > 64 {
+			legacyHTTPError(w, r, http.StatusBadRequest)
+			return
+		}
+		if input.Scope == "" {
+			input.Scope = "admin"
+		}
+		if input.Scope != "admin" && input.Scope != "read" && input.Scope != "playback" || input.ExpiresInDays < 0 || input.ExpiresInDays > 3650 {
 			legacyHTTPError(w, r, http.StatusBadRequest)
 			return
 		}
@@ -811,7 +839,15 @@ func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
 		rawToken := "strata_" + secret
 		hash := sha256.Sum256([]byte(rawToken))
 		created := time.Now().UTC().Format(time.RFC3339)
-		token := config.APIToken{ID: id, Name: input.Name, TokenHash: hex.EncodeToString(hash[:]), CreatedAt: created}
+		expiresAt := ""
+		if input.ExpiresInDays > 0 || input.Scope == "admin" {
+			days := input.ExpiresInDays
+			if days == 0 {
+				days = 30
+			}
+			expiresAt = time.Now().Add(time.Duration(days) * 24 * time.Hour).UTC().Format(time.RFC3339)
+		}
+		token := config.APIToken{ID: id, Name: input.Name, TokenHash: hex.EncodeToString(hash[:]), CreatedAt: created, Scope: input.Scope, ExpiresAt: expiresAt}
 		if err := s.mutateAPITokens(func(tokens []config.APIToken) ([]config.APIToken, error) {
 			for _, existing := range tokens {
 				if existing.Name == token.Name {
