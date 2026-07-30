@@ -795,6 +795,8 @@ type apiTokenResponse struct {
 	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
+const maxAPITokens = 32
+
 func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
 	s.configMu.Lock()
 	enabled := len(s.cfg.WUIAccounts) > 0
@@ -858,6 +860,9 @@ func (s *server) handleAPITokens(w http.ResponseWriter, r *http.Request) {
 		}
 		token := config.APIToken{ID: id, Name: input.Name, TokenHash: hex.EncodeToString(hash[:]), CreatedAt: created, Scope: input.Scope, ExpiresAt: expiresAt}
 		if err := s.mutateAPITokens(func(tokens []config.APIToken) ([]config.APIToken, error) {
+			if len(tokens) >= maxAPITokens {
+				return nil, errors.New("api token capacity reached")
+			}
 			for _, existing := range tokens {
 				if existing.Name == token.Name {
 					return nil, errors.New("duplicate api token name")
