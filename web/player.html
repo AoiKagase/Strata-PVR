@@ -71,6 +71,16 @@
       object-fit: contain;
     }
 
+    video:fullscreen,
+    video:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      max-height: none;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      object-fit: contain;
+    }
+
     .message {
       display: grid;
       justify-items: center;
@@ -136,6 +146,7 @@
     </div>
   </main>
   <script src="/mpegts.js"></script>
+  <script src="/player-orientation.js"></script>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);

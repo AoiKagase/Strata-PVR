@@ -2741,13 +2741,27 @@
 
   function togglePlayerFullscreen() {
     var shell = document.querySelector(".player-shell");
-    if (!shell || !shell.requestFullscreen) {
+    var video = byId("playerVideo");
+    if (!shell) {
       return;
     }
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(function () {});
-    } else {
-      shell.requestFullscreen().catch(function () {});
+
+    var requestFullscreen = shell.requestFullscreen || shell.webkitRequestFullscreen;
+    var videoFullscreen = video && video.webkitEnterFullscreen;
+    var fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement;
+    var exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fullscreenElement) {
+      if (typeof exitFullscreen === "function") {
+        Promise.resolve(exitFullscreen.call(document)).catch(function () {});
+      }
+    } else if (typeof requestFullscreen === "function") {
+      Promise.resolve(requestFullscreen.call(shell)).catch(function () {});
+    } else if (typeof videoFullscreen === "function") {
+      try {
+        videoFullscreen.call(video);
+      } catch (error) {
+        // Older WebKit may expose the method but reject it outside native video playback.
+      }
     }
   }
 

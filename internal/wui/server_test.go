@@ -987,6 +987,8 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 		filepath.Join("..", "..", "web", "player.html"): {
 			`<video id="externalPlayer" controls autoplay playsinline aria-label="視聴プレイヤー">`,
 			`<track id="subtitleTrack" kind="subtitles" srclang="ja" label="日本語">`,
+			`video:fullscreen,`,
+			`<script src="/player-orientation.js"></script>`,
 			`<script src="/mpegts.js"></script>`,
 			`var src = params.get("src");`,
 			`var subtitles = params.get("subtitles");`,
@@ -996,6 +998,52 @@ func TestNativeDashboardPlayerOpenLinkUsesStandalonePlayer(t *testing.T) {
 			`window.mpegts.createPlayer({`,
 			`subtitleURL.searchParams.set("session", playbackSessionToken);`,
 			`subtitleTrack.src = subtitleURL.toString();`,
+		},
+	}
+	for path, wants := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		for _, want := range wants {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %q", path, want)
+			}
+		}
+	}
+}
+
+func TestPlayerFullscreenLocksLandscapeOrientation(t *testing.T) {
+	files := map[string][]string{
+		filepath.Join("..", "..", "web", "player-orientation.js"): {
+			`function lockPlayerOrientation()`,
+			`orientation.lock("landscape")`,
+			`function unlockPlayerOrientation()`,
+			`orientation.unlock()`,
+			`function syncPlayerOrientation()`,
+			`document.addEventListener("fullscreenchange", syncPlayerOrientation);`,
+			`document.addEventListener("webkitfullscreenchange", syncPlayerOrientation);`,
+			`video.addEventListener("webkitbeginfullscreen", lockPlayerOrientation);`,
+			`video.addEventListener("webkitendfullscreen", unlockPlayerOrientation);`,
+		},
+		filepath.Join("..", "..", "web", "index.html"): {
+			`<script src="/player-orientation.js"></script>`,
+		},
+		filepath.Join("..", "..", "web", "player.html"): {
+			`<script src="/player-orientation.js"></script>`,
+		},
+		filepath.Join("..", "..", "web", "styles.css"): {
+			`height: 100dvh;`,
+			`padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);`,
+			`.player-shell:-webkit-full-screen {`,
+			`video:fullscreen,`,
+			`video:-webkit-full-screen {`,
+		},
+		filepath.Join("..", "..", "web", "app.js"): {
+			`var requestFullscreen = shell.requestFullscreen || shell.webkitRequestFullscreen;`,
+			`var fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement;`,
+			`var exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;`,
 		},
 	}
 	for path, wants := range files {

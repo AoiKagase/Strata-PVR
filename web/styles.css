@@ -2153,21 +2153,37 @@ summary:focus-visible,
   font-size: 12px;
 }
 
-.player-shell:fullscreen {
+.player-shell:fullscreen,
+.player-shell:-webkit-full-screen {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow: hidden;
 }
 
-.player-shell:fullscreen .embedded-player {
+.player-shell:fullscreen .embedded-player,
+.player-shell:-webkit-full-screen .embedded-player {
   flex: 1 1 auto;
+  min-height: 0;
   max-height: none;
   aspect-ratio: auto;
 }
 
-.player-shell:fullscreen .player-controls {
+video:fullscreen,
+video:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  object-fit: contain;
+}
+
+.player-shell:fullscreen .player-controls,
+.player-shell:-webkit-full-screen .player-controls {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -2179,12 +2195,15 @@ summary:focus-visible,
 }
 
 .player-shell:fullscreen .player-controls:hover,
-.player-shell:fullscreen .player-controls:focus-within {
+.player-shell:fullscreen .player-controls:focus-within,
+.player-shell:-webkit-full-screen .player-controls:hover,
+.player-shell:-webkit-full-screen .player-controls:focus-within {
   opacity: 1;
   transform: translateY(0);
 }
 
-.player-shell:fullscreen .player-controls::before {
+.player-shell:fullscreen .player-controls::before,
+.player-shell:-webkit-full-screen .player-controls::before {
   content: "";
   position: absolute;
   right: 0;
