@@ -12,7 +12,7 @@ permissions:
 
 env:
   # Pin the patched toolchain so CI cannot select a vulnerable Go release.
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.26.6"
   TZ: Asia/Tokyo
 
 jobs:
