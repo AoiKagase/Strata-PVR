@@ -24,7 +24,7 @@ Chinachu の完全な後継や全機能互換を目指すものではありま�
 - Mirakurun / mirakc (未検証)
 - 配布済みバイナリを使う場合: 実行対象 OS 用の Strata PVR バイナリ
 - 視聴やプレビューを使う場合: `ffmpeg` / `ffprobe`
-- ソースからビルドする場合: Go 1.25 以上
+- ソースからビルドする場合: Go 1.26.6 以上（`go.mod` の指定）
 
 ## ビルド
 
@@ -142,6 +142,90 @@ HTML、CSS、JavaScript はバイナリに埋め込まれています。通常�
 視聴ルートは必要なときに `ffmpeg` を起動します。実行ファイルが
 見つからない場合は、該当する機能だけが `503 Service Unavailable` になります。
 
+### WUI の待受と認証
+
+初期設定は `127.0.0.1:20772` で、認証は無効です。LAN などへ直接待受を
+広げる場合は、`web.listenAddress` を変更するだけでは起動できません。
+`web.authentication.enabled: true` でユーザーを設定し、
+`web.trustForwardedHeaders: true` と `web.trustedProxies` に、実際に転送する
+reverse proxy の IP または CIDR を設定する必要があります。非ループバック
+待受ではこの3条件がそろわない設定を拒否します。
+
+`trustForwardedHeaders` は信頼した proxy からの転送ヘッダーだけを HTTPS と
+外部ホスト情報として扱うための設定です。任意の送信元を
+`trustedProxies` に入れたり、TLS なしで WUI をインターネットへ直接公開したり
+しないでください。API はログインセッションのほか、設定した API token を
+`Authorization: Bearer <token>` で利用できます。
+
+録画済み番組の視聴は、Apple 系のネイティブ HLS 対応ブラウザでは HLS を使い、
+それ以外では MP4 を使います。ライブ視聴は、Apple 系のネイティブ HLS 対応
+ブラウザでは HLS を使い、それ以外ではブラウザの対応状況に応じて MSE または
+MP4 を使います。
+HLS の画質は `1080p`、`720p`、`540p`（既定）、`360p` から選べます。
+プレイヤーのフルスクリーン操作では、対応ブラウザで横画面ロックを試みますが、
+ブラウザが拒否・未対応でも再生自体は継続します。チャンネルロゴは
+`data/.cache/logos/` に保存され、HTTP の ETag と `private, max-age=86400` に
+よるキャッシュを使います。管理画面からロゴキャッシュを削除できます。
+
+開発時に埋め込み Web 資産の代わりに外部ディレクトリを使う場合は、設定の
+`wuiWebDir` または `./strata-pvr run wui --web-dir <path>` を指定します。
+
+## CLI コマンド
+
+初期化・移行と各サービスの起動:
+
+```sh
+./strata-pvr init
+./strata-pvr migrate
+./strata-pvr run wui [--web-dir <path>]
+./strata-pvr run operator
+./strata-pvr run scheduler
+```
+
+運用コマンドの主なものは次のとおりです。
+
+| コマンド | 用途 |
+| --- | --- |
+| `update` | スケジューラを1回実行 |
+| `search [options]` | 番組を検索 |
+| `reserve <pgid>` / `unreserve <pgid>` | 手動予約・予約解除 |
+| `skip <pgid>` / `unskip <pgid>` | 自動予約のスキップ・解除 |
+| `stop <pgid>` | 録画を停止 |
+| `rule [options]` | 自動予約ルールを追加・設定 |
+| `enrule <rule#>` / `disrule <rule#>` / `rmrule <rule#>` | ルールの有効化・無効化・削除 |
+| `rules` / `reserves` / `recording` / `recorded` | 各一覧を表示 |
+| `cleanup` | 録画済み一覧を整理 |
+
+`service <name> execute` は互換用のサービス実行コマンド、
+`service <name> initscript` は旧形式の init script 出力です。
+
+## 設定
+
+設定ファイルは `data/config.json` です。`config.sample.json` の現行項目は
+次のとおりです。
+
+| 項目 | 内容 |
+| --- | --- |
+| `schema`, `version` | 設定スキーマ (`strata/config`) とバージョン |
+| `mirakurun.url` | Mirakurun の接続先 |
+| `mirakurun.recordingPriority`, `conflictedPriority` | 録画優先度 |
+| `recording.directory`, `filenameFormat` | 録画保存先とファイル名形式 |
+| `recording.startMargin`, `endMargin` | 録画開始・終了マージン（秒） |
+| `recording.lowSpace.thresholdMB`, `action` | 空き容量しきい値と動作 (`remove` / `stop`) |
+| `recording.postProcess.commands` | 録画完了後に実行する外部コマンド（shell 経由ではない） |
+| `recording.postProcess.timeoutSeconds`, `maxConcurrentRuns` | 後処理のタイムアウトと同時実行数 |
+| `web.listenAddress`, `port` | WUI の待受アドレスとポート |
+| `web.trustForwardedHeaders`, `trustedProxies` | reverse proxy の転送ヘッダーを信頼する条件 |
+| `web.authentication.enabled`, `users`, `apiTokens` | WUI/API 認証の有効化と認証情報 |
+| `wuiWebDir` | 外部 Web 資産ディレクトリ（空なら埋め込み資産） |
+| `previewCache.maxAgeDays`, `maxSizeMB` | プレビューキャッシュの保持期間と上限 |
+| `services.excluded`, `order` | 除外サービスとサービス順 |
+| `advanced.normalizationForm`, `mp4VideoEncoder` | 文字正規化と MP4 用エンコーダ設定 |
+
+`web.authentication.enabled` を有効にする場合は、少なくとも1つの `users`
+を設定してください。パスワードは平文ではなく `passwordHash` を保存します。
+非ループバック待受の追加条件については、上記「WUI の待受と認証」を参照してください。
+
 ## 録画後処理コマンド
 
 録画が正常完了して録画済み一覧へ登録された後に、任意の外部コマンドを実行できます。中断・失敗した録画では実行されず、後処理の失敗やタイムアウトによって録画結果や録画ファイルが変更されることはありません。標準出力・標準エラー・終了状態は operator ログへ記録されます。
@@ -172,6 +256,8 @@ systemd 用の unit ファイル例を `contrib/systemd/` に用意していま�
 `operator` と `wui` は常駐サービス、`scheduler` は timer から起動する
 one-shot サービスとして運用できます。詳しくは
 [contrib/systemd/README.md](contrib/systemd/README.md) を参照してください。
+Linux 用バイナリのビルド、`/opt/strata-pvr` への配置、unit のインストール、
+`systemctl enable --now` までの手順も同ガイドに記載しています。
 
 ## データとバックアップ
 
