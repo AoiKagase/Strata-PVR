@@ -1759,6 +1759,7 @@ func publicStrataConfig(data []byte) ([]byte, error) {
 type strataConfigUpdate struct {
 	Schema       string                      `json:"schema"`
 	Version      int                         `json:"version"`
+	WUIWebDir    string                      `json:"wuiWebDir"`
 	Mirakurun    config.MirakurunSettings    `json:"mirakurun"`
 	Recording    config.RecordingSettings    `json:"recording"`
 	PreviewCache config.PreviewCacheSettings `json:"previewCache"`
@@ -1833,7 +1834,7 @@ func (s *server) updateStrataConfig(w http.ResponseWriter, r *http.Request, curr
 		users = append(users, config.WebUser{Username: user.Username, PasswordHash: hash})
 	}
 	doc := config.Document{
-		Schema: update.Schema, Version: update.Version, Mirakurun: update.Mirakurun,
+		Schema: update.Schema, Version: update.Version, WUIWebDir: update.WUIWebDir, Mirakurun: update.Mirakurun,
 		Recording: update.Recording, PreviewCache: update.PreviewCache, Services: update.Services, Advanced: update.Advanced,
 		Web: config.WebSettings{
 			ListenAddress: update.Web.ListenAddress, Port: update.Web.Port,

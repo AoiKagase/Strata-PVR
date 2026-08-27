@@ -5760,13 +5760,21 @@
       return null;
     }
     var cfg = state.config || {};
+    var web = cfg.web || {};
     return {
       schema: cfg.schema,
       version: cfg.version,
       mirakurun: { url: mirakurunURL, recordingPriority: Number(controlString("strataRecordingPriority")), conflictedPriority: Number(controlString("strataConflictedPriority")) },
 	  recording: { directory: directory, filenameFormat: filenameFormat, startMargin: startMargin, endMargin: endMargin, lowSpace: { thresholdMB: threshold, action: controlString("strataLowSpaceAction") }, postProcess: { commands: postProcessCommands, timeoutSeconds: postProcessTimeout, maxConcurrentRuns: postProcessMaxConcurrent } },
 	  previewCache: { maxAgeDays: previewMaxAge, maxSizeMB: previewMaxSize },
-      web: { listenAddress: listenAddress, port: port, authentication: { enabled: enabled, users: users } },
+      web: {
+        listenAddress: listenAddress,
+        port: port,
+        trustForwardedHeaders: web.trustForwardedHeaders === true,
+        trustedProxies: Array.isArray(web.trustedProxies) ? web.trustedProxies.slice() : [],
+        authentication: { enabled: enabled, users: users }
+      },
+      wuiWebDir: cfg.wuiWebDir || "",
       services: { excluded: excluded, order: order },
       advanced: { normalizationForm: controlString("strataNormalizationForm"), mp4VideoEncoder: controlString("strataMP4VideoEncoder") }
     };
