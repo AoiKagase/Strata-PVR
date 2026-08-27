@@ -1438,6 +1438,9 @@ func TestNativeDashboardStrataConfigForm(t *testing.T) {
 			`body: raw`,
 			`function renderStrataConfigForm(cfg)`,
 			`function readStrataConfigForm()`,
+			`trustForwardedHeaders: web.trustForwardedHeaders === true`,
+			`trustedProxies: Array.isArray(web.trustedProxies) ? web.trustedProxies.slice() : []`,
+			`wuiWebDir: cfg.wuiWebDir || ""`,
 			`passwordConfigured`,
 			`autocomplete="new-password"`,
 		},
@@ -5481,6 +5484,7 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := config.DefaultDocument()
+	doc.WUIWebDir = "external-web"
 	doc.Web.Authentication.Users = []config.WebUser{{Username: "admin", PasswordHash: existingHash}}
 	if err := storage.WriteJSONAtomic(paths.Config, doc, true); err != nil {
 		t.Fatal(err)
@@ -5526,6 +5530,9 @@ func TestAPIStrataConfigPutHashesAndPreservesPasswords(t *testing.T) {
 	}
 	if !passwordauth.VerifyPassword(saved.Web.Authentication.Users[1].PasswordHash, "new-secret") {
 		t.Fatal("new password was not hashed")
+	}
+	if saved.WUIWebDir != doc.WUIWebDir {
+		t.Fatalf("wuiWebDir was not preserved: got %q, want %q", saved.WUIWebDir, doc.WUIWebDir)
 	}
 	if got := saved.Recording.PostProcess; !reflect.DeepEqual(got.Commands, []config.PostProcessCommand{{Command: "ffmpeg", Arguments: []string{"-i", "{recordedPath}", "{programID}.mp4"}}}) || got.TimeoutSeconds != 900 || got.MaxConcurrentRuns != 2 {
 		t.Fatalf("post-process settings were not preserved: %#v", got)
