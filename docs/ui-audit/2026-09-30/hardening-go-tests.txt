@@ -1,0 +1,20 @@
+?   	strata-pvr/cmd/strata-pvr	[no test files]
+ok  	strata-pvr/internal/auth	(cached)
+ok  	strata-pvr/internal/cli	3.056s
+ok  	strata-pvr/internal/config	(cached)
+ok  	strata-pvr/internal/database	(cached)
+ok  	strata-pvr/internal/domain	(cached)
+ok  	strata-pvr/internal/logging	(cached)
+ok  	strata-pvr/internal/mirakurun	(cached)
+ok  	strata-pvr/internal/operator	(cached)
+ok  	strata-pvr/internal/operatorcontrol	(cached)
+ok  	strata-pvr/internal/programstore	(cached)
+ok  	strata-pvr/internal/reservationstore	(cached)
+ok  	strata-pvr/internal/rulestore	(cached)
+ok  	strata-pvr/internal/scheduler	(cached)
+ok  	strata-pvr/internal/schedulestore	(cached)
+ok  	strata-pvr/internal/storage	(cached)
+ok  	strata-pvr/internal/system	(cached)
+ok  	strata-pvr/internal/version	(cached)
+ok  	strata-pvr/internal/wui	16.964s
+?   	strata-pvr/web	[no test files]

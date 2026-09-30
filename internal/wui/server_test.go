@@ -1137,8 +1137,8 @@ func TestLivePlayersUseMPEGTSWithSharedCaptionSession(t *testing.T) {
 	}
 	mpegtsIndex := strings.Index(indexSource, `<script src="/mpegts.js"></script>`)
 	appIndex := strings.Index(indexSource, `<script src="/app.js"></script>`)
-	if mpegtsIndex < 0 || appIndex < 0 || mpegtsIndex > appIndex {
-		t.Fatal("web/index.html must load mpegts.js before app.js")
+	if mpegtsIndex >= 0 || appIndex < 0 {
+		t.Fatal("web/index.html must load app.js without eagerly loading mpegts.js")
 	}
 
 	player, err := os.ReadFile(filepath.Join("..", "..", "web", "player.html"))
@@ -1342,7 +1342,7 @@ func TestLiveChannelPlaybackUsesHLSForAppleNativeBrowsers(t *testing.T) {
 		`function liveChannelPlaybackURL(channelID, query)`,
 		`return channelURL(channelID, "hls/index", "m3u8", hlsQuery);`,
 		`return channelURL(channelID, "watch", "mp4", query);`,
-		`return liveChannelPlaybackURL(group.id, query);`,
+		`openLiveChannelPlayer(group.name || group.id || "チャンネル", group.id);`,
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("web/app.js missing %q", want)

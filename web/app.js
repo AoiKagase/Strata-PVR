@@ -39,6 +39,8 @@
   var playerLiveSubtitleTimeOffset = null;
   var playerLiveCueLimit = 128;
   var playerSourceGeneration = 0;
+  var mpegtsLoadPromise = null;
+  var playerLiveLoadRetry = null;
   var playerSourceStopPromise = Promise.resolve();
   var pendingConfirmResolve = null;
   var scheduleMenuTouchStart = null;
@@ -2268,6 +2270,47 @@
     return channelURL(channelID, "watch", "mp4", query);
   }
 
+  function ensureMPEGTSLoaded() {
+    if (window.mpegts && typeof window.mpegts.isSupported === "function") {
+      return Promise.resolve();
+    }
+    if (mpegtsLoadPromise) {
+      return mpegtsLoadPromise;
+    }
+    var pending = new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = "/mpegts.js";
+      script.async = true;
+      var timer = window.setTimeout(function () {
+        finish(new Error("視聴機能の読み込みが時間内に完了しませんでした。接続を確認して再試行してください。"));
+      }, 15000);
+      function finish(error) {
+        window.clearTimeout(timer);
+        script.onload = script.onerror = null;
+        if (error) {
+          script.remove();
+          reject(error);
+        } else {
+          resolve();
+        }
+      }
+      script.onload = function () {
+        finish(window.mpegts && typeof window.mpegts.isSupported === "function" ? null : new Error("視聴機能を初期化できませんでした。再試行してください。"));
+      };
+      script.onerror = function () {
+        finish(new Error("視聴機能を読み込めませんでした。接続を確認して再試行してください。"));
+      };
+      document.head.appendChild(script);
+    });
+    mpegtsLoadPromise = pending;
+    pending.catch(function () {
+      if (mpegtsLoadPromise === pending) {
+        mpegtsLoadPromise = null;
+      }
+    });
+    return pending;
+  }
+
   function liveMSESupported() {
     if (!window.mpegts || typeof window.mpegts.isSupported !== "function" || !window.mpegts.isSupported()) {
       return false;
@@ -2278,7 +2321,7 @@
 
   function liveChannelSubtitlesURL(channelID, query) {
     var subtitleQuery = cloneQuery(query || {});
-    if (liveMSESupported()) {
+    if (isLiveMSEURL(liveChannelPlaybackURL(channelID, query))) {
       subtitleQuery.mode = "mse";
     } else {
       delete subtitleQuery.mode;
@@ -2524,6 +2567,10 @@
   }
 
   function retryPlayerSource() {
+    if (playerLiveLoadRetry) {
+      playerLiveLoadRetry();
+      return;
+    }
     if (!playerSourceBuilder) {
       return;
     }
@@ -2539,6 +2586,7 @@
     var video = byId("playerVideo");
     var openLink = byId("playerOpenLink");
     if (openLink) {
+      openLink.hidden = false;
       var metaNode = byId("playerDialogMeta");
       var subtitleURL = "";
       if (playerSubtitleSourceBuilder) {
@@ -3222,6 +3270,7 @@
     var dialog = byId("playerDialog");
     var video = byId("playerVideo");
     options = options || {};
+    playerLiveLoadRetry = null;
     if (!dialog || !video || !dialog.showModal) {
       openURL(url);
       return;
@@ -3242,11 +3291,64 @@
     updatePlayerQualityControl(options.query || null, Boolean(playerSourceBuilder));
     updatePlayerAudioControl(options.query || null, Boolean(playerSourceBuilder));
     dialog.showModal();
-    setPlayerSource(url, options.query || null);
+    if (!options.deferSource) {
+      setPlayerSource(url, options.query || null);
+    } else {
+      var openLink = byId("playerOpenLink");
+      if (openLink) {
+        openLink.hidden = true;
+        openLink.removeAttribute("href");
+      }
+    }
     if (options.status) {
       setPlayerStatus(options.status, "info");
     }
     video.focus();
+  }
+
+  function openLiveChannelPlayer(meta, channelID) {
+    stopPlayerVideo();
+    var dialog = byId("playerDialog");
+    var video = byId("playerVideo");
+    if (!dialog || !video || !dialog.showModal) {
+      var fallbackGeneration = playerSourceGeneration;
+      var fallbackNativeHLS = recordedNativeHLSSupported(video || document.createElement("video"), window.navigator && window.navigator.userAgent);
+      setBusy("視聴機能を読み込んでいます。");
+      (fallbackNativeHLS ? Promise.resolve() : ensureMPEGTSLoaded()).then(function () {
+        if (fallbackGeneration === playerSourceGeneration) {
+          openURL(playerWindowURL(liveChannelPlaybackURL(channelID, null), meta, liveChannelSubtitlesURL(channelID, null)));
+        }
+      }).catch(function (error) {
+        if (fallbackGeneration === playerSourceGeneration) {
+          showError(error);
+        }
+      });
+      return;
+    }
+    openPlayerDialog(meta, "", { deferSource: true, status: "視聴機能を読み込んでいます。" });
+    function start() {
+      var generation = ++playerSourceGeneration;
+      setPlayerStatus("視聴機能を読み込んでいます。", "info");
+      var nativeHLS = recordedNativeHLSSupported(video, window.navigator && window.navigator.userAgent);
+      (nativeHLS ? Promise.resolve() : ensureMPEGTSLoaded()).then(function () {
+        if (generation !== playerSourceGeneration || !dialog.open) {
+          return;
+        }
+        playerLiveLoadRetry = null;
+        playerSourceBuilder = function (query) { return liveChannelPlaybackURL(channelID, query); };
+        playerSubtitleSourceBuilder = function (query) { return liveChannelSubtitlesURL(channelID, query); };
+        updatePlayerSubtitleControl(true);
+        updatePlayerQualityControl(null, true);
+        updatePlayerAudioControl(null, true);
+        setPlayerSource(playerSourceBuilder(null), null);
+      }).catch(function (error) {
+        if (generation === playerSourceGeneration && dialog.open) {
+          setPlayerStatus(error.message);
+        }
+      });
+    }
+    playerLiveLoadRetry = start;
+    start();
   }
 
   function openAdjustablePlayer(meta, buildURL, query, seekable, duration, status, subtitleBuilder) {
@@ -3273,6 +3375,7 @@
   }
 
   function stopPlayerVideo() {
+    playerLiveLoadRetry = null;
     var video = byId("playerVideo");
     if (!video) {
       return;
@@ -3451,11 +3554,7 @@
         var channelID = programChannelID(program);
         if (channelID) {
           row.appendChild(actionButton("視聴", "この番組のチャンネルを視聴", function () {
-            openAdjustablePlayer(program.title || channelID || "チャンネル", function (query) {
-              return liveChannelPlaybackURL(channelID, query);
-            }, null, false, 0, "", function (query) {
-              return liveChannelSubtitlesURL(channelID, query);
-            });
+            openLiveChannelPlayer(program.title || channelID || "チャンネル", channelID);
           }));
         }
       } else if (name === "create-rule-from-program") {
@@ -3864,11 +3963,7 @@
     actions.className = "row-actions live-channel-actions";
     if (group.id) {
       actions.appendChild(actionButton("視聴", "このチャンネルをライブ視聴", function () {
-        openAdjustablePlayer(group.name || group.id || "チャンネル", function (query) {
-          return liveChannelPlaybackURL(group.id, query);
-        }, null, false, 0, "", function (query) {
-          return liveChannelSubtitlesURL(group.id, query);
-        });
+        openLiveChannelPlayer(group.name || group.id || "チャンネル", group.id);
       }, "small-button"));
     }
 
@@ -4797,11 +4892,7 @@
       return row;
     }
     row.appendChild(actionButton("視聴", "チャンネルを視聴", function () {
-      openAdjustablePlayer(label || channelID || "チャンネル", function (query) {
-        return liveChannelPlaybackURL(channelID, query);
-      }, null, false, 0, "", function (query) {
-        return liveChannelSubtitlesURL(channelID, query);
-      });
+      openLiveChannelPlayer(label || channelID || "チャンネル", channelID);
     }));
     return row;
   }

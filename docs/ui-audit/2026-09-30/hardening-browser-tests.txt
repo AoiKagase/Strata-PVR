@@ -1,0 +1,41 @@
+✔ search result channel is treated as present when the search view has not loaded the schedule (3.5718ms)
+✔ schedule channel label wins and search channel with the same ID is not duplicated (2.3922ms)
+✔ channel absent from both sources keeps the existing unavailable label (1.2312ms)
+▶ layout and contrast: desktop and touch, light and dark
+  ✔ 1440 light (1011.1363ms)
+  ✔ 1440 dark (817.6101ms)
+  ✔ 375 light (889.6292ms)
+  ✔ 375 dark (768.7025ms)
+  ✔ 320 light (761.6178ms)
+  ✔ 320 dark (849.2345ms)
+✔ layout and contrast: desktop and touch, light and dark (5666.7145ms)
+▶ login errors preserve input and allow retry without duplicate requests
+  ✔ 401 (448.3559ms)
+  ✔ 403 (434.6197ms)
+  ✔ 429 (451.9307ms)
+  ✔ 500 (460.0595ms)
+✔ login errors preserve input and allow retry without duplicate requests (1796.6619ms)
+▶ login network failure, timeout and success
+  ✔ network (224.5897ms)
+  ✔ timeout (230.0464ms)
+  ✔ timeout-no-abort (232.8486ms)
+  ✔ success (287.3106ms)
+✔ login network failure, timeout and success (976.1475ms)
+✔ dialog fallback opens a valid dedicated live player (499.203ms)
+✔ mpegts is lazy, shared and used before live URL selection (932.7903ms)
+▶ failed mpegts loading can retry; closing during loading never starts media
+  ✔ retry (491.6691ms)
+  ✔ close (467.2484ms)
+  ✔ switch (471.7946ms)
+  ✔ timeout (485.7647ms)
+  ✔ unsupported (419.402ms)
+  ✔ hls (419.4533ms)
+✔ failed mpegts loading can retry; closing during loading never starts media (2756.6045ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13239.3628

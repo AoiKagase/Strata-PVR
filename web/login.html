@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ログイン | Strata PVR</title>
   <style>
+    *, *::before, *::after { box-sizing: border-box; }
     :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101724; color: #eef3fb; }
     body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at top, #213a63, #101724 55%); }
     main { width: min(100% - 2rem, 25rem); padding: 2rem; border: 1px solid #3a4d6b; border-radius: 1rem; background: #172235; box-shadow: 0 1rem 3rem #0008; }
     h1 { margin: 0 0 .4rem; font-size: 1.55rem; } p { color: #bdc9d9; line-height: 1.55; }
-    form { display: grid; gap: 1rem; margin-top: 1.5rem; } label { display: grid; gap: .45rem; font-weight: 600; }
+    form { display: grid; gap: 1rem; margin-top: 1.5rem; min-width: 0; } label { display: grid; gap: .45rem; font-weight: 600; min-width: 0; }
     input, button { font: inherit; border-radius: .5rem; padding: .75rem; } input { border: 1px solid #526786; background: #0f1827; color: inherit; }
     button { border: 0; background: #56a1ff; color: #071321; font-weight: 700; cursor: pointer; } button:disabled { opacity: .65; cursor: wait; }
     #error { min-height: 1.4em; color: #ffb4ab; margin: .8rem 0 0; }
+    input { width: 100%; min-width: 0; } #error { overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -31,21 +33,47 @@
       var form = document.getElementById("loginForm");
       var button = document.getElementById("submit");
       var error = document.getElementById("error");
+      var submitting = false;
       form.addEventListener("submit", function (event) {
         event.preventDefault();
+        if (submitting) { return; }
+        submitting = true;
         error.textContent = "";
         button.disabled = true;
-        fetch("/api/auth/login", {
+        button.setAttribute("aria-busy", "true");
+        var controller = typeof window.AbortController === "function" ? new window.AbortController() : null;
+        var timer;
+        var timeout = new Promise(function (resolve, reject) {
+          timer = window.setTimeout(function () {
+            if (controller) { controller.abort(); }
+            var failure = new Error("ログインの応答待ちがタイムアウトしました。");
+            failure.name = "AbortError";
+            reject(failure);
+          }, 15000);
+        });
+        Promise.race([timeout, fetch("/api/auth/login", {
           method: "POST",
           credentials: "same-origin",
+          signal: controller ? controller.signal : undefined,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: document.getElementById("username").value, password: document.getElementById("password").value })
-        }).then(function (response) {
-          if (!response.ok) { throw new Error("ユーザー名またはパスワードが正しくありません。"); }
+        })]).then(function (response) {
+          if (!response.ok) {
+            var message = "ログイン処理に失敗しました。再試行してください。";
+            if (response.status === 401) { message = "ユーザー名またはパスワードが正しくありません。入力内容を確認して再試行してください。"; }
+            else if (response.status === 403) { message = "ログインが許可されていません。接続先とアクセス権を確認して再試行してください。"; }
+            else if (response.status === 429) { message = "ログインの試行が多すぎます。しばらく待ってから再試行してください。"; }
+            else if (response.status >= 500) { message = "サーバーでログイン処理に失敗しました。しばらく待ってから再試行してください。"; }
+            throw new Error(message);
+          }
           window.location.assign("/");
         }).catch(function (err) {
-          error.textContent = err.message || "ログインに失敗しました。";
+          error.textContent = err.name === "AbortError" ? "サーバーからの応答がありません。接続を確認して再試行してください。" : err.name === "TypeError" ? "サーバーに接続できません。接続を確認して再試行してください。" : err.message;
+          submitting = false;
           button.disabled = false;
+        }).finally(function () {
+          window.clearTimeout(timer);
+          button.removeAttribute("aria-busy");
         });
       });
     }());

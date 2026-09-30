@@ -884,7 +884,7 @@ button {
 
 button:hover {
   background: var(--accent-strong);
-  color: var(--brand-ink);
+  color: var(--accent-ink);
 }
 
 button:disabled {
@@ -970,6 +970,7 @@ summary:focus-visible,
 .empty-link-button:hover {
   border-color: var(--accent-line);
   background: var(--accent-hover-surface);
+  color: var(--ink);
 }
 
 .program-row {
@@ -1828,7 +1829,7 @@ summary:focus-visible,
 
 .primary-action:hover {
   background: var(--accent-strong);
-  color: var(--brand-ink);
+  color: var(--accent-ink);
 }
 
 .action-menu {
@@ -2079,6 +2080,10 @@ summary:focus-visible,
   color: var(--player-control-hover-ink);
 }
 
+.player-control-link[hidden] {
+  display: none;
+}
+
 .player-control-button:disabled {
   border-color: var(--player-control-disabled-line);
   background: var(--player-control-disabled-surface);
@@ -2225,6 +2230,7 @@ video:-webkit-full-screen {
 
 .danger-button:hover {
   background: var(--danger-strong);
+  color: var(--danger-ink);
 }
 
 .mp4-dialog form {
@@ -2259,6 +2265,7 @@ video:-webkit-full-screen {
 .small-button:hover {
   border-color: var(--accent-line);
   background: var(--accent-hover-surface);
+  color: var(--ink);
 }
 
 .json-editor {
@@ -2926,13 +2933,16 @@ body.view-settings .settings-grid {
 }
 
 .config-form span {
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }
 
 .config-form select {
-  max-width: none;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .panel-head {
@@ -2974,6 +2984,7 @@ body.view-settings .settings-grid {
 
 .filter-clear-button:hover {
   background: var(--surface-disabled);
+  color: var(--ink);
 }
 
 .list-filter-summary {
@@ -3757,6 +3768,7 @@ body.view-schedule .schedule-zoom-controls {
 
 @media (pointer: coarse) {
   button,
+  .pagination-buttons button,
   select,
   input:not([type="checkbox"]),
   textarea,

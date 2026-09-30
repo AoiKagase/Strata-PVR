@@ -1,0 +1,284 @@
+[
+  {
+    "width": 1440,
+    "colorScheme": "light",
+    "normal": 4.994119957577584,
+    "hover": 8.26099021079881,
+    "focus": 4.994119957577584
+  },
+  {
+    "width": 1440,
+    "colorScheme": "light",
+    "route": "settings",
+    "viewport": 1440,
+    "scroll": 1440
+  },
+  {
+    "width": 1440,
+    "colorScheme": "light",
+    "route": "login",
+    "viewport": 1440,
+    "scroll": 1440
+  },
+  {
+    "width": 1440,
+    "colorScheme": "dark",
+    "normal": 7.554576817835526,
+    "hover": 11.474001212698107,
+    "focus": 7.554576817835526
+  },
+  {
+    "width": 1440,
+    "colorScheme": "dark",
+    "route": "settings",
+    "viewport": 1440,
+    "scroll": 1440
+  },
+  {
+    "width": 1440,
+    "colorScheme": "dark",
+    "route": "login",
+    "viewport": 1440,
+    "scroll": 1440
+  },
+  {
+    "width": 375,
+    "colorScheme": "light",
+    "normal": 4.994119957577584,
+    "hover": 8.26099021079881,
+    "focus": 4.994119957577584
+  },
+  {
+    "width": 375,
+    "colorScheme": "light",
+    "route": "settings",
+    "viewport": 375,
+    "scroll": 375
+  },
+  {
+    "width": 375,
+    "colorScheme": "light",
+    "route": "search",
+    "targets": [
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      }
+    ]
+  },
+  {
+    "width": 375,
+    "colorScheme": "light",
+    "route": "login",
+    "viewport": 375,
+    "scroll": 375
+  },
+  {
+    "width": 375,
+    "colorScheme": "dark",
+    "normal": 7.554576817835526,
+    "hover": 11.474001212698107,
+    "focus": 7.554576817835526
+  },
+  {
+    "width": 375,
+    "colorScheme": "dark",
+    "route": "settings",
+    "viewport": 375,
+    "scroll": 375
+  },
+  {
+    "width": 375,
+    "colorScheme": "dark",
+    "route": "search",
+    "targets": [
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      }
+    ]
+  },
+  {
+    "width": 375,
+    "colorScheme": "dark",
+    "route": "login",
+    "viewport": 375,
+    "scroll": 375
+  },
+  {
+    "width": 320,
+    "colorScheme": "light",
+    "normal": 4.994119957577584,
+    "hover": 8.26099021079881,
+    "focus": 4.994119957577584
+  },
+  {
+    "width": 320,
+    "colorScheme": "light",
+    "route": "settings",
+    "viewport": 320,
+    "scroll": 320
+  },
+  {
+    "width": 320,
+    "colorScheme": "light",
+    "route": "search",
+    "targets": [
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      }
+    ]
+  },
+  {
+    "width": 320,
+    "colorScheme": "light",
+    "route": "login",
+    "viewport": 320,
+    "scroll": 320
+  },
+  {
+    "width": 320,
+    "colorScheme": "dark",
+    "normal": 7.554576817835526,
+    "hover": 11.474001212698107,
+    "focus": 7.554576817835526
+  },
+  {
+    "width": 320,
+    "colorScheme": "dark",
+    "route": "settings",
+    "viewport": 320,
+    "scroll": 320
+  },
+  {
+    "width": 320,
+    "colorScheme": "dark",
+    "route": "search",
+    "targets": [
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      },
+      {
+        "w": 44,
+        "h": 44
+      }
+    ]
+  },
+  {
+    "width": 320,
+    "colorScheme": "dark",
+    "route": "login",
+    "viewport": 320,
+    "scroll": 320
+  }
+]
