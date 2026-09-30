@@ -6208,10 +6208,18 @@
     setFormValue(id, value);
   }
 
-  function channelOptionEntries(extraValues) {
+  function channelOptionEntries(extraValues, sourceChannels) {
     var entries = [];
     var seen = {};
     (state.schedule || []).forEach(function (channel) {
+      var id = scheduleChannelID(channel);
+      if (!id || seen[id]) {
+        return;
+      }
+      seen[id] = true;
+      entries.push({ id: id, name: scheduleChannelName(channel) || id });
+    });
+    (sourceChannels || []).forEach(function (channel) {
       var id = scheduleChannelID(channel);
       if (!id || seen[id]) {
         return;
@@ -6229,7 +6237,7 @@
     return entries;
   }
 
-  function renderChannelSelectOptions(select, extraValues, emptyLabel, multiple) {
+  function renderChannelSelectOptions(select, extraValues, emptyLabel, multiple, sourceChannels) {
     if (!select) {
       return;
     }
@@ -6242,7 +6250,7 @@
       empty.textContent = emptyLabel || "選択";
       select.appendChild(empty);
     }
-    channelOptionEntries(values).forEach(function (entry) {
+    channelOptionEntries(values, sourceChannels).forEach(function (entry) {
       var option = document.createElement("option");
       option.value = entry.id;
       option.textContent = entry.name;
@@ -6274,7 +6282,7 @@
     return entries.sort(function (a, b) { return a.localeCompare(b); });
   }
 
-  function renderRuleFormOptions(extraCategories, extraChannels, extraIgnoreChannels) {
+  function renderRuleFormOptions(extraCategories, extraChannels, extraIgnoreChannels, sourceChannels) {
     var categories = byId("ruleCategories");
     var categoryValues = (extraCategories || []).concat(listFormValues(categories));
     if (categories) {
@@ -6290,7 +6298,7 @@
     ["ruleChannels", "ruleIgnoreChannels"].forEach(function (id) {
       var select = byId(id);
       var extraValues = id === "ruleChannels" ? extraChannels : extraIgnoreChannels;
-      renderChannelSelectOptions(select, (extraValues || []).concat(listFormValues(select)), "", true);
+      renderChannelSelectOptions(select, (extraValues || []).concat(listFormValues(select)), "", true, sourceChannels);
     });
   }
 
@@ -6430,7 +6438,12 @@
     }
     setFormValue("ruleSid", channelID && /^\d+$/.test(channelID) ? channelID : "");
     setFormValue("ruleCategories", "");
-    renderRuleFormOptions(program.category ? [program.category] : [], channelID && !/^\d+$/.test(channelID) ? [channelID] : [], []);
+    renderRuleFormOptions(
+      program.category ? [program.category] : [],
+      channelID && !/^\d+$/.test(channelID) ? [channelID] : [],
+      [],
+      state.currentView === "search" ? state.searchChannels : []
+    );
     setFormValue("ruleCategories", program.category ? [program.category] : []);
     setFormValue("ruleChannels", channelID && !/^\d+$/.test(channelID) ? [channelID] : []);
     setFormValue("ruleIgnoreChannels", []);
