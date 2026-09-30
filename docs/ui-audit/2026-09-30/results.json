@@ -1,0 +1,3336 @@
+[
+  {
+    "mode": "desktop",
+    "route": "dashboard",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "refreshButton",
+        "tag": "BUTTON",
+        "text": "更新",
+        "w": 52,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 71,
+        "h": 24
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "ニュースと天気予報",
+        "w": 888,
+        "h": 28
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 38,
+        "h": 24
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ダッシュボード",
+      "放送中の番組",
+      "録画中",
+      "最近の録画",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nダッシュボード\n\n現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。\n\n更新\n放送中の番組\n監査チャンネル\nニュースと天気予報\n20:01-20:31\n視聴\n録画中\n録画中の番組はありません\n最近の録画\n録画済み番組はありません\n予約\n予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "schedule",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "scheduleRefreshButton",
+        "tag": "BUTTON",
+        "text": "再読込",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 66,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "番組一覧（3件）",
+        "w": 1440,
+        "h": 36
+      },
+      {
+        "id": "",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1440,
+        "h": 32
+      },
+      {
+        "id": "scheduleZoomOutButton",
+        "tag": "BUTTON",
+        "text": "番組表を縮小",
+        "w": 36,
+        "h": 32
+      },
+      {
+        "id": "scheduleZoomInButton",
+        "tag": "BUTTON",
+        "text": "番組表を拡大",
+        "w": 36,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [],
+    "bodyText": "メインコンテンツへ移動\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nオペレータ稼働中\n録画中 0\n予約 0\n競合 0\n再読込\n番組表フィルタ\n\n番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組表へ移動し、矢印キーで番組を選び、Enterキーで詳細を開きます。タッチ操作では番組一覧も利用できます。\n\n時刻\n監査チャンネル\n視聴\n09/30 20:00\n09/30 21:00\n09/30 22:00\n20:01-20:31\nニュースと天気予報\nnews\n20:31-21:01\n映画 日本語の長い番組タイトルを含む字幕付き特別放送\nnews\n21:01-21:31\n音楽ライブ\nnews\n番組一覧（3件）\n-\n標準\n+\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "search",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "searchQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 432,
+        "h": 32
+      },
+      {
+        "id": "searchCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchType",
+        "tag": "SELECT",
+        "text": "すべて\n            GR\n            BS\n            CS\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchProgramID",
+        "tag": "INPUT",
+        "text": "",
+        "w": 432,
+        "h": 32
+      },
+      {
+        "id": "searchChannelID",
+        "tag": "SELECT",
+        "text": "全チャンネル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchStartHour",
+        "tag": "INPUT",
+        "text": "",
+        "w": 200,
+        "h": 32
+      },
+      {
+        "id": "searchEndHour",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchFirstPage",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchPrevPage",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchNextPage",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchLastPage",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "番組検索"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n番組検索\n\n番組表から条件に一致する今後の番組を検索します。\n\n検索\nジャンル\n全ジャンル\n種別\nすべて\nGR\nBS\nCS\nEX\nタイトル\n説明\n番組ID\nチャンネル\n全チャンネル\n何時から\n何時まで\nクリア\n1-3 / 3件\n1 / 1ページ\n最初\n前へ\n次へ\n最後\n条件に一致する番組はありません\n1 / 1ページ\n最初\n前へ\n次へ\n最後\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "reserves",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "reserveListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 476,
+        "h": 32
+      },
+      {
+        "id": "reserveListCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListType",
+        "tag": "SELECT",
+        "text": "すべて\n              手動予約\n              自動予約\n        ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListSort",
+        "tag": "SELECT",
+        "text": "開始時刻 昇順\n              開始時刻 降順\n              ジャンル\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n予約\n\n手動予約、自動予約、スキップ状態を確認します。\n\n検索\nジャンル\n全ジャンル\n予約種別\nすべて\n手動予約\n自動予約\nスキップ\n並び順\n開始時刻 昇順\n開始時刻 降順\nジャンル\nタイトル\n長さ\nクリア\n0件\n条件に一致する予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "recorded",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "一覧",
+        "w": 66,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "タイル",
+        "w": 70,
+        "h": 32
+      },
+      {
+        "id": "recordedCleanupButton",
+        "tag": "BUTTON",
+        "text": "クリーンアップ",
+        "w": 93,
+        "h": 40
+      },
+      {
+        "id": "recordedListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 686,
+        "h": 32
+      },
+      {
+        "id": "recordedListCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "recordedListSort",
+        "tag": "SELECT",
+        "text": "開始時刻 降順\n              開始時刻 昇順\n              ジャンル\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "recordedListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      },
+      {
+        "id": "recordedListPageSize",
+        "tag": "SELECT",
+        "text": "50件\n            100件\n            200件",
+        "w": 120,
+        "h": 32
+      },
+      {
+        "id": "recordedListFirstPage",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListPrevPage",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListNextPage",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListLastPage",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SELECT",
+        "text": "50件\n            100件\n            200件",
+        "w": 120,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "録画済み"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n録画済み\n\n録画済み番組の再生、変換、ダウンロード、削除を行います。\n\n一覧\nタイル\nクリーンアップ\n検索\nジャンル\n全ジャンル\n並び順\n開始時刻 降順\n開始時刻 昇順\nジャンル\nタイトル\n長さ\nクリア\n0件\n表示件数\n50件\n100件\n200件\n最初のページ\n前のページ\n0件\n次のページ\n最後のページ\n条件に一致する録画済み番組はありません\n表示件数\n50件\n100件\n200件\n0件\n最初のページ\n前のページ\n次のページ\n最後のページ\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "rules",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "forceSchedulerButton",
+        "tag": "BUTTON",
+        "text": "スケジューラ実行",
+        "w": 110,
+        "h": 32
+      },
+      {
+        "id": "ruleTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleType",
+        "tag": "SELECT",
+        "text": "すべて\n              GR\n              BS\n            ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleSid",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleFlags",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreFlags",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDurationMin",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDurationMax",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleHourStart",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleHourEnd",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleRecordedFormat",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1166,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "ruleDisabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "addBasicRuleButton",
+        "tag": "BUTTON",
+        "text": "フォームから追加",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "saveBasicRuleButton",
+        "tag": "BUTTON",
+        "text": "フォーム保存",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "resetRuleFormButton",
+        "tag": "BUTTON",
+        "text": "フォーム解除",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 652,
+        "h": 32
+      },
+      {
+        "id": "ruleListState",
+        "tag": "SELECT",
+        "text": "すべて\n              有効\n              無効",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleListSort",
+        "tag": "SELECT",
+        "text": "番号 昇順\n              番号 降順\n              状態\n       ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ルール"
+    ],
+    "bodyText": "説明 ignore_descriptions\n種別\nすべて\nGR\nBS\nCS\nEX\nSID\n複数カテゴリ categories\nnews\nチャンネル\n監査チャンネル\n除外チャンネル\n監査チャンネル\nフラグ\n除外フラグ\n最短分 duration.min\n最長分 duration.max\n開始時 hour.start\n終了時 hour.end\n録画ファイル名\n\n<...> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。\n\n例: <title>.m2ts → 番組タイトル.m2ts\n\n使用できるタグ\n無効\n追加JSON\nフォームから追加\nフォーム保存\nフォーム解除\n検索\n状態\nすべて\n有効\n無効\n並び順\n番号 昇順\n番号 降順\n状態\n条件\nクリア\n0件\nルールはありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "status",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ステータス",
+      "リソース",
+      "ストレージ",
+      "ストレージ使用率",
+      "CPU / メモリ使用率"
+    ],
+    "bodyText": "I for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nステータス\n\nサーバーの稼働状態、リソース、ストレージを確認します。\n\nリソース\nバージョン\n不明\nコミット\n不明\nWUI\n稼働中\nオペレータ\n稼働中\nCPUコア\n未設定\nOS\n未設定\nGo\n未設定\nGoroutine\n未設定\n起動時刻\n未設定\n稼働時間\n取得不可\nメモリ使用量\n取得不可\nヒープ使用量\n取得不可\nシステム確保\n取得不可\nGC回数\n未設定\nストレージ\n対象\n録画保存先\n録画ファイル\n取得不可\nディスク容量\n取得不可\n使用量\n取得不可\n空き容量\n取得不可\nストレージ使用率\n\n取得不可\n\n取得不可\nCPU / メモリ使用率\n\n直近6時間 / 履歴を収集中\n\n履歴を収集中\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "settings",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "saveStrataConfigButton",
+        "tag": "BUTTON",
+        "text": "保存",
+        "w": 52,
+        "h": 32
+      },
+      {
+        "id": "strataMirakurunURL",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataListenAddress",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataWebPort",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataAuthEnabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingDirectory",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataFilenameFormat",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1166,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "strataRecordingStartMargin",
+        "tag": "INPUT",
+        "text": "正数で番組開始時刻より前、負数で番組開始時刻より後に録画を開始します。",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingEndMargin",
+        "tag": "INPUT",
+        "text": "正数で番組終了時刻より後、負数で番組終了時刻より前に録画を終了します。",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingPriority",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataConflictedPriority",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataLowSpaceThreshold",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataLowSpaceAction",
+        "tag": "SELECT",
+        "text": "古い録画を削除録画を停止",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataPreviewCacheMaxAge",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataPreviewCacheMaxSize",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "clearStrataPreviewCacheButton",
+        "tag": "BUTTON",
+        "text": "キャッシュをクリア",
+        "w": 114,
+        "h": 32
+      },
+      {
+        "id": "clearStrataLogoCacheButton",
+        "tag": "BUTTON",
+        "text": "ロゴをクリア",
+        "w": 85,
+        "h": 32
+      },
+      {
+        "id": "strataExcludedServices",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataServiceOrder",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataNormalizationForm",
+        "tag": "SELECT",
+        "text": "未設定NFCNFDNFKCNFKD",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "addPostProcessCommandButton",
+        "tag": "BUTTON",
+        "text": "コマンドを追加",
+        "w": 101,
+        "h": 32
+      },
+      {
+        "id": "strataPostProcessTimeout",
+        "tag": "INPUT",
+        "text": "",
+        "w": 578,
+        "h": 32
+      },
+      {
+        "id": "strataPostProcessMaxConcurrent",
+        "tag": "INPUT",
+        "text": "",
+        "w": 578,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "FFmpeg の記述例と利用可能な値",
+        "w": 647,
+        "h": 24
+      },
+      {
+        "id": "strataMP4VideoEncoder",
+        "tag": "SELECT",
+        "text": "利用可能な H.264 エンコーダーを検出できません",
+        "w": 1166,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "設定",
+      "設定",
+      "Strata設定"
+    ],
+    "bodyText": "正常完了した後に実行するコマンドです。実行ファイルと引数を分けて指定します。登録順に実行し、失敗またはタイムアウトした場合は後続を実行しません。未指定なら実行しません。\n\nコマンドを追加\nタイムアウト（秒）\n最大同時実行数\n\n0 は既定の 10 分です。コマンドの終了コードと出力は operator ログに記録され、失敗しても録画済みファイルは保持されます。\n\n0 は 1 件です。複数の録画が完了した場合も、この数までコマンド列を同時に実行します。\n\nFFmpeg の記述例と利用可能な値\n再生\nMP4 映像エンコーダー\n利用可能な H.264 エンコーダーを検出できません\n\nFFmpeg で実際に利用できる H.264 エンコーダーのみ表示します。ハードウェアエンコーダーがない環境ではソフトウェアエンコーダーのみ選択できます。\n\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "logs",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "refreshLogsButton",
+        "tag": "BUTTON",
+        "text": "ログ更新",
+        "w": 72,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ログ",
+      "スケジューラ",
+      "オペレータ",
+      "WUI"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nログ\n\nスケジューラ / オペレータ / WUI のログ末尾を確認します。\n\nログ更新\nスケジューラ\n[]\nオペレータ\n[]\nWUI\n[]\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR"
+    ],
+    "bodyText": "Strata PVR\n\n続行するにはログインしてください。\n\nユーザー名\nパスワード\nログイン",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "desktop",
+    "route": "player",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "視聴"
+    ],
+    "bodyText": "視聴\n\n再生 URL が指定されていません。",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "dashboard",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 71,
+        "h": 24
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 38,
+        "h": 44
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ダッシュボード",
+      "放送中の番組",
+      "録画中",
+      "最近の録画",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nダッシュボード\n\n現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。\n\n更新\n放送中の番組\n監査チャンネル\nニュースと天気予報\n20:01-20:31\n視聴\n録画中\n録画中の番組はありません\n最近の録画\n録画済み番組はありません\n予約\n予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "schedule",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "scheduleZoomOutButton",
+        "tag": "BUTTON",
+        "text": "番組表を縮小",
+        "w": 36,
+        "h": 44
+      },
+      {
+        "id": "scheduleZoomInButton",
+        "tag": "BUTTON",
+        "text": "番組表を拡大",
+        "w": 36,
+        "h": 44
+      }
+    ],
+    "unlabelled": [],
+    "headings": [],
+    "bodyText": "メインコンテンツへ移動\nメニュー\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nオペレータ稼働中\n再読込\n番組表フィルタ\n\n番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組表へ移動し、矢印キーで番組を選び、Enterキーで詳細を開きます。タッチ操作では番組一覧も利用できます。\n\n時刻\n監査チャンネル\n視聴\n09/30 20:00\n09/30 21:00\n09/30 22:00\n20:01-20:31\nニュースと天気予報\nnews\n20:31-21:01\n映画 日本語の長い番組タイトルを含む字幕付き特別放送\nnews\n21:01-21:31\n音楽ライブ\nnews\n番組一覧（3件）\n-\n標準\n+\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "search",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "searchFirstPage",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchPrevPage",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchNextPage",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchLastPage",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "番組検索"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n番組検索\n\n番組表から条件に一致する今後の番組を検索します。\n\n検索\nジャンル\n全ジャンル\n種別\nすべて\nGR\nBS\nCS\nEX\nタイトル\n説明\n番組ID\nチャンネル\n全チャンネル\n何時から\n何時まで\nクリア\n1-3 / 3件\n1 / 1ページ\n最初\n前へ\n次へ\n最後\n条件に一致する番組はありません\n1 / 1ページ\n最初\n前へ\n次へ\n最後\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "reserves",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n予約\n\n手動予約、自動予約、スキップ状態を確認します。\n\n検索\nジャンル\n全ジャンル\n予約種別\nすべて\n手動予約\n自動予約\nスキップ\n並び順\n開始時刻 昇順\n開始時刻 降順\nジャンル\nタイトル\n長さ\nクリア\n0件\n条件に一致する予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "recorded",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "recordedListFirstPage",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListPrevPage",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListNextPage",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListLastPage",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "録画済み"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n録画済み\n\n録画済み番組の再生、変換、ダウンロード、削除を行います。\n\n一覧\nタイル\nクリーンアップ\n検索\nジャンル\n全ジャンル\n並び順\n開始時刻 降順\n開始時刻 昇順\nジャンル\nタイトル\n長さ\nクリア\n0件\n表示件数\n50件\n100件\n200件\n最初のページ\n前のページ\n0件\n次のページ\n最後のページ\n条件に一致する録画済み番組はありません\n表示件数\n50件\n100件\n200件\n0件\n最初のページ\n前のページ\n次のページ\n最後のページ\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "rules",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "ruleDisabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ルール"
+    ],
+    "bodyText": "説明 ignore_descriptions\n種別\nすべて\nGR\nBS\nCS\nEX\nSID\n複数カテゴリ categories\nnews\nチャンネル\n監査チャンネル\n除外チャンネル\n監査チャンネル\nフラグ\n除外フラグ\n最短分 duration.min\n最長分 duration.max\n開始時 hour.start\n終了時 hour.end\n録画ファイル名\n\n<...> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。\n\n例: <title>.m2ts → 番組タイトル.m2ts\n\n使用できるタグ\n無効\n追加JSON\nフォームから追加\nフォーム保存\nフォーム解除\n検索\n状態\nすべて\n有効\n無効\n並び順\n番号 昇順\n番号 降順\n状態\n条件\nクリア\n0件\nルールはありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "status",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ステータス",
+      "リソース",
+      "ストレージ",
+      "ストレージ使用率",
+      "CPU / メモリ使用率"
+    ],
+    "bodyText": "I for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nステータス\n\nサーバーの稼働状態、リソース、ストレージを確認します。\n\nリソース\nバージョン\n不明\nコミット\n不明\nWUI\n稼働中\nオペレータ\n稼働中\nCPUコア\n未設定\nOS\n未設定\nGo\n未設定\nGoroutine\n未設定\n起動時刻\n未設定\n稼働時間\n取得不可\nメモリ使用量\n取得不可\nヒープ使用量\n取得不可\nシステム確保\n取得不可\nGC回数\n未設定\nストレージ\n対象\n録画保存先\n録画ファイル\n取得不可\nディスク容量\n取得不可\n使用量\n取得不可\n空き容量\n取得不可\nストレージ使用率\n\n取得不可\n\n取得不可\nCPU / メモリ使用率\n\n直近6時間 / 履歴を収集中\n\n履歴を収集中\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "settings",
+    "width": 394,
+    "scrollWidth": 394,
+    "bodyScrollWidth": 394,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "strataAuthEnabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "FFmpeg の記述例と利用可能な値",
+        "w": 313,
+        "h": 24
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "設定",
+      "設定",
+      "Strata設定"
+    ],
+    "bodyText": "正常完了した後に実行するコマンドです。実行ファイルと引数を分けて指定します。登録順に実行し、失敗またはタイムアウトした場合は後続を実行しません。未指定なら実行しません。\n\nコマンドを追加\nタイムアウト（秒）\n最大同時実行数\n\n0 は既定の 10 分です。コマンドの終了コードと出力は operator ログに記録され、失敗しても録画済みファイルは保持されます。\n\n0 は 1 件です。複数の録画が完了した場合も、この数までコマンド列を同時に実行します。\n\nFFmpeg の記述例と利用可能な値\n再生\nMP4 映像エンコーダー\n利用可能な H.264 エンコーダーを検出できません\n\nFFmpeg で実際に利用できる H.264 エンコーダーのみ表示します。ハードウェアエンコーダーがない環境ではソフトウェアエンコーダーのみ選択できます。\n\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "logs",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ダッシュボード",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組表",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "番組検索",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "予約",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "録画済み",
+        "w": 124,
+        "h": 41
+      },
+      {
+        "id": "",
+        "tag": "A",
+        "text": "ルール",
+        "w": 124,
+        "h": 41
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ログ",
+      "スケジューラ",
+      "オペレータ",
+      "WUI"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nログ\n\nスケジューラ / オペレータ / WUI のログ末尾を確認します。\n\nログ更新\nスケジューラ\n[]\nオペレータ\n[]\nWUI\n[]\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "login",
+    "width": 392,
+    "scrollWidth": 392,
+    "bodyScrollWidth": 392,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR"
+    ],
+    "bodyText": "Strata PVR\n\n続行するにはログインしてください。\n\nユーザー名\nパスワード\nログイン",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "mobile",
+    "route": "player",
+    "width": 375,
+    "scrollWidth": 375,
+    "bodyScrollWidth": 375,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "視聴"
+    ],
+    "bodyText": "視聴\n\n再生 URL が指定されていません。",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "dashboard",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "refreshButton",
+        "tag": "BUTTON",
+        "text": "更新",
+        "w": 52,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 71,
+        "h": 24
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "ニュースと天気予報",
+        "w": 888,
+        "h": 28
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 38,
+        "h": 24
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ダッシュボード",
+      "放送中の番組",
+      "録画中",
+      "最近の録画",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nダッシュボード\n\n現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。\n\n更新\n放送中の番組\n監査チャンネル\nニュースと天気予報\n20:01-20:31\n視聴\n録画中\n録画中の番組はありません\n最近の録画\n録画済み番組はありません\n予約\n予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "schedule",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "scheduleRefreshButton",
+        "tag": "BUTTON",
+        "text": "再読込",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 66,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "番組一覧（3件）",
+        "w": 1440,
+        "h": 36
+      },
+      {
+        "id": "",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1440,
+        "h": 32
+      },
+      {
+        "id": "scheduleZoomOutButton",
+        "tag": "BUTTON",
+        "text": "番組表を縮小",
+        "w": 36,
+        "h": 32
+      },
+      {
+        "id": "scheduleZoomInButton",
+        "tag": "BUTTON",
+        "text": "番組表を拡大",
+        "w": 36,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [],
+    "bodyText": "メインコンテンツへ移動\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nオペレータ稼働中\n録画中 0\n予約 0\n競合 0\n再読込\n番組表フィルタ\n\n番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組表へ移動し、矢印キーで番組を選び、Enterキーで詳細を開きます。タッチ操作では番組一覧も利用できます。\n\n時刻\n監査チャンネル\n視聴\n09/30 20:00\n09/30 21:00\n09/30 22:00\n20:01-20:31\nニュースと天気予報\nnews\n20:31-21:01\n映画 日本語の長い番組タイトルを含む字幕付き特別放送\nnews\n21:01-21:31\n音楽ライブ\nnews\n番組一覧（3件）\n-\n標準\n+\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "search",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "searchQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 432,
+        "h": 32
+      },
+      {
+        "id": "searchCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchType",
+        "tag": "SELECT",
+        "text": "すべて\n            GR\n            BS\n            CS\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchProgramID",
+        "tag": "INPUT",
+        "text": "",
+        "w": 432,
+        "h": 32
+      },
+      {
+        "id": "searchChannelID",
+        "tag": "SELECT",
+        "text": "全チャンネル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "searchStartHour",
+        "tag": "INPUT",
+        "text": "",
+        "w": 200,
+        "h": 32
+      },
+      {
+        "id": "searchEndHour",
+        "tag": "INPUT",
+        "text": "",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 164,
+        "h": 32
+      },
+      {
+        "id": "searchFirstPage",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchPrevPage",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchNextPage",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchLastPage",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "番組検索"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n番組検索\n\n番組表から条件に一致する今後の番組を検索します。\n\n検索\nジャンル\n全ジャンル\n種別\nすべて\nGR\nBS\nCS\nEX\nタイトル\n説明\n番組ID\nチャンネル\n全チャンネル\n何時から\n何時まで\nクリア\n1-3 / 3件\n1 / 1ページ\n最初\n前へ\n次へ\n最後\n条件に一致する番組はありません\n1 / 1ページ\n最初\n前へ\n次へ\n最後\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "reserves",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "reserveListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 476,
+        "h": 32
+      },
+      {
+        "id": "reserveListCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListType",
+        "tag": "SELECT",
+        "text": "すべて\n              手動予約\n              自動予約\n        ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListSort",
+        "tag": "SELECT",
+        "text": "開始時刻 昇順\n              開始時刻 降順\n              ジャンル\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "reserveListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n予約\n\n手動予約、自動予約、スキップ状態を確認します。\n\n検索\nジャンル\n全ジャンル\n予約種別\nすべて\n手動予約\n自動予約\nスキップ\n並び順\n開始時刻 昇順\n開始時刻 降順\nジャンル\nタイトル\n長さ\nクリア\n0件\n条件に一致する予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "recorded",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "一覧",
+        "w": 66,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "タイル",
+        "w": 70,
+        "h": 32
+      },
+      {
+        "id": "recordedCleanupButton",
+        "tag": "BUTTON",
+        "text": "クリーンアップ",
+        "w": 93,
+        "h": 40
+      },
+      {
+        "id": "recordedListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 686,
+        "h": 32
+      },
+      {
+        "id": "recordedListCategory",
+        "tag": "SELECT",
+        "text": "全ジャンル",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "recordedListSort",
+        "tag": "SELECT",
+        "text": "開始時刻 降順\n              開始時刻 昇順\n              ジャンル\n ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "recordedListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      },
+      {
+        "id": "recordedListPageSize",
+        "tag": "SELECT",
+        "text": "50件\n            100件\n            200件",
+        "w": 120,
+        "h": 32
+      },
+      {
+        "id": "recordedListFirstPage",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListPrevPage",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListNextPage",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListLastPage",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SELECT",
+        "text": "50件\n            100件\n            200件",
+        "w": 120,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "録画済み"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n録画済み\n\n録画済み番組の再生、変換、ダウンロード、削除を行います。\n\n一覧\nタイル\nクリーンアップ\n検索\nジャンル\n全ジャンル\n並び順\n開始時刻 降順\n開始時刻 昇順\nジャンル\nタイトル\n長さ\nクリア\n0件\n表示件数\n50件\n100件\n200件\n最初のページ\n前のページ\n0件\n次のページ\n最後のページ\n条件に一致する録画済み番組はありません\n表示件数\n50件\n100件\n200件\n0件\n最初のページ\n前のページ\n次のページ\n最後のページ\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "rules",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "forceSchedulerButton",
+        "tag": "BUTTON",
+        "text": "スケジューラ実行",
+        "w": 110,
+        "h": 32
+      },
+      {
+        "id": "ruleTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreTitle",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreDescription",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleType",
+        "tag": "SELECT",
+        "text": "すべて\n              GR\n              BS\n            ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleSid",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleFlags",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleIgnoreFlags",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDurationMin",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleDurationMax",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleHourStart",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleHourEnd",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleRecordedFormat",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1166,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "ruleDisabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "addBasicRuleButton",
+        "tag": "BUTTON",
+        "text": "フォームから追加",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "saveBasicRuleButton",
+        "tag": "BUTTON",
+        "text": "フォーム保存",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "resetRuleFormButton",
+        "tag": "BUTTON",
+        "text": "フォーム解除",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "ruleListQuery",
+        "tag": "INPUT",
+        "text": "",
+        "w": 652,
+        "h": 32
+      },
+      {
+        "id": "ruleListState",
+        "tag": "SELECT",
+        "text": "すべて\n              有効\n              無効",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleListSort",
+        "tag": "SELECT",
+        "text": "番号 昇順\n              番号 降順\n              状態\n       ",
+        "w": 180,
+        "h": 32
+      },
+      {
+        "id": "ruleListFilterReset",
+        "tag": "BUTTON",
+        "text": "クリア",
+        "w": 56,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ルール"
+    ],
+    "bodyText": "説明 ignore_descriptions\n種別\nすべて\nGR\nBS\nCS\nEX\nSID\n複数カテゴリ categories\nnews\nチャンネル\n監査チャンネル\n除外チャンネル\n監査チャンネル\nフラグ\n除外フラグ\n最短分 duration.min\n最長分 duration.max\n開始時 hour.start\n終了時 hour.end\n録画ファイル名\n\n<...> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。\n\n例: <title>.m2ts → 番組タイトル.m2ts\n\n使用できるタグ\n無効\n追加JSON\nフォームから追加\nフォーム保存\nフォーム解除\n検索\n状態\nすべて\n有効\n無効\n並び順\n番号 昇順\n番号 降順\n状態\n条件\nクリア\n0件\nルールはありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "status",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ステータス",
+      "リソース",
+      "ストレージ",
+      "ストレージ使用率",
+      "CPU / メモリ使用率"
+    ],
+    "bodyText": "I for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nステータス\n\nサーバーの稼働状態、リソース、ストレージを確認します。\n\nリソース\nバージョン\n不明\nコミット\n不明\nWUI\n稼働中\nオペレータ\n稼働中\nCPUコア\n未設定\nOS\n未設定\nGo\n未設定\nGoroutine\n未設定\n起動時刻\n未設定\n稼働時間\n取得不可\nメモリ使用量\n取得不可\nヒープ使用量\n取得不可\nシステム確保\n取得不可\nGC回数\n未設定\nストレージ\n対象\n録画保存先\n録画ファイル\n取得不可\nディスク容量\n取得不可\n使用量\n取得不可\n空き容量\n取得不可\nストレージ使用率\n\n取得不可\n\n取得不可\nCPU / メモリ使用率\n\n直近6時間 / 履歴を収集中\n\n履歴を収集中\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "settings",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "saveStrataConfigButton",
+        "tag": "BUTTON",
+        "text": "保存",
+        "w": 52,
+        "h": 32
+      },
+      {
+        "id": "strataMirakurunURL",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataListenAddress",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataWebPort",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataAuthEnabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingDirectory",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataFilenameFormat",
+        "tag": "INPUT",
+        "text": "",
+        "w": 1166,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "strataRecordingStartMargin",
+        "tag": "INPUT",
+        "text": "正数で番組開始時刻より前、負数で番組開始時刻より後に録画を開始します。",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingEndMargin",
+        "tag": "INPUT",
+        "text": "正数で番組終了時刻より後、負数で番組終了時刻より前に録画を終了します。",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataRecordingPriority",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataConflictedPriority",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataLowSpaceThreshold",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataLowSpaceAction",
+        "tag": "SELECT",
+        "text": "古い録画を削除録画を停止",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataPreviewCacheMaxAge",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "strataPreviewCacheMaxSize",
+        "tag": "INPUT",
+        "text": "",
+        "w": 186,
+        "h": 32
+      },
+      {
+        "id": "clearStrataPreviewCacheButton",
+        "tag": "BUTTON",
+        "text": "キャッシュをクリア",
+        "w": 114,
+        "h": 32
+      },
+      {
+        "id": "clearStrataLogoCacheButton",
+        "tag": "BUTTON",
+        "text": "ロゴをクリア",
+        "w": 85,
+        "h": 32
+      },
+      {
+        "id": "strataExcludedServices",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataServiceOrder",
+        "tag": "INPUT",
+        "text": "",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "strataNormalizationForm",
+        "tag": "SELECT",
+        "text": "未設定NFCNFDNFKCNFKD",
+        "w": 382,
+        "h": 32
+      },
+      {
+        "id": "addPostProcessCommandButton",
+        "tag": "BUTTON",
+        "text": "コマンドを追加",
+        "w": 101,
+        "h": 32
+      },
+      {
+        "id": "strataPostProcessTimeout",
+        "tag": "INPUT",
+        "text": "",
+        "w": 578,
+        "h": 32
+      },
+      {
+        "id": "strataPostProcessMaxConcurrent",
+        "tag": "INPUT",
+        "text": "",
+        "w": 578,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "FFmpeg の記述例と利用可能な値",
+        "w": 647,
+        "h": 24
+      },
+      {
+        "id": "strataMP4VideoEncoder",
+        "tag": "SELECT",
+        "text": "利用可能な H.264 エンコーダーを検出できません",
+        "w": 1166,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "設定",
+      "設定",
+      "Strata設定"
+    ],
+    "bodyText": "正常完了した後に実行するコマンドです。実行ファイルと引数を分けて指定します。登録順に実行し、失敗またはタイムアウトした場合は後続を実行しません。未指定なら実行しません。\n\nコマンドを追加\nタイムアウト（秒）\n最大同時実行数\n\n0 は既定の 10 分です。コマンドの終了コードと出力は operator ログに記録され、失敗しても録画済みファイルは保持されます。\n\n0 は 1 件です。複数の録画が完了した場合も、この数までコマンド列を同時に実行します。\n\nFFmpeg の記述例と利用可能な値\n再生\nMP4 映像エンコーダー\n利用可能な H.264 エンコーダーを検出できません\n\nFFmpeg で実際に利用できる H.264 エンコーダーのみ表示します。ハードウェアエンコーダーがない環境ではソフトウェアエンコーダーのみ選択できます。\n\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "logs",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "管理",
+        "w": 44,
+        "h": 16
+      },
+      {
+        "id": "logoutButton",
+        "tag": "BUTTON",
+        "text": "ログアウト",
+        "w": 75,
+        "h": 32
+      },
+      {
+        "id": "refreshLogsButton",
+        "tag": "BUTTON",
+        "text": "ログ更新",
+        "w": 72,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ログ",
+      "スケジューラ",
+      "オペレータ",
+      "WUI"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nログ\n\nスケジューラ / オペレータ / WUI のログ末尾を確認します。\n\nログ更新\nスケジューラ\n[]\nオペレータ\n[]\nWUI\n[]\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR"
+    ],
+    "bodyText": "Strata PVR\n\n続行するにはログインしてください。\n\nユーザー名\nパスワード\nログイン",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "dark",
+    "route": "player",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "視聴"
+    ],
+    "bodyText": "視聴\n\n再生 URL が指定されていません。",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "dashboard",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "監査チャンネル",
+        "w": 71,
+        "h": 24
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 38,
+        "h": 44
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ダッシュボード",
+      "放送中の番組",
+      "録画中",
+      "最近の録画",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nダッシュボード\n\n現在の録画状態、放送中の番組、直近の予約、最近の録画を確認します。\n\n更新\n放送中の番組\n監査チャンネル\nニュースと天気予報\n20:01-20:31\n視聴\n録画中\n録画中の番組はありません\n最近の録画\n録画済み番組はありません\n予約\n予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "schedule",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "視聴",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [],
+    "bodyText": "メインコンテンツへ移動\nメニュー\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\nオペレータ稼働中\n再読込\n番組表フィルタ\n\n番組はチャンネルごとに並びます。各番組の読み上げには放送日時、チャンネル、状態が含まれます。Tabキーで番組表へ移動し、矢印キーで番組を選び、Enterキーで詳細を開きます。タッチ操作では番組一覧も利用できます。\n\n時刻\n監査チャンネル\n視聴\n09/30 20:00\n09/30 21:00\n09/30 22:00\n20:01-20:31\nニュースと天気予報\nnews\n20:31-21:01\n映画 日本語の長い番組タイトルを含む字幕付き特別放送\nnews\n21:01-21:31\n音楽ライブ\nnews\n番組一覧（3件）\n-\n標準\n+\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "search",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "searchFirstPage",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchPrevPage",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchNextPage",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "searchLastPage",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次へ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "番組検索"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n番組検索\n\n番組表から条件に一致する今後の番組を検索します。\n\n検索\nジャンル\n全ジャンル\n種別\nすべて\nGR\nBS\nCS\nEX\nタイトル\n説明\n番組ID\nチャンネル\n全チャンネル\n何時から\n何時まで\nクリア\n1-3 / 3件\n1 / 1ページ\n最初\n前へ\n次へ\n最後\n条件に一致する番組はありません\n1 / 1ページ\n最初\n前へ\n次へ\n最後\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "reserves",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "予約"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n予約\n\n手動予約、自動予約、スキップ状態を確認します。\n\n検索\nジャンル\n全ジャンル\n予約種別\nすべて\n手動予約\n自動予約\nスキップ\n並び順\n開始時刻 昇順\n開始時刻 降順\nジャンル\nタイトル\n長さ\nクリア\n0件\n条件に一致する予約はありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "recorded",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "recordedListFirstPage",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListPrevPage",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListNextPage",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "recordedListLastPage",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最初のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "前のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "次のページ",
+        "w": 44,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "BUTTON",
+        "text": "最後のページ",
+        "w": 44,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "録画済み"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nログアウト\n録画済み\n\n録画済み番組の再生、変換、ダウンロード、削除を行います。\n\n一覧\nタイル\nクリーンアップ\n検索\nジャンル\n全ジャンル\n並び順\n開始時刻 降順\n開始時刻 昇順\nジャンル\nタイトル\n長さ\nクリア\n0件\n表示件数\n50件\n100件\n200件\n最初のページ\n前のページ\n0件\n次のページ\n最後のページ\n条件に一致する録画済み番組はありません\n表示件数\n50件\n100件\n200件\n0件\n最初のページ\n前のページ\n次のページ\n最後のページ\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "rules",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "ruleDisabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ルール"
+    ],
+    "bodyText": "説明 ignore_descriptions\n種別\nすべて\nGR\nBS\nCS\nEX\nSID\n複数カテゴリ categories\nnews\nチャンネル\n監査チャンネル\n除外チャンネル\n監査チャンネル\nフラグ\n除外フラグ\n最短分 duration.min\n最長分 duration.max\n開始時 hour.start\n終了時 hour.end\n録画ファイル名\n\n<...> で囲まれた部分は、録画時に番組情報へ置き換わる「置換タグ」です。タグ以外の文字はそのままファイル名に残ります。\n\n例: <title>.m2ts → 番組タイトル.m2ts\n\n使用できるタグ\n無効\n追加JSON\nフォームから追加\nフォーム保存\nフォーム解除\n検索\n状態\nすべて\n有効\n無効\n並び順\n番号 昇順\n番号 降順\n状態\n条件\nクリア\n0件\nルールはありません\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "status",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ステータス",
+      "リソース",
+      "ストレージ",
+      "ストレージ使用率",
+      "CPU / メモリ使用率"
+    ],
+    "bodyText": "I for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nステータス\n\nサーバーの稼働状態、リソース、ストレージを確認します。\n\nリソース\nバージョン\n不明\nコミット\n不明\nWUI\n稼働中\nオペレータ\n稼働中\nCPUコア\n未設定\nOS\n未設定\nGo\n未設定\nGoroutine\n未設定\n起動時刻\n未設定\n稼働時間\n取得不可\nメモリ使用量\n取得不可\nヒープ使用量\n取得不可\nシステム確保\n取得不可\nGC回数\n未設定\nストレージ\n対象\n録画保存先\n録画ファイル\n取得不可\nディスク容量\n取得不可\n使用量\n取得不可\n空き容量\n取得不可\nストレージ使用率\n\n取得不可\n\n取得不可\nCPU / メモリ使用率\n\n直近6時間 / 履歴を収集中\n\n履歴を収集中\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "settings",
+    "width": 394,
+    "scrollWidth": 394,
+    "bodyScrollWidth": 394,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      },
+      {
+        "id": "strataAuthEnabled",
+        "tag": "INPUT",
+        "text": "",
+        "w": 13,
+        "h": 32
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "使用できるタグ",
+        "w": 84,
+        "h": 18
+      },
+      {
+        "id": "",
+        "tag": "SUMMARY",
+        "text": "FFmpeg の記述例と利用可能な値",
+        "w": 258,
+        "h": 24
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "設定",
+      "設定",
+      "Strata設定"
+    ],
+    "bodyText": "正常完了した後に実行するコマンドです。実行ファイルと引数を分けて指定します。登録順に実行し、失敗またはタイムアウトした場合は後続を実行しません。未指定なら実行しません。\n\nコマンドを追加\nタイムアウト（秒）\n最大同時実行数\n\n0 は既定の 10 分です。コマンドの終了コードと出力は operator ログに記録され、失敗しても録画済みファイルは保持されます。\n\n0 は 1 件です。複数の録画が完了した場合も、この数までコマンド列を同時に実行します。\n\nFFmpeg の記述例と利用可能な値\n再生\nMP4 映像エンコーダー\n利用可能な H.264 エンコーダーを検出できません\n\nFFmpeg で実際に利用できる H.264 エンコーダーのみ表示します。ハードウェアエンコーダーがない環境ではソフトウェアエンコーダーのみ選択できます。\n\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "logs",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [
+      {
+        "id": "",
+        "tag": "A",
+        "text": "メインコンテンツへ移動",
+        "w": 141,
+        "h": 38
+      }
+    ],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR",
+      "ログ",
+      "スケジューラ",
+      "オペレータ",
+      "WUI"
+    ],
+    "bodyText": "メインコンテンツへ移動\nStrata PVR\n\nStrata PVR WUI for Mirakurun\n\nオペレータ稼働中\nダッシュボード\n番組表\n番組検索\n予約\n録画済み\nルール\n管理\nステータス\n設定\nログ\nログアウト\nログ\n\nスケジューラ / オペレータ / WUI のログ末尾を確認します。\n\nログ更新\nスケジューラ\n[]\nオペレータ\n[]\nWUI\n[]\nオペレータ稼働中 / 録画中 0 / 予約 0 / 競合 0",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "login",
+    "width": 337,
+    "scrollWidth": 337,
+    "bodyScrollWidth": 337,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "Strata PVR"
+    ],
+    "bodyText": "Strata PVR\n\n続行するにはログインしてください。\n\nユーザー名\nパスワード\nログイン",
+    "fonts": "loaded",
+    "errors": []
+  },
+  {
+    "mode": "narrow",
+    "route": "player",
+    "width": 320,
+    "scrollWidth": 320,
+    "bodyScrollWidth": 320,
+    "smallTargets": [],
+    "unlabelled": [],
+    "headings": [
+      "視聴"
+    ],
+    "bodyText": "視聴\n\n再生 URL が指定されていません。",
+    "fonts": "loaded",
+    "errors": []
+  }
+]
