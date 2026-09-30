@@ -25,6 +25,7 @@ before(async () => {
       if (key === "status") data = { operator: { alive: true }, scheduler: { alive: true } };
       if (key === "schedule") data = [{ channel, programs: [program] }];
       if (key === "schedule/broadcasting") data = [program];
+      if (key === "search") data = { items: [program], total: 1, categories: ["news"], channels: [channel] };
       if (key === "recorded" || key === "recorded/recent") data = [program];
       if (key === "config") data = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.sample.json")));
       if (key === "auth/session") data = { authenticated: false, authenticationEnabled: false };
@@ -164,6 +165,28 @@ test("login errors preserve input and allow retry without duplicate requests", a
       } finally { await context.close(); }
     });
   }
+});
+
+test("rule creation retains channel metadata after navigation and rule rerenders", async t => {
+  for (const source of ["search", "schedule"]) await t.test(source, async () => {
+    const { page, context } = await pageFor();
+    try {
+      await loaded(page, source);
+      if (source === "search") {
+        await page.locator("#searchList button", { hasText: "ルール作成" }).first().click();
+      } else {
+        await page.locator(".schedule-card").first().click();
+        await page.locator("#programDialogActions button", { hasText: "ルール作成" }).click();
+      }
+      await page.waitForURL(baseURL + "/#rules");
+      await page.waitForFunction(() => document.querySelector("#ruleList").textContent.includes("ルールはありません"));
+      const selected = () => page.locator("#ruleChannels").evaluate(e => [...e.selectedOptions].map(o => ({ id: o.value, label: o.textContent })));
+      assert.deepEqual(await selected(), [{ id: channel.id, label: channel.name }]);
+      await page.locator("#ruleListSort").selectOption({ index: 1 });
+      assert.deepEqual(await selected(), [{ id: channel.id, label: channel.name }]);
+      assert.equal(await page.locator("#ruleTitle").inputValue(), program.title);
+    } finally { await context.close(); }
+  });
 });
 
 test("login network failure, timeout and success", async t => {

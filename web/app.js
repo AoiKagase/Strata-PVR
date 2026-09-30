@@ -69,6 +69,7 @@
     broadcasting: null,
     logoCacheVersion: 0,
     rules: [],
+    ruleFormSourceChannels: [],
     config: {},
     mp4VideoEncoders: [],
     apiTokens: [],
@@ -6374,6 +6375,11 @@
   }
 
   function renderRuleFormOptions(extraCategories, extraChannels, extraIgnoreChannels, sourceChannels) {
+    // Rule loading and filtering can rerender the form after its source view changes.
+    if (Array.isArray(sourceChannels)) {
+      state.ruleFormSourceChannels = sourceChannels.slice();
+    }
+    sourceChannels = state.ruleFormSourceChannels;
     var categories = byId("ruleCategories");
     var categoryValues = (extraCategories || []).concat(listFormValues(categories));
     if (categories) {
@@ -6394,6 +6400,7 @@
   }
 
   function clearRuleForm() {
+    state.ruleFormSourceChannels = [];
     [
       "ruleTitle",
       "ruleIgnoreTitle",
@@ -6471,7 +6478,7 @@
   function fillRuleFormFromRule(rule, index) {
     rule = rule || {};
     var categories = rule.categories && rule.categories.length ? rule.categories : (rule.category ? [rule.category] : []);
-    renderRuleFormOptions(categories, rule.channels, rule.ignore_channels);
+    renderRuleFormOptions(categories, rule.channels, rule.ignore_channels, []);
     setListFormValue("ruleTitle", rule.reserve_titles);
     setListFormValue("ruleIgnoreTitle", rule.ignore_titles);
     setListFormValue("ruleDescription", rule.reserve_descriptions);
